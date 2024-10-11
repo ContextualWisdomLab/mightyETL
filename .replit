@@ -43,6 +43,10 @@ args = "Run All Tests"
 task = "workflow.run"
 args = "Check Test Status"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Build and Run Microservices"
+
 [[workflows.workflow]]
 name = "Run Microservices"
 author = "agent"
@@ -135,8 +139,24 @@ agentRequireRestartOnSave = false
 task = "shell.exec"
 args = "mvn test"
 
+[[workflows.workflow]]
+name = "Build and Run Microservices"
+author = "agent"
+
+[workflows.workflow.metadata]
+agentRequireRestartOnSave = false
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "mvn clean install && java -jar eureka-server/target/eureka-server-1.0-SNAPSHOT.jar & sleep 30 && java -jar config-server/target/config-server-1.0-SNAPSHOT.jar & sleep 30 && java -jar etl-service/target/etl-service-1.0-SNAPSHOT.jar & java -jar cdc-service/target/cdc-service-1.0-SNAPSHOT.jar & java -jar zuul-gateway/target/zuul-gateway-1.0-SNAPSHOT.jar"
+waitForPort = 8761
+
 [deployment]
 run = ["sh", "-c", "mvn clean install && java -jar eureka-server/target/eureka-server-1.0-SNAPSHOT.jar & sleep 30 && java -jar config-server/target/config-server-1.0-SNAPSHOT.jar & sleep 30 && java -jar zipkin.jar & sleep 30 && java -jar etl-service/target/etl-service-1.0-SNAPSHOT.jar & java -jar cdc-service/target/cdc-service-1.0-SNAPSHOT.jar & java -jar zuul-gateway/target/zuul-gateway-1.0-SNAPSHOT.jar"]
+
+[[ports]]
+localPort = 8761
+externalPort = 3001
 
 [[ports]]
 localPort = 9411
