@@ -8,6 +8,12 @@ spring:
     url: jdbc:postgresql://${PGHOST}:${PGPORT}/${PGDATABASE}
     username: ${PGUSER}
     password: ${PGPASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
 
 eureka:
   client:
@@ -18,3 +24,7 @@ logging:
   level:
     root: INFO
     com.xtrmetl: DEBUG
+
+# Enable Spring Retry
+spring.retry:
+  enabled: true

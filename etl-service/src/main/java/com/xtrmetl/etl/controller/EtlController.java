@@ -16,9 +16,9 @@ public class EtlController {
     private EtlService etlService;
 
     @PostMapping("/process")
-    public ResponseEntity<String> processData(@RequestBody String data) {
+    public ResponseEntity<String> processData(@RequestBody String jsonInput) {
         try {
-            String result = etlService.processData(data);
+            String result = etlService.processData(jsonInput);
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("Error processing data: " + e.getMessage());
