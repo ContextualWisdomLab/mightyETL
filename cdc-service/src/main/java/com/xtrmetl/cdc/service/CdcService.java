@@ -33,12 +33,12 @@ public class CdcService {
     }
 
     @PostConstruct
-    private void start() {
+    public void start() {
         this.executor.execute(debeziumEngine);
     }
 
     @PreDestroy
-    private void stop() throws IOException {
+    public void stop() throws IOException {
         if (this.debeziumEngine != null) {
             this.debeziumEngine.close();
         }

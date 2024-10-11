@@ -13,6 +13,16 @@ spring:
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
+  zipkin:
+    base-url: http://localhost:9412
+  sleuth:
+    sampler:
+      probability: 1.0
+
+management:
+  tracing:
+    sampling:
+      probability: 1.0
 
 eureka:
   client:
@@ -24,3 +34,4 @@ logging:
     root: INFO
     com.xtrmetl: DEBUG
     io.debezium: INFO
+    org.springframework.web: DEBUG

@@ -3,16 +3,32 @@ package com.xtrmetl.cdc.config;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.core.ProducerFactory;
+import org.springframework.kafka.core.DefaultKafkaProducerFactory;
+import org.springframework.kafka.support.SendResult;
+import org.springframework.util.concurrent.ListenableFuture;
+import org.springframework.util.concurrent.SettableListenableFuture;
+
+import java.util.HashMap;
+import java.util.Map;
 
 @Configuration
 public class KafkaConfig {
 
     @Bean
     public KafkaTemplate<String, String> kafkaTemplate() {
-        return new KafkaTemplate<String, String>(null) {
+        Map<String, Object> configProps = new HashMap<>();
+        // Add Kafka producer configuration properties here
+        
+        ProducerFactory<String, String> producerFactory = new DefaultKafkaProducerFactory<>(configProps);
+        
+        return new KafkaTemplate<String, String>(producerFactory) {
             @Override
-            public void send(String topic, String data) {
+            public ListenableFuture<SendResult<String, String>> send(String topic, String data) {
                 System.out.println("Mock Kafka: Sending data to topic " + topic + ": " + data);
+                SettableListenableFuture<SendResult<String, String>> future = new SettableListenableFuture<>();
+                future.set(new SendResult<>(null, null));
+                return future;
             }
         };
     }

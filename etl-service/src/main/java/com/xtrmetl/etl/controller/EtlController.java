@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import io.micrometer.observation.annotation.Observed;
 
 @RestController
 @RequestMapping("/api/etl")
@@ -16,6 +17,7 @@ public class EtlController {
     private EtlService etlService;
 
     @PostMapping("/process")
+    @Observed(name = "etl.process", contextualName = "etl-processing")
     public ResponseEntity<String> processData(@RequestBody String jsonInput) {
         try {
             String result = etlService.processData(jsonInput);
