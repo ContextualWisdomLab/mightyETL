@@ -42,9 +42,6 @@ class CdcServiceTest {
 
     @Test
     void testStop() throws IOException {
-        // Ensure debeziumEngine is not null
-        assertNotNull(debeziumEngine);
-
         // Call the stop method
         cdcService.stop();
 
@@ -57,14 +54,11 @@ class CdcServiceTest {
 
     @Test
     void testStopWithException() throws IOException {
-        // Ensure debeziumEngine is not null
-        assertNotNull(debeziumEngine);
-
         // Mock the debeziumEngine to throw an IOException when close() is called
         doThrow(new IOException("Test exception")).when(debeziumEngine).close();
 
         // Call the stop method and expect an IOException
-        Exception exception = assertThrows(IOException.class, () -> cdcService.stop());
+        IOException exception = assertThrows(IOException.class, () -> cdcService.stop());
 
         // Verify the exception message
         assertEquals("Error stopping CDC: Test exception", exception.getMessage());
