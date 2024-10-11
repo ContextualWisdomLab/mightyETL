@@ -2,6 +2,7 @@ package com.xtrmetl.cdc.service;
 
 import io.debezium.engine.ChangeEvent;
 import io.debezium.engine.DebeziumEngine;
+import io.debezium.engine.RecordChangeEvent;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -9,10 +10,11 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.io.IOException;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
@@ -22,7 +24,7 @@ class CdcServiceTest {
     private KafkaTemplate<String, String> kafkaTemplate;
 
     @Mock
-    private DebeziumEngine<ChangeEvent<SourceRecord>> debeziumEngine;
+    private DebeziumEngine<RecordChangeEvent<SourceRecord>> debeziumEngine;
 
     @InjectMocks
     private CdcService cdcService;
@@ -30,6 +32,7 @@ class CdcServiceTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
+        ReflectionTestUtils.setField(cdcService, "debeziumEngine", debeziumEngine);
     }
 
     @Test
@@ -39,13 +42,43 @@ class CdcServiceTest {
 
     @Test
     void testStop() throws IOException {
-        assertDoesNotThrow(() -> cdcService.stop());
+        // Ensure debeziumEngine is not null
+        assertNotNull(debeziumEngine);
+
+        // Call the stop method
+        cdcService.stop();
+
+        // Verify that close() was called on the debeziumEngine
         verify(debeziumEngine, times(1)).close();
+
+        // Verify that debeziumEngine is set to null after stopping
+        assertNull(ReflectionTestUtils.getField(cdcService, "debeziumEngine"));
+    }
+
+    @Test
+    void testStopWithException() throws IOException {
+        // Ensure debeziumEngine is not null
+        assertNotNull(debeziumEngine);
+
+        // Mock the debeziumEngine to throw an IOException when close() is called
+        doThrow(new IOException("Test exception")).when(debeziumEngine).close();
+
+        // Call the stop method and expect an IOException
+        Exception exception = assertThrows(IOException.class, () -> cdcService.stop());
+
+        // Verify the exception message
+        assertEquals("Error stopping CDC: Test exception", exception.getMessage());
+
+        // Verify that close() was called on the debeziumEngine
+        verify(debeziumEngine, times(1)).close();
+
+        // Verify that debeziumEngine is set to null even when an exception occurs
+        assertNull(ReflectionTestUtils.getField(cdcService, "debeziumEngine"));
     }
 
     @Test
     void testHandleChangeEvent() {
-        ChangeEvent<SourceRecord> changeEvent = mock(ChangeEvent.class);
+        RecordChangeEvent<SourceRecord> changeEvent = mock(RecordChangeEvent.class);
         SourceRecord sourceRecord = mock(SourceRecord.class);
 
         when(changeEvent.record()).thenReturn(sourceRecord);

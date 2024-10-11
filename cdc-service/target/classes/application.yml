@@ -14,7 +14,7 @@ spring:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
   zipkin:
-    baseUrl: http://localhost:9412
+    base-url: http://localhost:9412
   sleuth:
     sampler:
       probability: 1.0

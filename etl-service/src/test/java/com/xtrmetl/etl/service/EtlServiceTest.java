@@ -1,5 +1,6 @@
 package com.xtrmetl.etl.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,15 +46,16 @@ class EtlServiceTest {
     }
 
     @Test
-    void testProcessDataWithEmptyInput() {
+    void testProcessDataWithEmptyInput() throws JsonProcessingException {
         String testData = "[]";
+        when(objectMapper.readTree(testData)).thenReturn(new ObjectMapper().readTree(testData));
         assertDoesNotThrow(() -> etlService.processData(testData));
     }
 
     @Test
-    void testProcessDataWithInvalidJson() {
+    void testProcessDataWithInvalidJson() throws JsonProcessingException {
         String testData = "invalid json";
-        when(objectMapper.readTree(testData)).thenThrow(new RuntimeException("Invalid JSON"));
+        when(objectMapper.readTree(testData)).thenThrow(new JsonProcessingException("Invalid JSON") {});
 
         assertThrows(RuntimeException.class, () -> etlService.processData(testData));
     }

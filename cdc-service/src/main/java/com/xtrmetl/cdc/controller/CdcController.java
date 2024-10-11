@@ -26,8 +26,12 @@ public class CdcController {
 
     @PostMapping("/stop")
     @Observed(name = "cdc.stop", contextualName = "cdc-stop")
-    public ResponseEntity<String> stopCdc() throws IOException {
-        cdcService.stop();
-        return ResponseEntity.ok("CDC process stopped");
+    public ResponseEntity<String> stopCdc() {
+        try {
+            cdcService.stop();
+            return ResponseEntity.ok("CDC process stopped");
+        } catch (IOException e) {
+            return ResponseEntity.internalServerError().body("Error stopping CDC process: " + e.getMessage());
+        }
     }
 }

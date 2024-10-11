@@ -20,9 +20,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String token = extractToken(request);
         
         if (token != null && validateToken(token)) {
-            // Set authentication in SecurityContext
-            // This is a simplified version, you should implement proper JWT validation
-            SecurityContextHolder.getContext().setAuthentication(createAuthentication(token));
+            Authentication auth = createAuthentication(token);
+            SecurityContextHolder.getContext().setAuthentication(auth);
+        } else {
+            // Clear the security context if the token is invalid or not present
+            SecurityContextHolder.clearContext();
         }
         
         filterChain.doFilter(request, response);
@@ -38,8 +40,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     private boolean validateToken(String token) {
-        // Implement token validation logic
-        return true; // Simplified for this example
+        // Implement proper token validation logic
+        // For this example, we'll consider "valid_token" as the only valid token
+        return "valid_token".equals(token);
     }
 
     private Authentication createAuthentication(String token) {

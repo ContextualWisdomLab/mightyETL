@@ -20,31 +20,38 @@ import java.util.concurrent.Executors;
 public class CdcService {
 
     private final Executor executor = Executors.newSingleThreadExecutor();
-    private final DebeziumEngine<RecordChangeEvent<SourceRecord>> debeziumEngine;
+    private DebeziumEngine<RecordChangeEvent<SourceRecord>> debeziumEngine;
 
     @Autowired
     private KafkaTemplate<String, String> kafkaTemplate;
 
-    public CdcService() {
-        this.debeziumEngine = DebeziumEngine.create(ChangeEventFormat.of(Connect.class))
-                .using(getCdcConfiguration().asProperties())
-                .notifying(this::handleChangeEvent)
-                .build();
-    }
-
     @PostConstruct
     public void start() {
+        initializeDebeziumEngine();
         this.executor.execute(debeziumEngine);
     }
 
     @PreDestroy
     public void stop() throws IOException {
         if (this.debeziumEngine != null) {
-            this.debeziumEngine.close();
+            try {
+                this.debeziumEngine.close();
+            } catch (IOException e) {
+                throw new IOException("Error stopping CDC: " + e.getMessage(), e);
+            } finally {
+                this.debeziumEngine = null;
+            }
         }
     }
 
-    private void handleChangeEvent(RecordChangeEvent<SourceRecord> sourceRecordRecordChangeEvent) {
+    private void initializeDebeziumEngine() {
+        this.debeziumEngine = DebeziumEngine.create(ChangeEventFormat.of(Connect.class))
+                .using(getCdcConfiguration().asProperties())
+                .notifying(this::handleChangeEvent)
+                .build();
+    }
+
+    protected void handleChangeEvent(RecordChangeEvent<SourceRecord> sourceRecordRecordChangeEvent) {
         SourceRecord sourceRecord = sourceRecordRecordChangeEvent.record();
         String topic = sourceRecord.topic();
         String key = sourceRecord.key().toString();
