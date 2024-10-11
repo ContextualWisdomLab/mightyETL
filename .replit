@@ -1,0 +1,61 @@
+modules = ["java", "java-17"]
+
+[nix]
+channel = "stable-24_05"
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Run Microservices"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Java Version Check"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Build Project"
+
+[[workflows.workflow]]
+name = "Run Microservices"
+author = "agent"
+
+[workflows.workflow.metadata]
+agentRequireRestartOnSave = false
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "mvn clean install && java -jar eureka-server/target/eureka-server-0.0.1-SNAPSHOT.jar & sleep 30 && java -jar config-server/target/config-server-0.0.1-SNAPSHOT.jar & sleep 30 && java -jar etl-service/target/etl-service-0.0.1-SNAPSHOT.jar & java -jar cdc-service/target/cdc-service-0.0.1-SNAPSHOT.jar & java -jar zuul-gateway/target/zuul-gateway-0.0.1-SNAPSHOT.jar"
+waitForPort = 8080
+
+[[workflows.workflow]]
+name = "Java Version Check"
+author = "agent"
+
+[workflows.workflow.metadata]
+agentRequireRestartOnSave = false
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "java -version"
+
+[[workflows.workflow]]
+name = "Build Project"
+author = "agent"
+
+[workflows.workflow.metadata]
+agentRequireRestartOnSave = false
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "mvn clean install"
+
+[deployment]
+run = ["sh", "-c", "mvn clean install && java -jar eureka-server/target/eureka-server-0.0.1-SNAPSHOT.jar & sleep 30 && java -jar config-server/target/config-server-0.0.1-SNAPSHOT.jar & sleep 30 && java -jar etl-service/target/etl-service-0.0.1-SNAPSHOT.jar & java -jar cdc-service/target/cdc-service-0.0.1-SNAPSHOT.jar & java -jar zuul-gateway/target/zuul-gateway-0.0.1-SNAPSHOT.jar"]
