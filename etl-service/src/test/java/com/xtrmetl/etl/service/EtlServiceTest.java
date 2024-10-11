@@ -1,0 +1,60 @@
+package com.xtrmetl.etl.service;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+import org.springframework.jdbc.core.JdbcTemplate;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
+
+class EtlServiceTest {
+
+    @Mock
+    private JdbcTemplate jdbcTemplate;
+
+    @Mock
+    private ObjectMapper objectMapper;
+
+    @InjectMocks
+    private EtlService etlService;
+
+    @BeforeEach
+    void setUp() {
+        MockitoAnnotations.openMocks(this);
+    }
+
+    @Test
+    void testProcessData() throws Exception {
+        String testData = "[{\"id\":\"1\",\"name\":\"John Doe\",\"email\":\"john@example.com\",\"amount\":\"100.50\"}]";
+        JsonNode jsonNode = new ObjectMapper().readTree(testData);
+
+        when(objectMapper.readTree(testData)).thenReturn(jsonNode);
+        when(jdbcTemplate.update(anyString(), anyString())).thenReturn(1);
+
+        String result = etlService.processData(testData);
+
+        assertNotNull(result);
+        assertTrue(result.contains("Processed: 1"));
+        verify(jdbcTemplate, times(1)).update(anyString(), anyString());
+    }
+
+    @Test
+    void testProcessDataWithEmptyInput() {
+        String testData = "[]";
+        assertDoesNotThrow(() -> etlService.processData(testData));
+    }
+
+    @Test
+    void testProcessDataWithInvalidJson() {
+        String testData = "invalid json";
+        when(objectMapper.readTree(testData)).thenThrow(new RuntimeException("Invalid JSON"));
+
+        assertThrows(RuntimeException.class, () -> etlService.processData(testData));
+    }
+}
