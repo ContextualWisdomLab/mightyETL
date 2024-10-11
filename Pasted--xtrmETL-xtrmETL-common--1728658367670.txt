@@ -1,0 +1,1111 @@
+# xtrmETL 프로젝트 개발 문서
+
+## 프로젝트 구조
+
+```
+xtrmETL/
+├── common/                # 공통 모듈 (도메인 객체 등)
+│   ├── src/
+│   │   └── main/
+│   │       ├── java/
+│   │       │   └── com.xtrmetl.common/
+│   │       │       ├── domain/
+│   │       │       │   ├── Task.java
+│   │       │       │   ├── User.java
+│   │       │       │   ├── Role.java
+│   │       │       │   └── ERole.java
+│   │       │       └── security/
+│   │       │           ├── JwtAuthenticationFilter.java
+│   │       │           ├── JwtTokenProvider.java
+│   │       │           └── UserPrincipal.java
+│   └── pom.xml
+├── etl-service/           # ETL 기능을 담당하는 마이크로서비스
+│   ├── src/
+│   │   ├── main/
+│   │   │   ├── java/
+│   │   │   │   └── com.xtrmetl.etl/
+│   │   │   │       ├── EtlApplication.java
+│   │   │   │       ├── controller/
+│   │   │   │       │   ├── EtlController.java
+│   │   │   │       │   └── AuthController.java
+│   │   │   │       ├── service/
+│   │   │   │       │   ├── EtlService.java
+│   │   │   │       │   ├── EtlServiceImpl.java
+│   │   │   │       │   ├── UserService.java
+│   │   │   │       │   └── UserServiceImpl.java
+│   │   │   │       ├── repository/
+│   │   │   │       │   ├── UserRepository.java
+│   │   │   │       │   └── RoleRepository.java
+│   │   │   │       ├── TaskProducer.java
+│   │   │   │       ├── TaskConsumer.java
+│   │   │   │       └── SecurityConfig.java
+│   │   │   └── resources/
+│   │   │       ├── application.yml
+│   │   │       ├── mybatis-config.xml
+│   │   │       └── mappers/
+│   │   │           └── DataMapper.xml
+│   └── pom.xml
+├── cdc-service/           # CDC 기능을 담당하는 마이크로서비스
+│   ├── src/
+│   │   ├── main/
+│   │   │   ├── java/
+│   │   │   │   └── com.xtrmetl.cdc/
+│   │   │   │       ├── CdcApplication.java
+│   │   │   │       ├── controller/
+│   │   │   │       │   ├── CdcController.java
+│   │   │   │       │   └── AuthController.java
+│   │   │   │       ├── service/
+│   │   │   │       │   ├── CdcService.java
+│   │   │   │       │   ├── CdcServiceImpl.java
+│   │   │   │       │   ├── UserService.java
+│   │   │   │       │   └── UserServiceImpl.java
+│   │   │   │       ├── repository/
+│   │   │   │       │   ├── UserRepository.java
+│   │   │   │       │   └── RoleRepository.java
+│   │   │   │       ├── TaskProducer.java
+│   │   │   │       ├── TaskConsumer.java
+│   │   │   │       └── SecurityConfig.java
+│   │   │   └── resources/
+│   │   │       ├── application.yml
+│   │   │       ├── mybatis-config.xml
+│   │   │       └── mappers/
+│   │   │           └── CdcMapper.xml
+│   └── pom.xml
+├── config-server/         # Spring Cloud Config Server
+│   ├── src/
+│   │   ├── main/
+│   │   │   └── java/
+│   │   │       └── com.xtrmetl.config/
+│   │   │           └── ConfigServerApplication.java
+│   │   └── resources/
+│   │       └── application.yml
+│   └── pom.xml
+├── eureka-server/         # 서비스 디스커버리를 위한 Eureka Server
+│   ├── src/
+│   │   ├── main/
+│   │   │   └── java/
+│   │   │       └── com.xtrmetl.eureka/
+│   │   │           └── EurekaServerApplication.java
+│   │   └── resources/
+│   │       └── application.yml
+│   └── pom.xml
+├── zuul-gateway/          # API Gateway 역할을 하는 Zuul Server
+│   ├── src/
+│   │   ├── main/
+│   │   │   └── java/
+│   │   │       └── com.xtrmetl.gateway/
+│   │   │           ├── ZuulGatewayApplication.java
+│   │   │           └── SecurityConfig.java
+│   │   └── resources/
+│   │       └── application.yml
+│   └── pom.xml
+└── pom.xml                # 멀티 모듈 프로젝트를 위한 부모 POM
+```
+
+---
+
+## 1. 부모 POM 설정 (`pom.xml`)
+
+```xml
+<project xmlns="http://maven.apache.org/POM/4.0.0" 
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 
+                             http://www.w3.org/2001/XMLSchema.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.xtrmetl</groupId>
+    <artifactId>xtrmETL</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+
+    <modules>
+        <module>common</module>
+        <module>etl-service</module>
+        <module>cdc-service</module>
+        <module>config-server</module>
+        <module>eureka-server</module>
+        <module>zuul-gateway</module>
+    </modules>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- Spring Boot 버전 관리 -->
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>2.7.13</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <!-- Spring Cloud 버전 관리 -->
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>2021.0.5</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <properties>
+        <java.version>11</java.version>
+    </properties>
+
+    <build>
+        <plugins>
+            <!-- Spring Boot Maven Plugin -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>
+```
+
+---
+
+## 2. 공통 모듈 (`common`)
+
+### 2.1 `pom.xml`
+
+```xml
+<project xmlns="http://maven.apache.org/POM/4.0.0" 
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 
+                             http://www.w3.org/2001/XMLSchema.xsd">
+    <parent>
+        <groupId>com.xtrmetl</groupId>
+        <artifactId>xtrmETL</artifactId>
+        <version>1.0-SNAPSHOT</version>
+    </parent>
+    <modelVersion>4.0.0</modelVersion>
+    <artifactId>common</artifactId>
+    <dependencies>
+        <!-- Spring Boot Starter -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter</artifactId>
+        </dependency>
+        <!-- Jackson for JSON parsing -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <!-- JWT -->
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-api</artifactId>
+            <version>0.11.5</version>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-impl</artifactId>
+            <version>0.11.5</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-jackson</artifactId>
+            <version>0.11.5</version>
+            <scope>runtime</scope>
+        </dependency>
+        <!-- Spring Data JPA -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+        <!-- PostgreSQL JDBC Driver -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+        </dependency>
+    </dependencies>
+</project>
+```
+
+### 2.2 `domain` 패키지
+
+#### `Task.java`
+
+```java
+package com.xtrmetl.common.domain;
+
+import java.io.Serializable;
+
+public class Task implements Serializable {
+    private static final long serialVersionUID = 1L;
+
+    private String type; // 작업 유형 (ETL 또는 CDC)
+    private String payload; // 작업에 필요한 데이터 (JSON 등)
+
+    // 기본 생성자
+    public Task() {
+    }
+
+    // 매개변수 있는 생성자
+    public Task(String type, String payload) {
+        this.type = type;
+        this.payload = payload;
+    }
+
+    // Getter와 Setter
+    public String getType() {
+        return type;
+    }
+
+    public String getPayload() {
+        return payload;
+    }
+
+    public void setType(String type) {
+        this.type = type;
+    }
+
+    public void setPayload(String payload) {
+        this.payload = payload;
+    }
+}
+```
+
+#### `User.java`
+
+```java
+package com.xtrmetl.common.domain;
+
+import javax.persistence.*;
+import java.util.HashSet;
+import java.util.Set;
+
+@Entity
+@Table(name = "users")
+public class User {
+  
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+  
+    @Column(unique = true)
+    private String username;
+  
+    private String password;
+  
+    @ManyToMany(fetch = FetchType.EAGER)
+    @JoinTable(
+        name = "user_roles",
+        joinColumns = @JoinColumn(name = "user_id"),
+        inverseJoinColumns = @JoinColumn(name = "role_id"))
+    private Set<Role> roles = new HashSet<>();
+  
+    // 기본 생성자
+    public User() {}
+  
+    // 매개변수 있는 생성자
+    public User(String username, String password, Set<Role> roles) {
+        this.username = username;
+        this.password = password;
+        this.roles = roles;
+    }
+  
+    // Getter와 Setter
+    public Long getId() {
+        return id;
+    }
+  
+    public String getUsername() {
+        return username;
+    }
+  
+    public String getPassword() {
+        return password;
+    }
+  
+    public Set<Role> getRoles() {
+        return roles;
+    }
+  
+    public void setId(Long id) {
+        this.id = id;
+    }
+  
+    public void setUsername(String username) {
+        this.username = username;
+    }
+  
+    public void setPassword(String password) {
+        this.password = password;
+    }
+  
+    public void setRoles(Set<Role> roles) {
+        this.roles = roles;
+    }
+}
+```
+
+#### `Role.java`
+
+```java
+package com.xtrmetl.common.domain;
+
+import javax.persistence.*;
+
+@Entity
+@Table(name = "roles")
+public class Role {
+  
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+  
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    private ERole name;
+  
+    public Role() {}
+  
+    public Role(ERole name) {
+        this.name = name;
+    }
+  
+    // Getter와 Setter
+    public Long getId() {
+        return id;
+    }
+  
+    public ERole getName() {
+        return name;
+    }
+  
+    public void setId(Long id) {
+        this.id = id;
+    }
+  
+    public void setName(ERole name) {
+        this.name = name;
+    }
+}
+```
+
+#### `ERole.java`
+
+```java
+package com.xtrmetl.common.domain;
+
+public enum ERole {
+    ROLE_USER,
+    ROLE_ADMIN
+}
+```
+
+### 2.3 `security` 패키지
+
+#### `UserPrincipal.java`
+
+```java
+package com.xtrmetl.common.security;
+
+import com.xtrmetl.common.domain.User;
+import org.springframework.security.core.*;
+import org.springframework.security.core.userdetails.UserDetails;
+import java.util.*;
+import java.util.stream.Collectors;
+
+public class UserPrincipal implements UserDetails {
+
+    private Long id;
+    private String username;
+    private String password;
+    private Collection<? extends GrantedAuthority> authorities;
+
+    public UserPrincipal(Long id, String username, String password,
+                         Collection<? extends GrantedAuthority> authorities) {
+        this.id = id;
+        this.username = username;
+        this.password = password;
+        this.authorities = authorities;
+    }
+
+    public static UserPrincipal build(User user) {
+        List<GrantedAuthority> authorities = user.getRoles().stream()
+            .map(role -> new SimpleGrantedAuthority(role.getName().name()))
+            .collect(Collectors.toList());
+
+        return new UserPrincipal(
+            user.getId(),
+            user.getUsername(),
+            user.getPassword(),
+            authorities
+        );
+    }
+
+    // Getters
+    public Long getId() {
+        return id;
+    }
+  
+    @Override
+    public String getUsername() {
+        return username;
+    }
+  
+    @Override
+    public String getPassword() {
+        return password;
+    }
+  
+    @Override
+    public Collection<? extends GrantedAuthority> getAuthorities() {
+        return authorities;
+    }
+
+    // 기타 메서드들
+    @Override
+    public boolean isAccountNonExpired() {
+        return true;
+    }
+  
+    @Override
+    public boolean isAccountNonLocked() {
+        return true;
+    }
+  
+    @Override
+    public boolean isCredentialsNonExpired() {
+        return true;
+    }
+  
+    @Override
+    public boolean isEnabled() {
+        return true;
+    }
+}
+```
+
+#### `JwtTokenProvider.java`
+
+```java
+package com.xtrmetl.common.security;
+
+import io.jsonwebtoken.*;
+import org.springframework.stereotype.Component;
+
+import java.util.Date;
+import java.util.function.Function;
+
+@Component
+public class JwtTokenProvider {
+
+    private final String JWT_SECRET = "your_secret_key"; // 실제로는 환경 변수나 외부 설정에서 가져와야 합니다.
+    private final long JWT_EXPIRATION_MS = 3600000; // 1시간
+
+    // JWT 토큰 생성
+    public String generateToken(UserPrincipal userPrincipal) {
+        Date now = new Date();
+        Date expiryDate = new Date(now.getTime() + JWT_EXPIRATION_MS);
+
+        return Jwts.builder()
+                .setSubject(userPrincipal.getUsername())
+                .setIssuedAt(now)
+                .setExpiration(expiryDate)
+                .signWith(SignatureAlgorithm.HS512, JWT_SECRET)
+                .compact();
+    }
+
+    // 토큰에서 사용자 이름 추출
+    public String getUsernameFromToken(String token) {
+        return getClaimFromToken(token, Claims::getSubject);
+    }
+
+    // 토큰 유효성 검사
+    public boolean validateToken(String authToken) {
+        try {
+            Jwts.parser().setSigningKey(JWT_SECRET).parseClaimsJws(authToken);
+            return true;
+        } catch (JwtException ex) {
+            // 로그 또는 예외 처리
+        }
+        return false;
+    }
+
+    // 토큰에서 클레임 가져오기
+    public <T> T getClaimFromToken(String token, Function<Claims, T> claimsResolver) {
+        final Claims claims = Jwts.parser()
+                .setSigningKey(JWT_SECRET)
+                .parseClaimsJws(token)
+                .getBody();
+        return claimsResolver.apply(claims);
+    }
+}
+```
+
+#### `JwtAuthenticationFilter.java`
+
+```java
+package com.xtrmetl.common.security;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.filter.OncePerRequestFilter;
+import com.xtrmetl.etl.service.UserService;
+
+import javax.servlet.FilterChain;
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
+
+import org.springframework.security.core.Authentication;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+
+public class JwtAuthenticationFilter extends OncePerRequestFilter {
+
+    @Autowired
+    private JwtTokenProvider tokenProvider;
+  
+    @Autowired
+    private UserService userService;
+  
+    @Override
+    protected void doFilterInternal(HttpServletRequest request,
+                                    HttpServletResponse response,
+                                    FilterChain filterChain) throws ServletException, IOException {
+  
+        try {
+            String jwt = getJwtFromRequest(request);
+
+            if (jwt != null && tokenProvider.validateToken(jwt)) {
+                String username = tokenProvider.getUsernameFromToken(jwt);
+
+                UserPrincipal userDetails = (UserPrincipal) userService.loadUserByUsername(username);
+                Authentication authentication = new UsernamePasswordAuthenticationToken(
+                        userDetails, null, userDetails.getAuthorities());
+  
+                SecurityContextHolder.getContext().setAuthentication(authentication);
+            }
+        } catch (Exception ex) {
+            // 로그 또는 예외 처리
+        }
+  
+        filterChain.doFilter(request, response);
+    }
+  
+    private String getJwtFromRequest(HttpServletRequest request) {
+        String bearerToken = request.getHeader("Authorization");
+  
+        if (bearerToken != null && bearerToken.startsWith("Bearer ")) {
+            return bearerToken.substring(7);
+        }
+        return null;
+    }
+}
+```
+
+---
+
+## 3. ETL 서비스 (`etl-service`)
+
+### 3.1 `pom.xml`
+
+```xml
+<project xmlns="http://maven.apache.org/POM/4.0.0" 
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 
+                             http://www.w3.org/2001/XMLSchema.xsd">
+    <parent>
+        <groupId>com.xtrmetl</groupId>
+        <artifactId>xtrmETL</artifactId>
+        <version>1.0-SNAPSHOT</version>
+    </parent>
+    <modelVersion>4.0.0</modelVersion>
+    <artifactId>etl-service</artifactId>
+    <dependencies>
+        <!-- 공통 모듈 -->
+        <dependency>
+            <groupId>com.xtrmetl</groupId>
+            <artifactId>common</artifactId>
+            <version>1.0-SNAPSHOT</version>
+        </dependency>
+        <!-- Spring Boot Starter Web -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <!-- Spring Security -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <!-- Spring Cloud Netflix Eureka Client -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+        </dependency>
+        <!-- Spring Cloud Config Client -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-config</artifactId>
+        </dependency>
+        <!-- MyBatis Spring Boot Starter -->
+        <dependency>
+            <groupId>org.mybatis.spring.boot</groupId>
+            <artifactId>mybatis-spring-boot-starter</artifactId>
+            <version>2.2.2</version>
+        </dependency>
+        <!-- PostgreSQL JDBC Driver -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+        </dependency>
+        <!-- Redis -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <!-- Spring Retry -->
+        <dependency>
+            <groupId>org.springframework.retry</groupId>
+            <artifactId>spring-retry</artifactId>
+        </dependency>
+        <!-- Spring Data JPA -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+    </dependencies>
+</project>
+```
+
+### 3.2 `EtlApplication.java`
+
+```java
+package com.xtrmetl.etl;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
+import org.springframework.context.annotation.EnableAspectJAutoProxy;
+import org.springframework.retry.annotation.EnableRetry;
+
+@SpringBootApplication(scanBasePackages = {"com.xtrmetl.etl", "com.xtrmetl.common"})
+@EnableDiscoveryClient
+@EnableAspectJAutoProxy(proxyTargetClass = true)
+@EnableRetry
+public class EtlApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(EtlApplication.class, args);
+    }
+}
+```
+
+### 3.3 `controller` 패키지
+
+#### `EtlController.java`
+
+```java
+package com.xtrmetl.etl.controller;
+
+import com.xtrmetl.common.domain.Task;
+import com.xtrmetl.etl.TaskProducer;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
+
+@RestController
+@RequestMapping("/etl")
+public class EtlController {
+
+    @Autowired
+    private TaskProducer taskProducer;
+
+    @PostMapping("/process")
+    @PreAuthorize("hasRole('USER')")
+    public String processEtl(@RequestBody String jsonInput) {
+        Task task = new Task("ETL", jsonInput);
+        taskProducer.submitTask(task);
+        return "ETL 작업이 큐에 등록되었습니다.";
+    }
+}
+```
+
+#### `AuthController.java`
+
+```java
+package com.xtrmetl.etl.controller;
+
+import com.xtrmetl.common.domain.ERole;
+import com.xtrmetl.common.domain.Role;
+import com.xtrmetl.common.domain.User;
+import com.xtrmetl.common.security.JwtTokenProvider;
+import com.xtrmetl.etl.repository.RoleRepository;
+import com.xtrmetl.etl.repository.UserRepository;
+import com.xtrmetl.etl.service.UserService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.bind.annotation.*;
+import java.util.Collections;
+
+@RestController
+@RequestMapping("/auth")
+public class AuthController {
+
+    @Autowired
+    UserRepository userRepository;
+  
+    @Autowired
+    RoleRepository roleRepository;
+  
+    @Autowired
+    PasswordEncoder encoder;
+  
+    @Autowired
+    JwtTokenProvider tokenProvider;
+  
+    @Autowired
+    UserService userService;
+
+    @PostMapping("/signup")
+    public ResponseEntity<?> registerUser(@RequestBody SignupRequest signUpRequest) {
+        if(userRepository.existsByUsername(signUpRequest.getUsername())) {
+            return ResponseEntity.badRequest().body("이미 존재하는 사용자입니다.");
+        }
+
+        // 사용자 생성
+        User user = new User(signUpRequest.getUsername(),
+                             encoder.encode(signUpRequest.getPassword()),
+                             Collections.singleton(roleRepository.findByName(ERole.ROLE_USER).orElseThrow(() -> new RuntimeException("역할이 없습니다.")))
+        );
+
+        userRepository.save(user);
+
+        return ResponseEntity.ok("사용자 등록 성공");
+    }
+
+    @PostMapping("/signin")
+    public ResponseEntity<?> authenticateUser(@RequestBody LoginRequest loginRequest) {
+        UserPrincipal userDetails = (UserPrincipal) userService.loadUserByUsername(loginRequest.getUsername());
+
+        if(!encoder.matches(loginRequest.getPassword(), userDetails.getPassword())) {
+            return ResponseEntity.badRequest().body("비밀번호가 일치하지 않습니다.");
+        }
+
+        String jwt = tokenProvider.generateToken(userDetails);
+
+        return ResponseEntity.ok(new JwtResponse(jwt));
+    }
+}
+```
+
+##### `SignupRequest.java`
+
+```java
+package com.xtrmetl.etl.controller;
+
+public class SignupRequest {
+    private String username;
+    private String password;
+
+    // Getters and setters
+}
+```
+
+##### `LoginRequest.java`
+
+```java
+package com.xtrmetl.etl.controller;
+
+public class LoginRequest {
+    private String username;
+    private String password;
+
+    // Getters and setters
+}
+```
+
+##### `JwtResponse.java`
+
+```java
+package com.xtrmetl.etl.controller;
+
+public class JwtResponse {
+    private String token;
+
+    public JwtResponse(String token) {
+        this.token = token;
+    }
+
+    // Getter and setter
+}
+```
+
+### 3.4 `service` 패키지
+
+#### `UserService.java`
+
+```java
+package com.xtrmetl.etl.service;
+
+import org.springframework.security.core.userdetails.UserDetailsService;
+
+public interface UserService extends UserDetailsService {
+    // 추가적인 메서드가 필요하면 선언
+}
+```
+
+#### `UserServiceImpl.java`
+
+```java
+package com.xtrmetl.etl.service;
+
+import com.xtrmetl.common.domain.User;
+import com.xtrmetl.common.security.UserPrincipal;
+import com.xtrmetl.etl.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.userdetails.*;
+import org.springframework.stereotype.Service;
+
+@Service
+public class UserServiceImpl implements UserService {
+  
+    @Autowired
+    UserRepository userRepository;
+  
+    @Override
+    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+        User user = userRepository.findByUsername(username)
+                 .orElseThrow(() -> new UsernameNotFoundException("사용자를 찾을 수 없습니다: " + username));
+
+        return UserPrincipal.build(user);
+    }
+}
+```
+
+### 3.5 `repository` 패키지
+
+#### `UserRepository.java`
+
+```java
+package com.xtrmetl.etl.repository;
+
+import com.xtrmetl.common.domain.User;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+import java.util.Optional;
+
+@Repository
+public interface UserRepository extends JpaRepository<User, Long> {
+    Optional<User> findByUsername(String username);
+    Boolean existsByUsername(String username);
+}
+```
+
+#### `RoleRepository.java`
+
+```java
+package com.xtrmetl.etl.repository;
+
+import com.xtrmetl.common.domain.ERole;
+import com.xtrmetl.common.domain.Role;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+import java.util.Optional;
+
+@Repository
+public interface RoleRepository extends JpaRepository<Role, Long> {
+    Optional<Role> findByName(ERole name);
+}
+```
+
+### 3.6 `SecurityConfig.java`
+
+```java
+package com.xtrmetl.etl;
+
+import com.xtrmetl.common.security.JwtAuthenticationFilter;
+import com.xtrmetl.etl.service.UserService;
+import com.xtrmetl.common.security.JwtTokenProvider;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.*;
+import org.springframework.security.config.annotation.method.configuration.EnableGlobalMethodSecurity;
+import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.*;
+
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.password.*;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+
+@Configuration
+@EnableWebSecurity
+@EnableGlobalMethodSecurity(prePostEnabled = true)
+public class SecurityConfig extends WebSecurityConfigurerAdapter {
+
+    @Autowired
+    private UserService userService;
+  
+    @Autowired
+    private JwtTokenProvider tokenProvider;
+  
+    @Bean
+    public JwtAuthenticationFilter jwtAuthenticationFilter() {
+        return new JwtAuthenticationFilter();
+    }
+  
+    @Override
+    public void configure(AuthenticationManagerBuilder authenticationManagerBuilder) throws Exception {
+        authenticationManagerBuilder
+            .userDetailsService(userService)
+            .passwordEncoder(passwordEncoder());
+    }
+  
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+  
+    @Bean
+    @Override
+    public AuthenticationManager authenticationManagerBean() throws Exception {
+        return super.authenticationManagerBean();
+    }
+  
+    @Override
+    protected void configure(HttpSecurity http) throws Exception {
+        http
+            .csrf().disable()
+            .authorizeRequests()
+                .antMatchers("/auth/**").permitAll()
+                .anyRequest().authenticated()
+            .and()
+            .addFilterBefore(jwtAuthenticationFilter(), UsernamePasswordAuthenticationFilter.class)
+            .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS);
+    }
+}
+```
+
+### 3.7 `application.yml`
+
+```yaml
+server:
+  port: 8081
+
+spring:
+  application:
+    name: etl-service
+  datasource:
+    url: jdbc:postgresql://localhost:5432/your_database
+    username: your_username
+    password: your_password
+    driver-class-name: org.postgresql.Driver
+  redis:
+    host: localhost
+    port: 6379
+  jackson:
+    serialization:
+      FAIL_ON_EMPTY_BEANS: false
+
+eureka:
+  client:
+    serviceUrl:
+      defaultZone: http://localhost:8761/eureka/
+
+# Spring Retry 설정
+spring:
+  retry:
+    enabled: true
+```
+
+### 3.8 데이터베이스 설정
+
+#### 사용자 및 역할 테이블 생성
+
+```sql
+CREATE TABLE roles (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(20) UNIQUE NOT NULL
+);
+
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    password VARCHAR(100) NOT NULL
+);
+
+CREATE TABLE user_roles (
+    user_id INTEGER NOT NULL,
+    role_id INTEGER NOT NULL,
+    PRIMARY KEY (user_id, role_id),
+    FOREIGN KEY (user_id) REFERENCES users (id),
+    FOREIGN KEY (role_id) REFERENCES roles (id)
+);
+
+INSERT INTO roles (name) VALUES ('ROLE_USER'), ('ROLE_ADMIN');
+```
+
+---
+
+## 10. 테스트 방법
+
+- **회원 가입:**
+
+  ```
+  POST http://localhost:8080/etl/auth/signup
+  Content-Type: application/json
+
+  {
+      "username": "testuser",
+      "password": "testpassword"
+  }
+  ```
+
+- **로그인:**
+
+  ```
+  POST http://localhost:8080/etl/auth/signin
+  Content-Type: application/json
+
+  {
+      "username": "testuser",
+      "password": "testpassword"
+  }
+  ```
+
+  응답으로 받은 토큰을 Authorization 헤더에 포함하여 API 요청을 보냅니다.
+
+- **ETL 서비스 테스트:**
+
+  ```
+  POST http://localhost:8080/etl/process
+  Content-Type: application/json
+  Authorization: Bearer your_jwt_token
+
+  {
+      "dataTypeCode": "TYPE001",
+      "data": [
+          {"id": "1", "name": "John", "age": "30"},
+          {"id": "2", "name": "Jane", "age": "25"}
+      ]
+  }
+  ```
+
+---
+
+## 11. 추가 고려사항
+
+- **보안 및 인증:**
+  - Spring Security와 JWT를 사용하여 API 요청에 대한 인증과 권한 부여를 구현하였습니다.
+  - 사용자 정보와 권한을 데이터베이스에서 관리하며, 패스워드는 BCrypt 알고리즘으로 암호화됩니다.
+  - `@PreAuthorize` 어노테이션을 사용하여 메소드 수준에서 권한을 제어합니다.
+
+- **에러 처리 및 재시도 로직:**
+  - `@Retryable` 어노테이션을 사용하여 재시도 로직을 구현하였습니다.
+  - 예외 발생 시 로깅과 알림 시스템을 통해 관리자에게 통보할 수 있습니다.
+
+- **모니터링 및 로깅:**
+  - ELK 스택이나 Prometheus, Grafana 등을 사용하여 서비스의 상태를 모니터링하고, 로깅을 관리할 수 있습니다.
+
+- **배포 및 확장:**
+  - Docker와 Kubernetes를 사용하여 마이크로서비스를 컨테이너화하고, 오케스트레이션하여 확장성과 가용성을 높일 수 있습니다.
+
+---
