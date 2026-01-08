@@ -4,17 +4,18 @@
 
 ### 1.1 Product Overview
 
-xtrmETL is a microservices-based enterprise data integration platform that provides real-time Change Data Capture (CDC) and Extract-Transform-Load (ETL) capabilities. The platform enables organizations to capture database changes in real-time and process data through configurable transformation pipelines.
 xtrmETL is a microservices-based enterprise data integration platform
 that provides real-time Change Data Capture (CDC) and
-Extract-Transform-Load (ETL) capabilities.
+Extract-Transform-Load (ETL) capabilities. The platform enables
+organizations to capture database changes in real-time and process data
+through configurable transformation pipelines.
 
 ### 1.2 Product Vision
 
-To provide a scalable, reliable, and secure platform for real-time data integration and transformation, enabling organizations to synchronize data across systems, build real-time analytics pipelines, and maintain data consistency across distributed architectures.
 To provide a scalable, reliable, and secure platform for real-time
 data integration and transformation, enabling organizations to
-synchronize data across systems.
+synchronize data across systems, build real-time analytics pipelines,
+and maintain data consistency across distributed architectures.
 
 ### 1.3 Target Users
 
@@ -393,7 +394,7 @@ CREATE TABLE users (
     username VARCHAR(50) UNIQUE NOT NULL,
     password VARCHAR(100) NOT NULL
 );
-```text
+```
 
 #### Roles Table
 
@@ -402,7 +403,7 @@ CREATE TABLE roles (
     id BIGSERIAL PRIMARY KEY,
     name VARCHAR(20) UNIQUE NOT NULL
 );
-```text
+```
 
 #### User-Roles Association
 
@@ -414,7 +415,7 @@ CREATE TABLE user_roles (
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (role_id) REFERENCES roles(id)
 );
-```text
+```
 
 ### 6.2 ETL Schema
 
@@ -441,7 +442,7 @@ CREATE TABLE processed_data (
   "username": "string",
   "password": "string"
 }
-```text
+```
 
 **Response** (200):
 
@@ -449,7 +450,7 @@ CREATE TABLE processed_data (
 {
   "message": "User registered successfully"
 }
-```text
+```
 
 #### POST /auth/signin
 
@@ -460,7 +461,7 @@ CREATE TABLE processed_data (
   "username": "string",
   "password": "string"
 }
-```text
+```
 
 **Response** (200):
 
@@ -510,7 +511,7 @@ CREATE TABLE processed_data (
     "amount": "1234.5"
   }
 ]
-```text
+```
 
 **Response** (200):
 

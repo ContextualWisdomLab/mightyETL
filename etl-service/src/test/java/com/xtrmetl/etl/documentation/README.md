@@ -17,6 +17,7 @@ This test suite provides comprehensive validation for all project documentation 
 ### Total: 40+ Individual Test Cases
 
 #### 1. README.md Tests (7 tests)
+
 - ✅ Document structure validation
 - ✅ Service descriptions completeness
 - ✅ Code block syntax and content validation
@@ -25,6 +26,7 @@ This test suite provides comprehensive validation for all project documentation 
 - ✅ Authentication documentation
 
 #### 2. PRD.md Tests (7 tests)
+
 - ✅ Complete document structure (Executive Summary, Problem Statement, etc.)
 - ✅ Functional requirements with proper IDs (FR-CDC-*, FR-ETL-*, FR-AUTH-*)
 - ✅ Non-functional requirements with IDs (NFR-*)
@@ -34,6 +36,7 @@ This test suite provides comprehensive validation for all project documentation 
 - ✅ Risk assessment and mitigation strategies
 
 #### 3. ARCHITECTURE.md Tests (7 tests)
+
 - ✅ ASCII art system diagrams
 - ✅ All microservices descriptions
 - ✅ Data flow documentation (ETL, CDC, Authentication flows)
@@ -43,23 +46,27 @@ This test suite provides comprehensive validation for all project documentation 
 - ✅ Technology integration (Debezium, Kafka, PostgreSQL, Spring)
 
 #### 4. CHANGELOG.md Tests (4 tests)
+
 - ✅ Keep a Changelog format compliance
 - ✅ Semantic versioning adherence
 - ✅ Change categorization (Added, Changed, Fixed, Removed, Deprecated)
 - ✅ Documentation changes tracking
 
 #### 5. SUMMARY_KR.md Tests (3 tests)
+
 - ✅ Korean document structure
 - ✅ Korean character validation (Hangul Unicode range)
 - ✅ References to main English documentation
 
 #### 6. Cross-Document Consistency Tests (4 tests)
+
 - ✅ Service port consistency across all documents
 - ✅ API endpoint consistency (/api/etl/process, /api/cdc/start, etc.)
 - ✅ Technology stack consistency
 - ✅ Version number validation
 
 #### 7. Content Quality Tests (4 parameterized tests × multiple files)
+
 - ✅ Trailing whitespace detection
 - ✅ Balanced code blocks (matching ``` pairs)
 - ✅ Broken markdown link detection
@@ -109,17 +116,20 @@ mvn test -Dtest=DocumentationValidationTest\$ContentQualityTests
 ## What These Tests Validate
 
 ### Structure & Completeness
+
 - All required documentation sections exist
 - Essential technical details are documented
 - Required fields and configurations are present
 
 ### Accuracy & Consistency
+
 - Service ports match across documents (8080, 8000, 8001, 8761)
 - API endpoints are consistent (/api/etl/process, /auth/signin, etc.)
 - Technology names and versions align
 - Database schemas are properly documented
 
 ### Quality & Standards
+
 - Markdown syntax is correct (balanced code blocks, valid links)
 - Header hierarchy is logical (no h1 → h6 jumps)
 - Code blocks contain valid syntax for their language
@@ -127,6 +137,7 @@ mvn test -Dtest=DocumentationValidationTest\$ContentQualityTests
 - Semantic versioning is used
 
 ### Integration & References
+
 - Internal links point to existing files
 - Cross-references between documents are accurate
 - Technology stack is consistently described

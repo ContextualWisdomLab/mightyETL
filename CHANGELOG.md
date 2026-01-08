@@ -184,9 +184,7 @@ For more information, see:
 - [PRD.md](PRD.md) - Product Requirements Document  
 - [ARCHITECTURE.md](ARCHITECTURE.md) - Technical architecture
 - [SUMMARY_KR.md](SUMMARY_KR.md) - Korean summary
-- [Pasted--xtrmETL-xtrmETL-common--1728658367670.txt]
-  (Pasted--xtrmETL-xtrmETL-common--1728658367670.txt)
-  - Original design notes (Korean)
+- Original design notes (Korean) in project files
 
 ---
 

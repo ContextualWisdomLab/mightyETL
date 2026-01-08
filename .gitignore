@@ -27,7 +27,6 @@ buildNumber.properties
 .DS_Store
 
 # Test reports
-*.log
 hs_err_pid*
 
 # Node (if any)
@@ -37,5 +36,4 @@ package-lock.json
 # Temporary files
 *.tmp
 *.bak
-*.swp
 .~*

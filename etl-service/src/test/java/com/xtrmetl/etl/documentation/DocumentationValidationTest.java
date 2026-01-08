@@ -565,6 +565,9 @@ class DocumentationValidationTest {
             // Extract version references from different docs
             Pattern versionPattern = Pattern.compile("(?:version|Version|v)[:\\s]*([0-9]+\\.[0-9]+(?:\\.[0-9]+)?)");
             
+            // Documents that can have multiple versions (e.g., changelogs, READMEs with historical info)
+            Set<String> allowedMultiVersionDocs = Set.of("README.md", "CHANGELOG.md");
+            
             Map<String, Set<String>> versionsByDoc = new HashMap<>();
             for (Map.Entry<String, String> doc : allDocs.entrySet()) {
                 Set<String> versions = new HashSet<>();
@@ -578,9 +581,12 @@ class DocumentationValidationTest {
             }
             
             // Check per-document consistency: each doc should have consistent versions
+            // except for those in the allowlist
             for (Map.Entry<String, Set<String>> entry : versionsByDoc.entrySet()) {
-                assertTrue(entry.getValue().size() == 1,
-                    "Document " + entry.getKey() + " has inconsistent version numbers: " + entry.getValue());
+                if (!allowedMultiVersionDocs.contains(entry.getKey())) {
+                    assertTrue(entry.getValue().size() == 1,
+                        "Document " + entry.getKey() + " has inconsistent version numbers: " + entry.getValue());
+                }
             }
         }
     }
@@ -634,7 +640,7 @@ class DocumentationValidationTest {
                 filename + " should not have empty link text []( ");
             
             // Check for unclosed reference-style links (must end with ] not followed by text)
-            Pattern unclosedRefPattern = Pattern.compile("\\[[^\\]]+\\]\\s*\\[[^\\]]*$");
+            Pattern unclosedRefPattern = Pattern.compile("\\[[^\\]]+\\]\\s*\\[[^\\]]*$", Pattern.MULTILINE);
             assertFalse(unclosedRefPattern.matcher(content).find(),
                 filename + " should not have unclosed reference-style links");
         }
