@@ -1,0 +1,32 @@
+-------------------------------------------------------------------------------
+Test set: com.xtrmetl.etl.documentation.DocumentationValidationTest$PrdTests
+-------------------------------------------------------------------------------
+Tests run: 7, Failures: 7, Errors: 0, Skipped: 0, Time elapsed: 0.033 s <<< FAILURE! - in com.xtrmetl.etl.documentation.DocumentationValidationTest$PrdTests
+com.xtrmetl.etl.documentation.DocumentationValidationTest$PrdTests.shouldHaveRiskAssessment  Time elapsed: 0 s  <<< FAILURE!
+org.opentest4j.AssertionFailedError: PRD.md should exist ==> expected: <true> but was: <false>
+	at com.xtrmetl.etl.documentation.DocumentationValidationTest$PrdTests.setUp(DocumentationValidationTest.java:180)
+
+com.xtrmetl.etl.documentation.DocumentationValidationTest$PrdTests.shouldHaveCompleteDocumentStructure  Time elapsed: 0.001 s  <<< FAILURE!
+org.opentest4j.AssertionFailedError: PRD.md should exist ==> expected: <true> but was: <false>
+	at com.xtrmetl.etl.documentation.DocumentationValidationTest$PrdTests.setUp(DocumentationValidationTest.java:180)
+
+com.xtrmetl.etl.documentation.DocumentationValidationTest$PrdTests.shouldDefineSuccessMetrics  Time elapsed: 0.002 s  <<< FAILURE!
+org.opentest4j.AssertionFailedError: PRD.md should exist ==> expected: <true> but was: <false>
+	at com.xtrmetl.etl.documentation.DocumentationValidationTest$PrdTests.setUp(DocumentationValidationTest.java:180)
+
+com.xtrmetl.etl.documentation.DocumentationValidationTest$PrdTests.shouldDefineNonFunctionalRequirementsWithIds  Time elapsed: 0.004 s  <<< FAILURE!
+org.opentest4j.AssertionFailedError: PRD.md should exist ==> expected: <true> but was: <false>
+	at com.xtrmetl.etl.documentation.DocumentationValidationTest$PrdTests.setUp(DocumentationValidationTest.java:180)
+
+com.xtrmetl.etl.documentation.DocumentationValidationTest$PrdTests.shouldDocumentDatabaseSchema  Time elapsed: 0 s  <<< FAILURE!
+org.opentest4j.AssertionFailedError: PRD.md should exist ==> expected: <true> but was: <false>
+	at com.xtrmetl.etl.documentation.DocumentationValidationTest$PrdTests.setUp(DocumentationValidationTest.java:180)
+
+com.xtrmetl.etl.documentation.DocumentationValidationTest$PrdTests.shouldHaveApiSpecificationsWithExamples  Time elapsed: 0 s  <<< FAILURE!
+org.opentest4j.AssertionFailedError: PRD.md should exist ==> expected: <true> but was: <false>
+	at com.xtrmetl.etl.documentation.DocumentationValidationTest$PrdTests.setUp(DocumentationValidationTest.java:180)
+
+com.xtrmetl.etl.documentation.DocumentationValidationTest$PrdTests.shouldDefineFunctionalRequirementsWithIds  Time elapsed: 0.007 s  <<< FAILURE!
+org.opentest4j.AssertionFailedError: PRD.md should exist ==> expected: <true> but was: <false>
+	at com.xtrmetl.etl.documentation.DocumentationValidationTest$PrdTests.setUp(DocumentationValidationTest.java:180)
+

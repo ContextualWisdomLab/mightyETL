@@ -5,6 +5,7 @@ A microservices-based platform for real-time Change Data Capture (CDC) and Extra
 ## 🎯 Overview
 
 xtrmETL provides enterprise-grade capabilities for:
+
 - **Real-time Change Data Capture**: Monitor PostgreSQL databases and capture all data changes
 - **Data Transformation**: Apply business rules and transform data at scale
 - **Event Streaming**: Publish changes to Kafka for downstream processing
@@ -12,7 +13,7 @@ xtrmETL provides enterprise-grade capabilities for:
 
 ## 🏗️ Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │                      API Gateway (Zuul)                      │
 │                         Port 8080                            │
@@ -107,44 +108,54 @@ Access the gateway at: `http://localhost:8080`
 ## 📚 Services
 
 ### CDC Service (Port 8001)
+
 Captures database changes in real-time using Debezium.
 
 **Key Features:**
+
 - PostgreSQL change data capture
 - Kafka event publishing
 - Real-time monitoring
 - Minimal source database impact
 
 **API Endpoints:**
+
 - `POST /api/cdc/start` - Start CDC process
 - `POST /api/cdc/stop` - Stop CDC process
 
 ### ETL Service (Port 8000)
+
 Processes and transforms data with configurable business rules.
 
 **Key Features:**
+
 - JSON data processing
 - Parallel record processing
 - Automatic retry on failures
 - Configurable transformations
 
 **API Endpoints:**
+
 - `POST /api/etl/process` - Process data
 
 **Transformation Rules:**
+
 - NAME fields: Convert to uppercase
 - EMAIL fields: Convert to lowercase  
 - AMOUNT fields: Format to 2 decimal places
 
 ### Zuul Gateway (Port 8080)
+
 API Gateway with authentication and routing.
 
 **Routes:**
+
 - `/etl/**` → ETL Service
 - `/cdc/**` → CDC Service
 - `/auth/**` → Authentication endpoints
 
 ### Eureka Server (Port 8761)
+
 Service discovery and registration.
 
 **Dashboard:** `http://localhost:8761`
@@ -176,6 +187,7 @@ curl -X POST http://localhost:8080/auth/signin \
 ```
 
 Response:
+
 ```json
 {
   "token": "eyJhbGciOiJIUzUxMiJ9..."
@@ -230,6 +242,7 @@ curl -X POST http://localhost:8080/api/etl/process \
 ```
 
 Expected transformations:
+
 - Names: `JANE SMITH`, `BOB JONES`
 - Emails: `jane@company.com`, `bob@company.com`
 - Amounts: `999.99`, `1500.00`
@@ -290,6 +303,7 @@ cd cdc-service && mvn test
 ### Test Coverage
 
 Current test coverage includes:
+
 - ✅ EtlServiceTest
 - ✅ EtlControllerTest
 - ✅ CdcServiceTest
@@ -313,7 +327,8 @@ All services are configured to send traces to Zipkin with 100% sampling rate.
 ### Health Checks
 
 Check service health via Eureka dashboard:
-```
+
+```text
 http://localhost:8761
 ```
 
@@ -322,6 +337,7 @@ http://localhost:8761
 ### Application Properties
 
 Key configuration files:
+
 - `etl-service/src/main/resources/application.yml`
 - `cdc-service/src/main/resources/application.yml`
 - `zuul-gateway/src/main/resources/application.yml`
@@ -360,7 +376,7 @@ docker build -t xtrmetl/eureka-server:latest ./eureka-server
 ## 📋 Technology Stack
 
 | Component | Technology | Version |
-|-----------|-----------|---------|
+| ----------- | ----------- | --------- |
 | Runtime | Java | 17 |
 | Framework | Spring Boot | 2.7.14 |
 | Cloud | Spring Cloud | 2021.0.8 |
@@ -376,25 +392,30 @@ docker build -t xtrmetl/eureka-server:latest ./eureka-server
 ## 🎓 Key Concepts
 
 ### Change Data Capture (CDC)
+
 Monitors database transaction logs to capture INSERT, UPDATE, and DELETE operations in real-time without impacting source system performance.
 
 ### Extract-Transform-Load (ETL)
+
 Traditional data integration pattern:
+
 1. **Extract**: Read data from sources
 2. **Transform**: Apply business rules and data cleansing
 3. **Load**: Write processed data to targets
 
 ### Microservices Architecture
+
 Independent, loosely coupled services that communicate via REST APIs and message queues. Each service can be developed, deployed, and scaled independently.
 
 ### Service Discovery
+
 Automatic detection of service instances in the network, eliminating hardcoded service locations.
 
 ## 📝 Development
 
 ### Project Structure
 
-```
+```text
 xtrmETL/
 ├── pom.xml                    # Parent POM
 ├── README.md                  # This file
@@ -444,6 +465,7 @@ This project is proprietary software. All rights reserved.
 ## 🆘 Support
 
 For issues, questions, or contributions:
+
 - Create an issue in the repository
 - Contact the development team
 - Refer to the [PRD.md](PRD.md) for detailed requirements
@@ -451,6 +473,7 @@ For issues, questions, or contributions:
 ## 🗺️ Roadmap
 
 ### Current (v1.0)
+
 - ✅ CDC for PostgreSQL
 - ✅ Basic ETL transformations
 - ✅ JWT authentication
@@ -458,6 +481,7 @@ For issues, questions, or contributions:
 - ✅ Distributed tracing
 
 ### Planned (v2.0)
+
 - 🔲 Multi-database CDC support (MySQL, Oracle)
 - 🔲 Web UI for configuration
 - 🔲 Custom transformation functions

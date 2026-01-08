@@ -2,11 +2,12 @@
 
 ## System Architecture Overview
 
-This document provides a comprehensive view of the xtrmETL platform architecture, component interactions, and data flow.
+This document provides a comprehensive view of the xtrmETL platform architecture,
+component interactions, and data flow.
 
 ## 1. High-Level Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                            External Clients                              │
 │                     (Web Apps, CLI Tools, Services)                      │
@@ -27,7 +28,7 @@ This document provides a comprehensive view of the xtrmETL platform architecture
 │   ETL Service (8000)     │              │   CDC Service (8001)         │
 │  ┌────────────────────┐  │              │  ┌────────────────────────┐ │
 │  │ EtlController      │  │              │  │ CdcController          │ │
-│  │ /api/etl/process   │  │              │  │ /api/cdc/start|stop    │ │
+│  │ /api/etl/process   │  │              │  │ /api/cdc/start | stop    │ │
 │  └──────────┬─────────┘  │              │  └────────┬───────────────┘ │
 │             v             │              │            v                 │
 │  ┌────────────────────┐  │              │  ┌────────────────────────┐ │
@@ -82,12 +83,13 @@ This document provides a comprehensive view of the xtrmETL platform architecture
 
 ### 2.1 Synchronous Communication (REST)
 
-```
+```text
 Client → Zuul Gateway → Microservice
           (HTTP/REST)     (HTTP/REST)
 ```
 
 **Flow**:
+
 1. Client sends HTTP request with JWT token
 2. Zuul validates token via JWT filter
 3. Zuul routes request to appropriate service (Eureka lookup)
@@ -96,12 +98,13 @@ Client → Zuul Gateway → Microservice
 
 ### 2.2 Asynchronous Communication (Kafka)
 
-```
+```text
 Source DB → CDC Service → Kafka → Consumer Services
             (Debezium)    (Event Stream)
 ```
 
 **Flow**:
+
 1. Database change occurs (INSERT/UPDATE/DELETE)
 2. Debezium captures change from WAL
 3. CDC Service publishes event to Kafka topic
@@ -112,7 +115,7 @@ Source DB → CDC Service → Kafka → Consumer Services
 
 ### 3.1 ETL Processing Flow
 
-```
+```text
 ┌─────────────┐
 │   Client    │
 └──────┬──────┘
@@ -160,7 +163,7 @@ Source DB → CDC Service → Kafka → Consumer Services
 
 ### 3.2 CDC Event Capture Flow
 
-```
+```text
 ┌─────────────────────────┐
 │  Source Application     │
 └──────┬──────────────────┘
@@ -209,7 +212,7 @@ Source DB → CDC Service → Kafka → Consumer Services
 
 ### 3.3 Authentication Flow
 
-```
+```text
 ┌─────────────┐
 │   Client    │
 └──────┬──────┘
@@ -259,7 +262,7 @@ Source DB → CDC Service → Kafka → Consumer Services
 
 ## 4. Service Discovery & Registration
 
-```
+```text
 ┌────────────────────────────────────────────────────────────┐
 │                    Eureka Server (8761)                     │
 │  ┌──────────────────────────────────────────────────────┐  │
@@ -289,6 +292,7 @@ Source DB → CDC Service → Kafka → Consumer Services
 ```
 
 **Registration Process**:
+
 1. Service starts up
 2. Registers with Eureka (via `@EnableDiscoveryClient`)
 3. Sends heartbeat every 30 seconds
@@ -299,7 +303,7 @@ Source DB → CDC Service → Kafka → Consumer Services
 
 ### 5.1 Authentication & Authorization Layer
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │                      Security Layer                          │
 │                                                              │
@@ -338,7 +342,7 @@ Source DB → CDC Service → Kafka → Consumer Services
 
 ### 5.2 Database Security Schema
 
-```
+```text
 ┌──────────────────────────────────────┐
 │           users                       │
 ├──────────────────────────────────────┤
@@ -373,7 +377,7 @@ Source DB → CDC Service → Kafka → Consumer Services
 
 ### 6.1 Distributed Tracing
 
-```
+```text
 Request Flow with Trace IDs:
 
 Client Request
@@ -409,7 +413,7 @@ Client Request
 
 ### 6.2 Observability Stack
 
-```
+```text
 ┌──────────────────────────────────────────────────────────┐
 │                    Observability Layer                    │
 ├──────────────────────────────────────────────────────────┤
@@ -439,7 +443,7 @@ Client Request
 
 ### 7.1 Single-Node Deployment (Development)
 
-```
+```text
 ┌─────────────────────────────────────────────────────────┐
 │               Single Host / VM                           │
 │                                                          │
@@ -462,7 +466,7 @@ Client Request
 
 ### 7.2 Multi-Node Deployment (Production)
 
-```
+```text
 ┌──────────────────────┐  ┌──────────────────────┐
 │   Load Balancer      │  │   Service Mesh       │
 │   (nginx/HAProxy)    │  │   (Optional)         │
@@ -504,7 +508,7 @@ Client Request
 
 ### 8.1 Debezium Architecture
 
-```
+```text
 ┌──────────────────────────────────────────────────────────┐
 │                  Debezium Embedded Engine                 │
 │                                                           │
@@ -528,7 +532,7 @@ Client Request
 
 ### 8.2 Spring Retry Mechanism
 
-```
+```text
 ETL Processing with Retry:
 
 ┌────────────────────────────────────────┐
@@ -577,7 +581,7 @@ ETL Processing with Retry:
 ## 9. Network & Port Configuration
 
 | Service | Port | Protocol | Access Level |
-|---------|------|----------|--------------|
+| --------- | ------ | ---------- | -------------- |
 | Zuul Gateway | 8080 | HTTP | Public |
 | ETL Service | 8000 | HTTP | Internal |
 | CDC Service | 8001 | HTTP | Internal |
@@ -591,7 +595,7 @@ ETL Processing with Retry:
 
 ### 10.1 Horizontal Scaling
 
-```
+```text
 Load Distribution:
 
              ┌─────────────┐
@@ -622,6 +626,7 @@ Load Distribution:
 **Important**: Only ONE CDC service instance should monitor a given database table to avoid duplicate events.
 
 Options for high availability:
+
 1. Active-Passive: One active, one standby
 2. Table partitioning: Different instances monitor different tables
 3. Leader election: Use ZooKeeper/Consul for leader election

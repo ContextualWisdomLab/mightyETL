@@ -3,9 +3,11 @@
 ## 프로젝트 목적 역추적 결과
 
 ### 프로젝트 개요
+
 **xtrmETL**은 실시간 Change Data Capture(CDC)와 Extract-Transform-Load(ETL) 기능을 제공하는 마이크로서비스 기반 엔터프라이즈 데이터 통합 플랫폼입니다.
 
 ### 핵심 목표
+
 이 프로그램은 다음과 같은 문제를 해결하기 위해 개발되었습니다:
 
 1. **실시간 데이터베이스 변경 캡처**: PostgreSQL 데이터베이스의 변경사항(INSERT, UPDATE, DELETE)을 실시간으로 감지
@@ -16,14 +18,16 @@
 ## 주요 기능
 
 ### 1. CDC (Change Data Capture) 서비스
+
 - **목적**: 데이터베이스 변경사항을 실시간으로 캡처
 - **기술**: Debezium Embedded Engine 사용
-- **작동 방식**: 
+- **작동 방식**:
   - PostgreSQL의 Write-Ahead Log(WAL)를 모니터링
   - 변경사항을 Kafka 토픽으로 발행
   - 원본 데이터베이스 성능에 최소한의 영향
 
 ### 2. ETL (Extract-Transform-Load) 서비스
+
 - **목적**: 데이터 추출, 변환, 로딩 파이프라인 제공
 - **기능**:
   - JSON 데이터 수신 및 파싱
@@ -33,6 +37,7 @@
   - 실패 시 자동 재시도 (3회, 1초 지연)
 
 ### 3. 보안 및 인증
+
 - **JWT 기반 인증**: 토큰 기반 보안 시스템
 - **역할 기반 접근 제어**: USER, ADMIN 역할 지원
 - **비밀번호 암호화**: BCrypt 해싱 사용
@@ -41,7 +46,7 @@
 
 ### 마이크로서비스 구성
 
-```
+```text
 외부 클라이언트
      ↓
 Zuul API Gateway (8080) ← 인증 및 라우팅
@@ -56,6 +61,7 @@ PostgreSQL     Kafka
 ```
 
 ### 인프라 서비스
+
 - **Eureka Server (8761)**: 서비스 디스커버리
 - **Config Server (8888)**: 중앙 집중식 설정 관리
 - **Zipkin (9412)**: 분산 추적 및 모니터링
@@ -63,7 +69,7 @@ PostgreSQL     Kafka
 ## 기술 스택
 
 | 구성요소 | 기술 | 버전 |
-|---------|-----|------|
+| --------- | ----- | ------ |
 | 런타임 | Java | 17 |
 | 프레임워크 | Spring Boot | 2.7.14 |
 | 클라우드 | Spring Cloud | 2021.0.8 |
@@ -78,6 +84,7 @@ PostgreSQL     Kafka
 ## 사용 사례
 
 ### 사례 1: 실시간 데이터 동기화
+
 1. 원본 애플리케이션이 PostgreSQL 데이터를 수정
 2. CDC 서비스가 변경사항 감지
 3. 변경 이벤트를 Kafka로 발행
@@ -85,6 +92,7 @@ PostgreSQL     Kafka
 5. 대상 시스템이 1초 이내에 업데이트
 
 ### 사례 2: 배치 데이터 변환
+
 1. 외부 시스템이 JWT로 인증
 2. JSON 배열을 `/api/etl/process`로 전송
 3. ETL 서비스가 데이터 검증 및 파싱
@@ -95,25 +103,30 @@ PostgreSQL     Kafka
 ## API 명세
 
 ### 인증 API
+
 - **POST /auth/signup**: 사용자 등록
 - **POST /auth/signin**: 로그인 (JWT 토큰 발급)
 
 ### CDC API
+
 - **POST /api/cdc/start**: CDC 프로세스 시작
 - **POST /api/cdc/stop**: CDC 프로세스 중지
 
 ### ETL API
+
 - **POST /api/etl/process**: 데이터 처리 (JSON 배열)
 
 ## 시작하기
 
 ### 필수 요구사항
+
 - Java 17 이상
 - Maven 3.6+
 - PostgreSQL 12+ (논리 복제 활성화)
 - Apache Kafka (CDC 기능 사용 시)
 
 ### PostgreSQL 설정
+
 ```bash
 # postgresql.conf에서
 wal_level = logical
@@ -122,6 +135,7 @@ max_wal_senders = 4
 ```
 
 ### 환경 변수 설정
+
 ```bash
 export PGHOST=localhost
 export PGPORT=5432
@@ -131,6 +145,7 @@ export PGDATABASE=your_database
 ```
 
 ### 빌드 및 실행
+
 ```bash
 # 전체 빌드
 mvn clean install
@@ -155,7 +170,7 @@ cd zuul-gateway && mvn spring-boot:run
    - API 명세
    - 배포 아키텍처
    - 성공 지표
-   
+
 3. **ARCHITECTURE.md**: 시스템 아키텍처 문서
    - 고수준 아키텍처
    - 서비스 통신 패턴
@@ -180,6 +195,7 @@ cd zuul-gateway && mvn spring-boot:run
 ## 기술 부채
 
 현재 코드베이스에서 발견된 기술 부채:
+
 - **Common 모듈**: 문서에 언급되었으나 미구현
 - **MyBatis 통합**: 의존성은 있으나 사용되지 않음
 - **Redis 통합**: 의존성은 있으나 활용되지 않음
@@ -188,9 +204,10 @@ cd zuul-gateway && mvn spring-boot:run
 
 ## 결론
 
-xtrmETL은 **실시간 데이터베이스 변경 캡처(CDC)**와 **데이터 변환(ETL)** 기능을 제공하는 마이크로서비스 플랫폼입니다. 
+xtrmETL은 **실시간 데이터베이스 변경 캡처(CDC)**와 **데이터 변환(ETL)** 기능을 제공하는 마이크로서비스 플랫폼입니다.
 
 **핵심 가치**:
+
 - 실시간 데이터 동기화
 - 확장 가능한 마이크로서비스 아키텍처  
 - 보안이 강화된 API 접근

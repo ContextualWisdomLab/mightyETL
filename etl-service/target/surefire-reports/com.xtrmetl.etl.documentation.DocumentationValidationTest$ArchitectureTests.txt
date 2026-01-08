@@ -1,0 +1,32 @@
+-------------------------------------------------------------------------------
+Test set: com.xtrmetl.etl.documentation.DocumentationValidationTest$ArchitectureTests
+-------------------------------------------------------------------------------
+Tests run: 7, Failures: 7, Errors: 0, Skipped: 0, Time elapsed: 0.031 s <<< FAILURE! - in com.xtrmetl.etl.documentation.DocumentationValidationTest$ArchitectureTests
+com.xtrmetl.etl.documentation.DocumentationValidationTest$ArchitectureTests.shouldDescribeAllServices  Time elapsed: 0 s  <<< FAILURE!
+org.opentest4j.AssertionFailedError: ARCHITECTURE.md should exist ==> expected: <true> but was: <false>
+	at com.xtrmetl.etl.documentation.DocumentationValidationTest$ArchitectureTests.setUp(DocumentationValidationTest.java:298)
+
+com.xtrmetl.etl.documentation.DocumentationValidationTest$ArchitectureTests.shouldDocumentDataFlows  Time elapsed: 0.004 s  <<< FAILURE!
+org.opentest4j.AssertionFailedError: ARCHITECTURE.md should exist ==> expected: <true> but was: <false>
+	at com.xtrmetl.etl.documentation.DocumentationValidationTest$ArchitectureTests.setUp(DocumentationValidationTest.java:298)
+
+com.xtrmetl.etl.documentation.DocumentationValidationTest$ArchitectureTests.shouldDocumentMonitoring  Time elapsed: 0 s  <<< FAILURE!
+org.opentest4j.AssertionFailedError: ARCHITECTURE.md should exist ==> expected: <true> but was: <false>
+	at com.xtrmetl.etl.documentation.DocumentationValidationTest$ArchitectureTests.setUp(DocumentationValidationTest.java:298)
+
+com.xtrmetl.etl.documentation.DocumentationValidationTest$ArchitectureTests.shouldDocumentDeployment  Time elapsed: 0.001 s  <<< FAILURE!
+org.opentest4j.AssertionFailedError: ARCHITECTURE.md should exist ==> expected: <true> but was: <false>
+	at com.xtrmetl.etl.documentation.DocumentationValidationTest$ArchitectureTests.setUp(DocumentationValidationTest.java:298)
+
+com.xtrmetl.etl.documentation.DocumentationValidationTest$ArchitectureTests.shouldHaveSystemDiagrams  Time elapsed: 0.001 s  <<< FAILURE!
+org.opentest4j.AssertionFailedError: ARCHITECTURE.md should exist ==> expected: <true> but was: <false>
+	at com.xtrmetl.etl.documentation.DocumentationValidationTest$ArchitectureTests.setUp(DocumentationValidationTest.java:298)
+
+com.xtrmetl.etl.documentation.DocumentationValidationTest$ArchitectureTests.shouldDocumentTechnologyIntegration  Time elapsed: 0.004 s  <<< FAILURE!
+org.opentest4j.AssertionFailedError: ARCHITECTURE.md should exist ==> expected: <true> but was: <false>
+	at com.xtrmetl.etl.documentation.DocumentationValidationTest$ArchitectureTests.setUp(DocumentationValidationTest.java:298)
+
+com.xtrmetl.etl.documentation.DocumentationValidationTest$ArchitectureTests.shouldDocumentSecurityArchitecture  Time elapsed: 0.001 s  <<< FAILURE!
+org.opentest4j.AssertionFailedError: ARCHITECTURE.md should exist ==> expected: <true> but was: <false>
+	at com.xtrmetl.etl.documentation.DocumentationValidationTest$ArchitectureTests.setUp(DocumentationValidationTest.java:298)
+

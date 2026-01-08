@@ -24,11 +24,29 @@ import static org.junit.jupiter.api.Assertions.*;
 @DisplayName("Documentation Validation Tests")
 class DocumentationValidationTest {
 
-    private static final Path PROJECT_ROOT = Paths.get("").toAbsolutePath().getParent();
+    // Minimum thresholds for requirements validation
+    private static final int MIN_FUNCTIONAL_REQUIREMENTS = 10;
+    private static final int MIN_NONFUNCTIONAL_REQUIREMENTS = 8;
+
+    private static final Path PROJECT_ROOT = findProjectRoot();
     private static final Pattern MARKDOWN_LINK_PATTERN = Pattern.compile("\\[([^\\]]+)\\]\\(([^)]+)\\)");
     private static final Pattern MARKDOWN_HEADER_PATTERN = Pattern.compile("^#{1,6}\\s+(.+)$");
     private static final Pattern CODE_BLOCK_PATTERN = Pattern.compile("```([a-zA-Z]*)\n(.*?)\n```", Pattern.DOTALL);
     private static final Pattern URL_PATTERN = Pattern.compile("https?://[^\\s)]+");
+
+    /**
+     * Locates the project root by walking up the directory tree until finding a marker file.
+     */
+    private static Path findProjectRoot() {
+        Path current = Paths.get(System.getProperty("user.dir")).toAbsolutePath();
+        while (current != null) {
+            if (Files.exists(current.resolve("pom.xml")) || Files.exists(current.resolve(".git"))) {
+                return current;
+            }
+            current = current.getParent();
+        }
+        throw new IllegalStateException("Could not find project root (no pom.xml or .git found)");
+    }
 
     @Nested
     @DisplayName("README.md Tests")
@@ -191,8 +209,8 @@ class DocumentationValidationTest {
                 requirementIds.add(matcher.group());
             }
             
-            assertTrue(requirementIds.size() >= 10,
-                "PRD should define at least 10 functional requirements");
+            assertTrue(requirementIds.size() >= MIN_FUNCTIONAL_REQUIREMENTS,
+                "PRD should define at least " + MIN_FUNCTIONAL_REQUIREMENTS + " functional requirements");
             
             // Check for specific requirement categories
             assertTrue(requirementIds.stream().anyMatch(id -> id.startsWith("FR-CDC-")),
@@ -214,8 +232,8 @@ class DocumentationValidationTest {
                 nfrIds.add(matcher.group());
             }
             
-            assertTrue(nfrIds.size() >= 8,
-                "PRD should define at least 8 non-functional requirements");
+            assertTrue(nfrIds.size() >= MIN_NONFUNCTIONAL_REQUIREMENTS,
+                "PRD should define at least " + MIN_NONFUNCTIONAL_REQUIREMENTS + " non-functional requirements");
         }
 
         @Test
@@ -559,10 +577,10 @@ class DocumentationValidationTest {
                 }
             }
             
-            // If versions are mentioned, they should not conflict
-            if (!versionsByDoc.isEmpty()) {
-                // This is a soft check - versions can differ for different components
-                assertTrue(true, "Version references found and validated");
+            // Check per-document consistency: each doc should have consistent versions
+            for (Map.Entry<String, Set<String>> entry : versionsByDoc.entrySet()) {
+                assertTrue(entry.getValue().size() == 1,
+                    "Document " + entry.getKey() + " has inconsistent version numbers: " + entry.getValue());
             }
         }
     }
@@ -614,7 +632,10 @@ class DocumentationValidationTest {
                 filename + " should not have malformed links like ](]");
             assertFalse(content.contains("[]("),
                 filename + " should not have empty link text []( ");
-            assertFalse(content.matches(".*\\[([^\\]]+)\\]\\s*\\[.*"),
+            
+            // Check for unclosed reference-style links (must end with ] not followed by text)
+            Pattern unclosedRefPattern = Pattern.compile("\\[[^\\]]+\\]\\s*\\[[^\\]]*$");
+            assertFalse(unclosedRefPattern.matcher(content).find(),
                 filename + " should not have unclosed reference-style links");
         }
 
@@ -657,17 +678,5 @@ class DocumentationValidationTest {
             headers.add(matcher.group(1));
         }
         return headers;
-    }
-
-    private Map<String, String> extractCodeBlocks(String content) {
-        Map<String, String> codeBlocks = new HashMap<>();
-        Matcher matcher = CODE_BLOCK_PATTERN.matcher(content);
-        int index = 0;
-        while (matcher.find()) {
-            String language = matcher.group(1);
-            String code = matcher.group(2);
-            codeBlocks.put(language + "_" + index++, code);
-        }
-        return codeBlocks;
     }
 }

@@ -1,0 +1,16 @@
+-------------------------------------------------------------------------------
+Test set: com.xtrmetl.etl.documentation.DocumentationValidationTest$SummaryKrTests
+-------------------------------------------------------------------------------
+Tests run: 3, Failures: 3, Errors: 0, Skipped: 0, Time elapsed: 0.01 s <<< FAILURE! - in com.xtrmetl.etl.documentation.DocumentationValidationTest$SummaryKrTests
+com.xtrmetl.etl.documentation.DocumentationValidationTest$SummaryKrTests.shouldContainKoreanCharacters  Time elapsed: 0.007 s  <<< FAILURE!
+org.opentest4j.AssertionFailedError: SUMMARY_KR.md should exist ==> expected: <true> but was: <false>
+	at com.xtrmetl.etl.documentation.DocumentationValidationTest$SummaryKrTests.setUp(DocumentationValidationTest.java:453)
+
+com.xtrmetl.etl.documentation.DocumentationValidationTest$SummaryKrTests.shouldHaveProperStructure  Time elapsed: 0 s  <<< FAILURE!
+org.opentest4j.AssertionFailedError: SUMMARY_KR.md should exist ==> expected: <true> but was: <false>
+	at com.xtrmetl.etl.documentation.DocumentationValidationTest$SummaryKrTests.setUp(DocumentationValidationTest.java:453)
+
+com.xtrmetl.etl.documentation.DocumentationValidationTest$SummaryKrTests.shouldReferenceMainEnglishDocs  Time elapsed: 0.001 s  <<< FAILURE!
+org.opentest4j.AssertionFailedError: SUMMARY_KR.md should exist ==> expected: <true> but was: <false>
+	at com.xtrmetl.etl.documentation.DocumentationValidationTest$SummaryKrTests.setUp(DocumentationValidationTest.java:453)
+
