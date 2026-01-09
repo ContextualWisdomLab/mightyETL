@@ -302,10 +302,14 @@ class DocumentationValidationTest {
         @Test
         @DisplayName("Architecture doc should have system diagrams")
         void shouldHaveSystemDiagrams() {
-            // ASCII art diagrams typically contain box drawing characters
-            assertTrue(archContent.contains("┌") || archContent.contains("│") ||
-                      archContent.contains("└") || archContent.contains("─"),
-                "Should contain ASCII art system diagrams");
+            // Check for various diagram formats.
+            boolean hasAsciiDiagram = archContent.contains("┌") || archContent.contains("│") ||
+                                      archContent.contains("└") || archContent.contains("─");
+            boolean hasMermaidDiagram = archContent.contains("```mermaid");
+            boolean hasPlantUmlDiagram = archContent.contains("```plantuml");
+
+            assertTrue(hasAsciiDiagram || hasMermaidDiagram || hasPlantUmlDiagram,
+                "Should contain system diagrams (ASCII art, Mermaid, or PlantUML)");
         }
 
         @Test
