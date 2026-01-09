@@ -680,7 +680,7 @@ Processed: 2
 
 ### 14.2 Internal Documentation
 
-- See `Pasted--xtrmETL-xtrmETL-common--1728658367670.txt` for initial design notes (Korean)
+- See `xtrmETL-common-initial-design-notes.txt` for initial design notes (Korean)
 - Service-specific READMEs (to be created)
 
 ---

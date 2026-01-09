@@ -493,7 +493,7 @@ For issues, questions, or contributions:
 ## 📚 Additional Documentation
 
 - **[PRD.md](PRD.md)** - Complete Product Requirements Document
-- **[Pasted--xtrmETL-xtrmETL-common--1728658367670.txt](Pasted--xtrmETL-xtrmETL-common--1728658367670.txt)** - Original design notes (Korean)
+- **[xtrmETL-common-initial-design-notes.txt](xtrmETL-common-initial-design-notes.txt)** - Original design notes (Korean)
 
 ---
 
