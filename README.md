@@ -190,7 +190,7 @@ Response:
 
 ```json
 {
-  "token": "eyJhbGciOiJIUzUxMiJ9..."
+  "token": "EXAMPLE_JWT_TOKEN_TRUNCATED"
 }
 ```
 
