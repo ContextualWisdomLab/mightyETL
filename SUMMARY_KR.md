@@ -127,7 +127,7 @@ PostgreSQL     Kafka
 
 ### PostgreSQL 설정
 
-```bash
+```ini
 # postgresql.conf에서
 wal_level = logical
 max_replication_slots = 4
