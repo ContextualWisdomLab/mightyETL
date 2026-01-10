@@ -90,6 +90,7 @@ class CdcServiceTest {
         try {
             assertTrue(Thread.currentThread().isInterrupted());
         } finally {
+            // Clear interrupt status to avoid leaking it into subsequent tests.
             Thread.interrupted();
         }
     }
