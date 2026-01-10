@@ -34,6 +34,9 @@ public class CdcService {
         if (this.debeziumEngine == null) {
             initializeDebeziumEngine();
         }
+        if (this.debeziumEngine == null) {
+            throw new IllegalStateException("Debezium engine not initialized");
+        }
         this.executor.execute(debeziumEngine);
     }
 
