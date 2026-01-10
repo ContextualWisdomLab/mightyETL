@@ -5,13 +5,9 @@ spring:
   application:
     name: cdc-service
   datasource:
-    # NOTE: This datasource is intended for the replica applier component. It is always configured,
-    # but is only used by the replica applier when `xtrmetl.replica.enabled=true`. It resolves its
-    # connection using `REPLICA_PG*` variables, falling back to `PG*` (which may point to the primary),
-    # while Debezium continues to use `PG*` variables directly to read CDC from the primary DB.
-    url: jdbc:postgresql://${REPLICA_PGHOST:${PGHOST}}:${REPLICA_PGPORT:${PGPORT}}/${REPLICA_PGDATABASE:${PGDATABASE}}
-    username: ${REPLICA_PGUSER:${PGUSER}}
-    password: ${REPLICA_PGPASSWORD:${PGPASSWORD}}
+    url: jdbc:postgresql://${PGHOST}:${PGPORT}/${PGDATABASE}
+    username: ${PGUSER}
+    password: ${PGPASSWORD}
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
