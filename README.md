@@ -47,6 +47,14 @@ xtrmETL provides enterprise-grade capabilities for:
 - **Apache Kafka** (optional, for CDC)
 - **Docker** (optional, for containerized deployment)
 
+### Docker Compose
+
+Spin up PostgreSQL, Kafka, Zipkin, Eureka, and the application services:
+
+```bash
+docker compose up --build
+```
+
 ### PostgreSQL Configuration
 
 Enable logical replication in PostgreSQL:

@@ -9,12 +9,12 @@ spring:
     username: ${PGUSER}
     password: ${PGPASSWORD}
   kafka:
-    bootstrap-servers: localhost:9092
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
   zipkin:
-    base-url: http://localhost:9412
+    base-url: http://${ZIPKIN_HOST:localhost}:9412
   sleuth:
     sampler:
       probability: 1.0
@@ -27,7 +27,7 @@ management:
 eureka:
   client:
     serviceUrl:
-      defaultZone: http://localhost:8761/eureka/
+      defaultZone: http://${EUREKA_HOST:localhost}:8761/eureka/
 
 logging:
   level:
