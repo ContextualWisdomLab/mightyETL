@@ -28,6 +28,9 @@ services:
 
   postgres-replica:
     image: postgres:16-alpine
+    depends_on:
+      postgres:
+        condition: service_healthy
     command:
       - postgres
       - -c
