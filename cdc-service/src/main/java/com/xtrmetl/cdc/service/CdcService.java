@@ -13,7 +13,6 @@ import org.springframework.stereotype.Service;
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import java.io.IOException;
-import java.util.Objects;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
@@ -31,14 +30,13 @@ public class CdcService {
      *
      * 초기화된 엔진이 없으면 새 Debezium 엔진을 생성한 후 단일 스레드 실행기에 제출하여 비동기로 실행을 시작한다.
      *
-     * @throws NullPointerException 엔진이 초기화되지 않아 실행할 수 없는 경우
      */
     @PostConstruct
     public void start() {
         if (this.debeziumEngine == null) {
             initializeDebeziumEngine();
         }
-        this.executor.execute(Objects.requireNonNull(debeziumEngine, "Debezium engine"));
+        this.executor.execute(debeziumEngine);
     }
 
     /**
