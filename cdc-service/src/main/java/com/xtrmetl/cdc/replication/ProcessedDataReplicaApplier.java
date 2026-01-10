@@ -72,7 +72,10 @@ public class ProcessedDataReplicaApplier {
 
         try {
             JsonNode root = objectMapper.readTree(valueJson);
-            JsonNode payload = root.path("payload");
+            JsonNode payload = root.get("payload");
+            if (payload == null || payload.isNull()) {
+                return null;
+            }
 
             String op = payload.path("op").asText(null);
             JsonNode after = payload.get("after");

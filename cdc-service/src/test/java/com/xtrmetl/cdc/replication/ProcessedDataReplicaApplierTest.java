@@ -34,6 +34,18 @@ class ProcessedDataReplicaApplierTest {
     }
 
     @Test
+    void ignoresTombstoneValue() {
+        applier.apply("xtrmetl-cdc.public.processed_data", "{\"payload\":{\"id\":1}}", null);
+        verifyNoInteractions(jdbcTemplate);
+    }
+
+    @Test
+    void ignoresMissingPayload() {
+        applier.apply("xtrmetl-cdc.public.processed_data", "{\"payload\":{\"id\":1}}", "{\"not_payload\":{\"op\":\"c\"}}");
+        verifyNoInteractions(jdbcTemplate);
+    }
+
+    @Test
     void upsertsOnCreateEvent() {
         String topic = "xtrmetl-cdc.public.processed_data";
         String keyJson = "{\"payload\":{\"id\":1}}";
