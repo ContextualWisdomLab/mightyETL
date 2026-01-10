@@ -16,7 +16,7 @@
 - Expected changes:
   - Java 17 baseline and Jakarta namespace migration
   - Spring Cloud BOM upgrade (2023.x series)
-  - Zuul replacement (Spring Cloud Gateway)
+  - Zuul replacement (Spring Cloud Gateway) with route definitions replacing Zuul filters
   - Spring Kafka async API: replace ListenableFuture usage with CompletableFuture
   - Test updates for API and package changes
 
@@ -39,6 +39,20 @@
 - Maintain a 2.7.13 support branch for rollback during migration phases.
 - Require verification gates at each step before proceeding.
 - Use staged rollout with canary deployment for production environments.
+
+### Compatibility Targets
+
+- Spring Boot 3.2.x with Spring Cloud 2023.x (Leyton)
+- Spring Kafka 3.1.x (CompletableFuture-based KafkaTemplate)
+- Debezium 2.5.x+ (validate against Boot 3.2/Jakarta dependencies)
+- Spring Cloud Gateway 4.x (bundled with Cloud 2023.x)
+
+### Verification Gates
+
+- Step 1 exit: nullability/deprecation fixes merged and module unit tests green.
+- Step 2 exit: BOM alignment resolves, Debezium/Kafka compatibility matrix confirmed, module builds + smoke tests pass.
+- Step 3 exit: Jakarta/security/Kafka async migrations compile and integration tests green.
+- Step 4 exit: staging canary passes agreed window with error/latency within baseline, rollback runbook verified.
 
 ## Risks And Mitigations
 
