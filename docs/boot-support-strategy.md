@@ -72,11 +72,18 @@
 
 ### Risk Mitigation Execution Checklist (RACI)
 
-| Area | Artifact | Cadence | Responsible | Approver | Verification / Exit Criteria |
+| Area | Artifact | Owner (team/role) | Due / SLA | Approver | Acceptance Criteria |
 | --- | --- | --- | --- | --- | --- |
-| Version matrix | This document (see “Compatibility Matrix”) | On every dependency bump PR + weekly review | Platform team | Engineering lead | Matrix updated, linked to a CI run validating the baseline profile |
-| CI compatibility checks | CI pipeline running `mvn -B test` (all modules) | On PRs that change BOMs/dependencies + weekly scheduled run | Platform team | Engineering lead | All modules build/tests pass for the baseline profile; candidate profile is at least compile-green |
-| Dependency audit (Jakarta & 3rd-party libs) | GitHub Issue “Boot 3 migration dependency audit” checklist | Before Step 2 and then monthly | Security lead | Platform architect | Each blocker has an owner, status, and either a mitigation plan or an upgrade path |
+| Version matrix | This document (see “Compatibility Matrix”) | Platform Infra Team (maintainer) | On dependency bump PRs (same PR) + weekly (Mon 09:00) | Engineering lead | Matrix updated and linked from PR/CI summary; baseline versions match `pom.xml` |
+| CI compatibility checks | CI pipeline running `mvn -B test` (all modules) | Platform Infra Team | Weekly (Mon 09:00) + required on dependency bump PRs | Engineering lead | Baseline is green; candidate is at least compile/package-green |
+| Dependency audit (Jakarta & 3rd-party libs) | GitHub Issue “Boot 3 migration dependency audit” checklist | Security Team (security lead) | Kickoff (start of Step 1) + monthly (1st business day) + before Step 2 | Platform architect | Issue created and assigned; scans attached; blockers triaged with owners + mitigation plans |
+
+#### Role Mapping
+
+- Platform team → Platform Infra Team (CI/CD + dependency governance)
+- Security lead → Security Team lead / AppSec owner
+- Engineering lead → Product Engineering lead
+- Platform architect → Architecture owner for migration approval
 
 #### Compatibility Matrix
 
@@ -94,8 +101,8 @@
 
 #### Dependency Audit Tracking (Jakarta Namespace Risk)
 
-- Track audit outcomes and blockers in a single GitHub Issue (“Boot 3 migration dependency audit”) with a checklist and owners per library.
-- Before Step 2: run a dependency tree + update scan (`mvn -B -DskipTests dependency:tree` and `mvn -B -DskipTests versions:display-dependency-updates`) and attach results to the audit issue.
+- Track audit outcomes and blockers in a single GitHub Issue (“Boot 3 migration dependency audit”) with a checklist and owners per library; assign ownership at Step 1 kickoff.
+- Before Step 2 (and weekly on Mon 09:00, owned by Platform Infra Team): run a dependency tree + update scan (`mvn -B -DskipTests dependency:tree` and `mvn -B -DskipTests versions:display-dependency-updates`) and attach results to the audit issue; blockers must be triaged within 2 business days.
 - During Step 3: record “Jakarta blockers” (libraries still on `javax.*`, incompatible transitive deps) in the audit issue and gate progression on having a mitigation (upgrade, replacement, shading, or rollback plan).
 
 ## Decision Log
