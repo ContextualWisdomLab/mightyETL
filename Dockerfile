@@ -18,7 +18,7 @@ RUN mvn -B -DskipTests -pl "${SERVICE}" -am package \
   && mkdir -p /out \
   && cp "${SERVICE}/target/${SERVICE}-"*.jar /out/app.jar
 
-FROM eclipse-temurin:17-jre
+FROM eclipse-temurin:25-jre
 
 WORKDIR /app
 COPY --from=build /out/app.jar /app/app.jar
