@@ -26,7 +26,10 @@ public class ReplicaJdbcTemplateConfig {
 
         HikariConfig config = new HikariConfig();
         config.setPoolName("cdc-replica-pool");
-        config.setInitializationFailTimeout(-1);
+        long initializationFailTimeout = Long.parseLong(
+                environment.getProperty("REPLICA_HIKARI_INITIALIZATION_FAIL_TIMEOUT_MS", "-1")
+        );
+        config.setInitializationFailTimeout(initializationFailTimeout);
         config.setDriverClassName("org.postgresql.Driver");
         config.setJdbcUrl("jdbc:postgresql://" + host + ":" + port + "/" + database);
         config.setUsername(username);
