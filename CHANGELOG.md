@@ -127,7 +127,7 @@ Through code analysis, identified the platform as:
 
 #### Technology Stack Documented
 
-- Java 17
+- Java 25
 - Spring Boot 2.7.14
 - Spring Cloud 2021.0.8
 - Debezium 2.3.x - 2.5.x

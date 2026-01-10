@@ -2,7 +2,7 @@
 
 ## Decision
 
-- Adopt a Spring Boot 3.x upgrade path (target 3.2.x LTS) with Java 17.
+- Adopt a Spring Boot 3.x upgrade path (target 3.2.x LTS) with Java 25.
 - Keep 2.7.14 through Step 1 (Q1 2026) while aligning code to the newer APIs; begin Step 2 once Step 1 exit gates are met.
 
 ## Rationale
@@ -14,7 +14,7 @@
 
 - Modules: cdc-service, etl-service, config-server, eureka-server, zuul-gateway
 - Expected changes:
-  - Java 17 baseline and Jakarta namespace migration
+  - Java 25 baseline and Jakarta namespace migration
   - Spring Cloud BOM upgrade (`org.springframework.cloud:spring-cloud-dependencies:2023.0.2+` (Leyton), aligned with Boot 3.2.x)
   - Zuul replacement (Spring Cloud Gateway) with route definitions replacing Zuul filters
   - Spring Kafka async API: replace ListenableFuture usage with CompletableFuture
@@ -22,8 +22,8 @@
 - Module impact:
   - cdc-service: KafkaTemplate async API migration, Debezium JSON event handling, Jakarta package updates.
   - etl-service: SecurityConfig DSL alignment, Jakarta namespace updates, security tests adjustment.
-  - config-server: Spring Cloud 2023.0.x alignment, Java 17 baseline, Jakarta migration in configuration.
-  - eureka-server: Spring Cloud BOM upgrade, Java 17 baseline, jakarta.* dependency updates.
+  - config-server: Spring Cloud 2023.0.x alignment, Java 25 baseline, Jakarta migration in configuration.
+  - eureka-server: Spring Cloud BOM upgrade, Java 25 baseline, jakarta.* dependency updates.
   - zuul-gateway: replace Zuul filters with Spring Cloud Gateway routes/filters, update gateway security and tests.
 
 ## Plan
@@ -99,8 +99,8 @@
 
 | Profile | Java | Boot | Cloud | Notes |
 | --- | --- | --- | --- | --- |
-| Baseline (current) | 17 | 2.7.14 | 2021.0.8 | Production-compatible, used for Step 1 cleanup and rollback |
-| Candidate (target) | 17 | 3.2.x | 2023.x | Target stack for Steps 2–4; start as compile-only until migrations land |
+| Baseline (current) | 25 | 2.7.14 | 2021.0.8 | Production-compatible, used for Step 1 cleanup and rollback |
+| Candidate (target) | 25 | 3.2.x | 2023.x | Target stack for Steps 2–4; start as compile-only until migrations land |
 
 #### Weekly CI Compatibility Coverage
 
@@ -122,7 +122,7 @@
 - Alternatives: Keep 2.7.x with commercial support vs upgrade to Boot 3.x (selected)
 - Rationale:
   - Keep 2.7.x: commercial support cost (~EUR 10k/yr), lower migration effort, retains Zuul short-term.
-  - Upgrade to 3.x: OSS security updates, Spring Cloud/Kafka feature access, Java 17 alignment, Boot 3.2 LTS window.
+  - Upgrade to 3.x: OSS security updates, Spring Cloud/Kafka feature access, Java 25 alignment, Boot 3.2 LTS window.
   - Decision drivers: reduce post-EOL security exposure, pay down tech debt, align with platform roadmap.
 - Participants:
   - engineering lead (Product Engineering)
