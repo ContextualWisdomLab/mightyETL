@@ -3,7 +3,7 @@
 ## Decision
 
 - Adopt a Spring Boot 3.x upgrade path (target 3.2.x LTS) with Java 17.
-- Keep 2.7.13 in the short term while aligning code to the newer APIs.
+- Keep 2.7.14 in the short term while aligning code to the newer APIs.
 
 ## Rationale
 
@@ -43,7 +43,7 @@
 
 ### Rollback Strategy
 
-- Maintain a 2.7.13 support branch for rollback during migration phases.
+- Maintain a Boot 2.7.x support branch (currently 2.7.14) for rollback during migration phases.
 - Require verification gates at each step before proceeding.
 - Use staged rollout with canary deployment for production environments.
 
@@ -63,12 +63,40 @@
 
 ## Risks And Mitigations
 
-- Zuul replacement is required for Boot 3.x; target Q2 2026, owner: Platform team, migrate auth/routing/filter parity, rollback gate keeps 2.7.13 branch.
+- Zuul replacement is required for Boot 3.x; target Q2 2026, owner: Platform team, migrate auth/routing/filter parity, rollback gate keeps the Boot 2.7.x support branch (currently 2.7.14).
 - Validate Debezium and Kafka compatibility before dependency bumps; maintain version matrix and run weekly CI compatibility checks with rollback to pinned versions.
 - Jakarta namespace migration may break third-party libraries; audit dependencies, prioritize blockers, and track vendor patches with a migration checklist.
 - Performance characteristics may change; baseline P95 latency/throughput/lag, define thresholds, and run regression tests weekly.
 - Test coverage gaps may exist; target 80% unit coverage and add integration tests for CDC pipeline, auth, and recovery paths.
 - Dual-version support during rollout may be required; plan traffic routing, feature flags, and data compatibility rules, plus mixed-version CI gates and a Jakarta+Kafka async test matrix.
+
+### Risk Mitigation Execution Checklist (RACI)
+
+| Area | Artifact | Cadence | Responsible | Approver | Verification / Exit Criteria |
+| --- | --- | --- | --- | --- | --- |
+| Version matrix | This document (see “Compatibility Matrix”) | On every dependency bump PR + weekly review | Platform team | Engineering lead | Matrix updated, linked to a CI run validating the baseline profile |
+| CI compatibility checks | CI pipeline running `mvn -B test` (all modules) | On PRs that change BOMs/dependencies + weekly scheduled run | Platform team | Engineering lead | All modules build/tests pass for the baseline profile; candidate profile is at least compile-green |
+| Dependency audit (Jakarta & 3rd-party libs) | GitHub Issue “Boot 3 migration dependency audit” checklist | Before Step 2 and then monthly | Security lead | Platform architect | Each blocker has an owner, status, and either a mitigation plan or an upgrade path |
+
+#### Compatibility Matrix
+
+| Profile | Java | Boot | Cloud | Notes |
+| --- | --- | --- | --- | --- |
+| Baseline (current) | 17 | 2.7.14 | 2021.0.8 | Production-compatible, used for Step 1 cleanup and rollback |
+| Candidate (target) | 17 | 3.2.x | 2023.x | Target stack for Steps 2–4; start as compile-only until migrations land |
+
+#### Weekly CI Compatibility Coverage
+
+- **Modules**: `cdc-service`, `etl-service`, `config-server`, `eureka-server`, `zuul-gateway`.
+- **Baseline profile**: full build + unit tests for each module (expected green).
+- **Candidate profile**: at minimum compile/package validation until migration work is complete (expected to move to green as Step 3 progresses).
+- **Artifact of record**: each scheduled run links back to this document section by including the baseline/candidate versions in the job summary.
+
+#### Dependency Audit Tracking (Jakarta Namespace Risk)
+
+- Track audit outcomes and blockers in a single GitHub Issue (“Boot 3 migration dependency audit”) with a checklist and owners per library.
+- Before Step 2: run a dependency tree + update scan (`mvn -B -DskipTests dependency:tree` and `mvn -B -DskipTests versions:display-dependency-updates`) and attach results to the audit issue.
+- During Step 3: record “Jakarta blockers” (libraries still on `javax.*`, incompatible transitive deps) in the audit issue and gate progression on having a mitigation (upgrade, replacement, shading, or rollback plan).
 
 ## Decision Log
 
