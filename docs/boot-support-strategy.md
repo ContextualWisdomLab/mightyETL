@@ -35,10 +35,11 @@
 
 ### Timeline
 
-- Step 1: Q1 2026
-- Step 2: Q2 2026
-- Step 3: Q2-Q3 2026
-- Step 4: Q3 2026
+- Step 1: Q1 2026 (nullability/deprecation cleanup, unit tests green).
+- Step 2: Q2 2026 start (BOM alignment and dependency validation).
+- Step 3: Q2 2026 late - Q3 2026 early (Jakarta, SecurityConfig DSL, Kafka async API).
+- Step 4: Q3 2026 (integration tests and canary validation).
+- Notes: Zuul replacement can proceed in parallel and is not a hard gate for other modules; Step 2 must complete per-module before Step 3 for that module.
 
 ### Rollback Strategy
 
