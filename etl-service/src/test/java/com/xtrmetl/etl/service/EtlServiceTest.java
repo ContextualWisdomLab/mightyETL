@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.mockito.ArgumentMatchers;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
@@ -182,7 +183,7 @@ class EtlServiceTest {
 
             etlService.processData(testData);
 
-            verify(jdbcTemplate).update(anyString(), argThat((String data) ->
+            verify(jdbcTemplate).update(anyString(), ArgumentMatchers.<String>argThat(data ->
                 data.contains("ID:") && data.contains("NAME:") && 
                 data.contains("EMAIL:") && data.contains("AMOUNT:")
             ));
