@@ -139,6 +139,7 @@ services:
       PGUSER: ${POSTGRES_USER:-xtrmetl}
       # NOTE: Defaults are for local development only. Override via .env / secrets for production.
       PGPASSWORD: ${POSTGRES_PASSWORD:-xtrmetl}
+      # NOTE: postgres-replica is intentionally not in depends_on so CDC can run without the replica when REPLICA_ENABLED=false.
       REPLICA_ENABLED: ${REPLICA_ENABLED:-true}
       REPLICA_PGHOST: ${REPLICA_PGHOST:-postgres-replica}
       REPLICA_PGPORT: ${REPLICA_PGPORT:-5432}
