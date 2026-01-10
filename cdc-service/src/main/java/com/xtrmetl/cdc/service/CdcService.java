@@ -115,17 +115,19 @@ public class CdcService {
         } catch (IOException e) {
             log.warn("Error while stopping CDC engine during shutdown", e);
         } finally {
-            if (executor == null) {
+            ExecutorService executorToShutdown = executor;
+            executor = null;
+            if (executorToShutdown == null) {
                 return;
             }
-            executor.shutdown();
+            executorToShutdown.shutdown();
             try {
-                if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
-                    executor.shutdownNow();
+                if (!executorToShutdown.awaitTermination(5, TimeUnit.SECONDS)) {
+                    executorToShutdown.shutdownNow();
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                executor.shutdownNow();
+                executorToShutdown.shutdownNow();
             }
         }
     }
