@@ -27,6 +27,19 @@
 3. Code migration: Jakarta imports, security DSL, Kafka async API updates.
 4. Verification: module builds, targeted integration tests, staged rollout.
 
+### Timeline
+
+- Step 1: Q1 2026
+- Step 2: Q2 2026
+- Step 3: Q2-Q3 2026
+- Step 4: Q3 2026
+
+### Rollback Strategy
+
+- Maintain a 2.7.13 support branch for rollback during migration phases.
+- Require verification gates at each step before proceeding.
+- Use staged rollout with canary deployment for production environments.
+
 ## Risks And Mitigations
 
 - Zuul replacement is required for Boot 3.x; plan migration early.
