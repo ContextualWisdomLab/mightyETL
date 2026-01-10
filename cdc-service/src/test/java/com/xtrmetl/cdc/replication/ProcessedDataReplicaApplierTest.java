@@ -46,6 +46,17 @@ class ProcessedDataReplicaApplierTest {
     }
 
     @Test
+    void upsertsOnEmptyStringData() {
+        String topic = "xtrmetl-cdc.public.processed_data";
+        String keyJson = "{\"payload\":{\"id\":1}}";
+        String valueJson = "{\"payload\":{\"op\":\"u\",\"after\":{\"id\":1,\"data\":\"\"}}}";
+
+        applier.apply(topic, keyJson, valueJson);
+
+        verify(jdbcTemplate).update(startsWith("INSERT INTO processed_data"), eq(1L), eq(""));
+    }
+
+    @Test
     void deletesOnDeleteEvent() {
         String topic = "xtrmetl-cdc.public.processed_data";
         String keyJson = "{\"payload\":{\"id\":1}}";
@@ -57,4 +68,3 @@ class ProcessedDataReplicaApplierTest {
         verify(jdbcTemplate, never()).update(startsWith("INSERT INTO processed_data"), eq(1L), eq("hello"));
     }
 }
-

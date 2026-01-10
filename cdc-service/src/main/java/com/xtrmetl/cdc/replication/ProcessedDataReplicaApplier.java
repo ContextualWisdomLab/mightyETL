@@ -57,7 +57,7 @@ public class ProcessedDataReplicaApplier {
         }
 
         String data = extractTextOrJson(envelope.after(), "data");
-        if (data == null || data.isBlank()) {
+        if (data == null) {
             log.debug("Skipping replica apply: missing data (topic={}, id={})", topic, id);
             return;
         }
