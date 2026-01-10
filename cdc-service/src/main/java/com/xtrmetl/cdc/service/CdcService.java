@@ -25,11 +25,7 @@ public class CdcService {
 
     private static final Logger log = LoggerFactory.getLogger(CdcService.class);
 
-    private final ExecutorService executor = Executors.newSingleThreadExecutor(runnable -> {
-        Thread thread = new Thread(runnable, "cdc-debezium-engine");
-        thread.setDaemon(true);
-        return thread;
-    });
+    private ExecutorService executor;
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final boolean autoStart;
 
@@ -67,6 +63,13 @@ public class CdcService {
      * <p>{@link #stop()}으로 엔진을 종료한 뒤 다시 호출하면 새로운 엔진 인스턴스를 초기화한 후 재시작한다.</p>
      */
     public synchronized void start() {
+        if (this.executor == null) {
+            this.executor = Executors.newSingleThreadExecutor(runnable -> {
+                Thread thread = new Thread(runnable, "cdc-debezium-engine");
+                thread.setDaemon(true);
+                return thread;
+            });
+        }
         if (engineTask != null && !engineTask.isDone()) {
             return;
         }
@@ -105,12 +108,15 @@ public class CdcService {
      * 대기 중 인터럽트가 발생하면 인터럽트 플래그를 복원한 뒤 강제 종료를 시도한다.</p>
      */
     @PreDestroy
-    public void shutdown() {
+    public synchronized void shutdown() {
         try {
             stop();
         } catch (IOException e) {
             log.warn("Error while stopping CDC engine during shutdown", e);
         } finally {
+            if (executor == null) {
+                return;
+            }
             executor.shutdown();
             try {
                 if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
