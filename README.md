@@ -55,6 +55,9 @@ Spin up PostgreSQL (primary + replica), Kafka, Zipkin, Eureka, and the applicati
 docker compose up --build
 ```
 
+Note: `docker-compose.yml` includes development defaults for database credentials. Override them via `.env`
+(e.g. `POSTGRES_PASSWORD`, `REPLICA_POSTGRES_PASSWORD`) and use secrets for production deployments.
+
 ### PostgreSQL Configuration
 
 Enable logical replication in PostgreSQL:
