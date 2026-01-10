@@ -1,8 +1,7 @@
 package com.xtrmetl.cdc.service;
 
+import io.debezium.engine.ChangeEvent;
 import io.debezium.engine.DebeziumEngine;
-import io.debezium.engine.RecordChangeEvent;
-import org.apache.kafka.connect.source.SourceRecord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
@@ -23,7 +22,7 @@ class CdcServiceTest {
     private KafkaTemplate<String, String> kafkaTemplate;
 
     @Mock
-    private DebeziumEngine<RecordChangeEvent<SourceRecord>> debeziumEngine;
+    private DebeziumEngine<ChangeEvent<String, String>> debeziumEngine;
 
     @InjectMocks
     private CdcService cdcService;
@@ -72,14 +71,12 @@ class CdcServiceTest {
     @Test
     void testHandleChangeEvent() {
         @SuppressWarnings("unchecked")
-        RecordChangeEvent<SourceRecord> changeEvent =
-            (RecordChangeEvent<SourceRecord>) mock(RecordChangeEvent.class);
-        SourceRecord sourceRecord = mock(SourceRecord.class);
+        ChangeEvent<String, String> changeEvent =
+            (ChangeEvent<String, String>) mock(ChangeEvent.class);
 
-        when(changeEvent.record()).thenReturn(sourceRecord);
-        when(sourceRecord.topic()).thenReturn("test-topic");
-        when(sourceRecord.key()).thenReturn("test-key");
-        when(sourceRecord.value()).thenReturn("test-value");
+        when(changeEvent.destination()).thenReturn("test-topic");
+        when(changeEvent.key()).thenReturn("test-key");
+        when(changeEvent.value()).thenReturn("test-value");
 
         cdcService.handleChangeEvent(changeEvent);
 

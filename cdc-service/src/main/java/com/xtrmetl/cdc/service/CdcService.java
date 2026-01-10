@@ -1,11 +1,9 @@
 package com.xtrmetl.cdc.service;
 
 import io.debezium.config.Configuration;
-import io.debezium.embedded.Connect;
+import io.debezium.engine.ChangeEvent;
 import io.debezium.engine.DebeziumEngine;
-import io.debezium.engine.RecordChangeEvent;
-import io.debezium.engine.format.ChangeEventFormat;
-import org.apache.kafka.connect.source.SourceRecord;
+import io.debezium.engine.format.Json;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
@@ -20,7 +18,7 @@ import java.util.concurrent.Executors;
 public class CdcService {
 
     private final Executor executor = Executors.newSingleThreadExecutor();
-    private DebeziumEngine<RecordChangeEvent<SourceRecord>> debeziumEngine;
+    private DebeziumEngine<ChangeEvent<String, String>> debeziumEngine;
 
     @Autowired
     private KafkaTemplate<String, String> kafkaTemplate;
@@ -61,29 +59,25 @@ public class CdcService {
     }
 
     private void initializeDebeziumEngine() {
-        this.debeziumEngine = DebeziumEngine.create(ChangeEventFormat.of(Connect.class))
+        this.debeziumEngine = DebeziumEngine.create(Json.class)
                 .using(getCdcConfiguration().asProperties())
                 .notifying(this::handleChangeEvent)
                 .build();
     }
 
     /**
-     * Debezium에서 받은 CDC 변경 이벤트의 SourceRecord를 추출해 해당 topic으로 키·값을 Kafka에 전송한다.
+     * Debezium에서 받은 CDC 변경 이벤트의 JSON key/value를 해당 topic으로 전송한다.
      *
-     * @param sourceRecordRecordChangeEvent Debezium의 변경 이벤트로부터 SourceRecord를 포함하는 이벤트 객체
-     * @throws NullPointerException topic, key 또는 value가 null인 경우 발생한다
+     * @param changeEvent Debezium의 변경 이벤트로부터 key/value와 destination을 포함하는 이벤트 객체
      */
-    protected void handleChangeEvent(RecordChangeEvent<SourceRecord> sourceRecordRecordChangeEvent) {
-        SourceRecord sourceRecord = sourceRecordRecordChangeEvent.record();
-        String topic = sourceRecord.topic();
+    protected void handleChangeEvent(ChangeEvent<String, String> changeEvent) {
+        String topic = changeEvent.destination();
         if (topic == null) {
             return;
         }
 
-        Object keyObject = sourceRecord.key();
-        String key = keyObject != null ? keyObject.toString() : null;
-        Object valueObject = sourceRecord.value();
-        String value = valueObject != null ? valueObject.toString() : null;
+        String key = changeEvent.key();
+        String value = changeEvent.value();
 
         kafkaTemplate.send(topic, key, value);
     }
