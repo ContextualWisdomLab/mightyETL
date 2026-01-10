@@ -3,7 +3,7 @@
 ## Decision
 
 - Adopt a Spring Boot 3.x upgrade path (target 3.2.x LTS) with Java 17.
-- Keep 2.7.14 in the short term while aligning code to the newer APIs.
+- Keep 2.7.14 through Step 1 (Q1 2026) while aligning code to the newer APIs; begin Step 2 once Step 1 exit gates are met.
 
 ## Rationale
 
