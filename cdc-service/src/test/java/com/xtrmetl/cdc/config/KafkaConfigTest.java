@@ -46,6 +46,7 @@ class KafkaConfigTest {
                 (BinaryExceptionClassifier) ReflectionTestUtils.invokeMethod(errorHandler, "getClassifier");
         assertNotNull(classifier);
         assertFalse(classifier.classify(new IllegalArgumentException("test")));
+        assertFalse(classifier.classify(new IllegalStateException("test")));
     }
 
     @Test

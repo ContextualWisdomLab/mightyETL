@@ -29,7 +29,7 @@ public class KafkaConfig {
         );
 
         DefaultErrorHandler errorHandler = new DefaultErrorHandler(recoverer, new FixedBackOff(1000L, 3L));
-        errorHandler.addNotRetryableExceptions(IllegalArgumentException.class);
+        errorHandler.addNotRetryableExceptions(IllegalArgumentException.class, IllegalStateException.class);
         return errorHandler;
     }
 
