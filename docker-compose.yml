@@ -27,6 +27,14 @@ services:
 
   postgres-replica:
     image: postgres:16-alpine
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - max_replication_slots=4
+      - -c
+      - max_wal_senders=4
     environment:
       POSTGRES_DB: xtrmetl
       POSTGRES_USER: xtrmetl
