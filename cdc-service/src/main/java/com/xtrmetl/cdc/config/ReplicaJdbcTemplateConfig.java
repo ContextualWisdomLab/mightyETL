@@ -1,5 +1,6 @@
 package com.xtrmetl.cdc.config;
 
+import com.xtrmetl.cdc.util.ValidationUtils;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -18,9 +19,18 @@ public class ReplicaJdbcTemplateConfig {
 
     @Bean(name = "replicaJdbcTemplate")
     public JdbcTemplate replicaJdbcTemplate(Environment environment) {
-        String host = environment.getRequiredProperty("REPLICA_PGHOST");
-        String port = environment.getProperty("REPLICA_PGPORT", "5432");
-        String database = environment.getRequiredProperty("REPLICA_PGDATABASE");
+        String host = ValidationUtils.requireValidHost(
+                environment.getRequiredProperty("REPLICA_PGHOST"),
+                "REPLICA_PGHOST"
+        );
+        String port = ValidationUtils.requireValidPort(
+                environment.getProperty("REPLICA_PGPORT", "5432"),
+                "REPLICA_PGPORT"
+        );
+        String database = ValidationUtils.requireValidIdentifier(
+                environment.getRequiredProperty("REPLICA_PGDATABASE"),
+                "REPLICA_PGDATABASE"
+        );
         String username = environment.getRequiredProperty("REPLICA_PGUSER");
         String password = environment.getRequiredProperty("REPLICA_PGPASSWORD");
 
@@ -33,7 +43,7 @@ public class ReplicaJdbcTemplateConfig {
         );
         config.setInitializationFailTimeout(initializationFailTimeout);
         config.setDriverClassName("org.postgresql.Driver");
-        config.setJdbcUrl("jdbc:postgresql://" + host + ":" + port + "/" + database);
+        config.setJdbcUrl(String.format("jdbc:postgresql://%s:%s/%s", host, port, database));
         config.setUsername(username);
         config.setPassword(password);
 

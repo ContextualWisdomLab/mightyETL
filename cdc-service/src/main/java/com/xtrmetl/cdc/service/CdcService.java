@@ -1,6 +1,7 @@
 package com.xtrmetl.cdc.service;
 
 import com.xtrmetl.cdc.util.EnvUtils;
+import com.xtrmetl.cdc.util.ValidationUtils;
 import io.debezium.config.Configuration;
 import io.debezium.engine.ChangeEvent;
 import io.debezium.engine.DebeziumEngine;
@@ -199,7 +200,7 @@ public class CdcService {
                 .with("name", EnvUtils.getEnv("CDC_CONNECTOR_NAME", "xtrmetl-postgres-connector"))
                 .with("connector.class", "io.debezium.connector.postgresql.PostgresConnector")
                 .with("database.hostname", EnvUtils.requireEnv("PGHOST"))
-                .with("database.port", requireValidPort(EnvUtils.getEnv("PGPORT", "5432"), "PGPORT"))
+                .with("database.port", ValidationUtils.requireValidPort(EnvUtils.getEnv("PGPORT", "5432"), "PGPORT"))
                 .with("database.user", EnvUtils.requireEnv("PGUSER"))
                 .with("database.password", EnvUtils.requireEnv("PGPASSWORD"))
                 .with("database.dbname", EnvUtils.requireEnv("PGDATABASE"))
@@ -222,18 +223,6 @@ public class CdcService {
         String userHome = System.getProperty("user.home");
         Path baseDir = userHome == null || userHome.isBlank() ? Path.of(".") : Path.of(userHome);
         return baseDir.resolve(".xtrmetl").resolve("cdc");
-    }
-
-    private static String requireValidPort(String value, String key) {
-        try {
-            int port = Integer.parseInt(value);
-            if (port < 1 || port > 65535) {
-                throw new IllegalStateException("Invalid port for " + key + ": " + value);
-            }
-            return value;
-        } catch (NumberFormatException e) {
-            throw new IllegalStateException("Invalid port for " + key + ": " + value, e);
-        }
     }
 
     private static void ensureParentDirExists(String filePath) {
