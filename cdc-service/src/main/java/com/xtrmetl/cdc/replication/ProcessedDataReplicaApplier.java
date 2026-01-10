@@ -19,6 +19,7 @@ public class ProcessedDataReplicaApplier {
 
     private static final String TABLE_NAME = "processed_data";
 
+    // created_at is managed by the replica DB (DEFAULT) and intentionally preserved on updates.
     private static final String UPSERT_SQL = """
             INSERT INTO processed_data (id, data)
             VALUES (?, ?)
