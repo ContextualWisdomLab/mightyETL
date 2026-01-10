@@ -87,8 +87,11 @@ class CdcServiceTest {
 
         verify(executor, times(1)).shutdown();
         verify(executor, times(1)).shutdownNow();
-        assertTrue(Thread.currentThread().isInterrupted());
-        Thread.interrupted();
+        try {
+            assertTrue(Thread.currentThread().isInterrupted());
+        } finally {
+            Thread.interrupted();
+        }
     }
 
     @Test
