@@ -104,7 +104,7 @@ The platform consists of five independent microservices:
 
 #### 3.2.2 Technology Stack
 
-- **Runtime**: Java 17
+- **Runtime**: Java 25
 - **Framework**: Spring Boot 2.7.14, Spring Cloud 2021.0.8
 - **Database**: PostgreSQL
 - **Messaging**: Apache Kafka

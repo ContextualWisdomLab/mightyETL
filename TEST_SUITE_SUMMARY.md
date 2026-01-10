@@ -11,7 +11,7 @@ Successfully generated comprehensive unit tests for all documentation files in t
 **Location:** `etl-service/src/test/java/com/xtrmetl/etl/documentation/DocumentationValidationTest.java`
 
 - **Size:** 673 lines (28 KB)
-- **Language:** Java 17
+- **Language:** Java 25
 - **Framework:** JUnit 5 (Jupiter)
 
 ### 2. Test Suite Documentation

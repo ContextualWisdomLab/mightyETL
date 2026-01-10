@@ -70,7 +70,7 @@ PostgreSQL     Kafka
 
 | 구성요소 | 기술 | 버전 |
 | --------- | ----- | ------ |
-| 런타임 | Java | 17 |
+| 런타임 | Java | 25 |
 | 프레임워크 | Spring Boot | 2.7.14 |
 | 클라우드 | Spring Cloud | 2021.0.8 |
 | CDC 엔진 | Debezium | 2.3.x - 2.5.x |
@@ -120,7 +120,7 @@ PostgreSQL     Kafka
 
 ### 필수 요구사항
 
-- Java 17 이상
+- Java 25
 - Maven 3.6+
 - PostgreSQL 12+ (논리 복제 활성화)
 - Apache Kafka (CDC 기능 사용 시)

@@ -41,7 +41,7 @@ xtrmETL provides enterprise-grade capabilities for:
 
 ### Prerequisites
 
-- **Java 17** or higher
+- **Java 25**
 - **Maven 3.6+**
 - **PostgreSQL 12+** with logical replication enabled
 - **Apache Kafka** (optional, for CDC)
@@ -385,7 +385,7 @@ docker build -t xtrmetl/eureka-server:latest ./eureka-server
 
 | Component | Technology | Version |
 | ----------- | ----------- | --------- |
-| Runtime | Java | 17 |
+| Runtime | Java | 25 |
 | Framework | Spring Boot | 2.7.14 |
 | Cloud | Spring Cloud | 2021.0.8 |
 | CDC Engine | Debezium | 2.3.x - 2.5.x |
