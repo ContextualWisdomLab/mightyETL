@@ -1,11 +1,11 @@
 package com.xtrmetl.cdc.config;
 
-import com.xtrmetl.cdc.util.EnvUtils;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import javax.annotation.PreDestroy;
@@ -17,15 +17,16 @@ public class ReplicaJdbcTemplateConfig {
     private HikariDataSource replicaDataSource;
 
     @Bean(name = "replicaJdbcTemplate")
-    public JdbcTemplate replicaJdbcTemplate() {
-        String host = EnvUtils.requireEnv("REPLICA_PGHOST");
-        String port = EnvUtils.getEnv("REPLICA_PGPORT", "5432");
-        String database = EnvUtils.requireEnv("REPLICA_PGDATABASE");
-        String username = EnvUtils.requireEnv("REPLICA_PGUSER");
-        String password = EnvUtils.requireEnv("REPLICA_PGPASSWORD");
+    public JdbcTemplate replicaJdbcTemplate(Environment environment) {
+        String host = environment.getRequiredProperty("REPLICA_PGHOST");
+        String port = environment.getProperty("REPLICA_PGPORT", "5432");
+        String database = environment.getRequiredProperty("REPLICA_PGDATABASE");
+        String username = environment.getRequiredProperty("REPLICA_PGUSER");
+        String password = environment.getRequiredProperty("REPLICA_PGPASSWORD");
 
         HikariConfig config = new HikariConfig();
         config.setPoolName("cdc-replica-pool");
+        config.setInitializationFailTimeout(-1);
         config.setDriverClassName("org.postgresql.Driver");
         config.setJdbcUrl("jdbc:postgresql://" + host + ":" + port + "/" + database);
         config.setUsername(username);
