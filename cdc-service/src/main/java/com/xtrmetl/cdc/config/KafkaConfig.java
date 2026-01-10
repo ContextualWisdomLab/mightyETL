@@ -39,15 +39,33 @@ public class KafkaConfig {
             @Override
             @NonNull
             public ListenableFuture<SendResult<String, String>> send(@NonNull String topic, @Nullable String data) {
+                return mockSend(topic, null, data);
+            }
+
+            @Override
+            @NonNull
+            public ListenableFuture<SendResult<String, String>> send(
+                    @NonNull String topic,
+                    @Nullable String key,
+                    @Nullable String data
+            ) {
+                return mockSend(topic, key, data);
+            }
+
+            private ListenableFuture<SendResult<String, String>> mockSend(
+                    @NonNull String topic,
+                    @Nullable String key,
+                    @Nullable String data
+            ) {
                 System.out.println("Mock Kafka: Sending data to topic " + topic + ": " + data);
-                ProducerRecord<String, String> producerRecord = new ProducerRecord<>(topic, data);
+                ProducerRecord<String, String> producerRecord = new ProducerRecord<>(topic, key, data);
                 RecordMetadata recordMetadata = new RecordMetadata(
                         new TopicPartition(topic, 0),
                         0L,
                         0L,
                         System.currentTimeMillis(),
                         Long.valueOf(0L),
-                        0,
+                        key != null ? key.length() : 0,
                         data != null ? data.length() : 0
                 );
                 SettableListenableFuture<SendResult<String, String>> future = new SettableListenableFuture<>();
