@@ -1,5 +1,6 @@
 package com.xtrmetl.cdc.service;
 
+import com.xtrmetl.cdc.util.EnvUtils;
 import io.debezium.config.Configuration;
 import io.debezium.engine.ChangeEvent;
 import io.debezium.engine.DebeziumEngine;
@@ -161,29 +162,29 @@ public class CdcService {
 
     private Configuration getCdcConfiguration() {
         Path defaultCdcDataDir = defaultCdcDataDir();
-        String offsetFile = getEnv("CDC_OFFSET_FILE", defaultCdcDataDir.resolve("offsets.dat").toString());
-        String schemaHistoryFile = getEnv("CDC_SCHEMA_HISTORY_FILE", defaultCdcDataDir.resolve("schemahistory.dat").toString());
+        String offsetFile = EnvUtils.getEnv("CDC_OFFSET_FILE", defaultCdcDataDir.resolve("offsets.dat").toString());
+        String schemaHistoryFile = EnvUtils.getEnv("CDC_SCHEMA_HISTORY_FILE", defaultCdcDataDir.resolve("schemahistory.dat").toString());
         ensureParentDirExists(offsetFile);
         ensureParentDirExists(schemaHistoryFile);
 
         return Configuration.create()
-                .with("name", getEnv("CDC_CONNECTOR_NAME", "xtrmetl-postgres-connector"))
+                .with("name", EnvUtils.getEnv("CDC_CONNECTOR_NAME", "xtrmetl-postgres-connector"))
                 .with("connector.class", "io.debezium.connector.postgresql.PostgresConnector")
-                .with("database.hostname", requireEnv("PGHOST"))
-                .with("database.port", requireEnv("PGPORT"))
-                .with("database.user", requireEnv("PGUSER"))
-                .with("database.password", requireEnv("PGPASSWORD"))
-                .with("database.dbname", requireEnv("PGDATABASE"))
-                .with("topic.prefix", getEnv("CDC_TOPIC_PREFIX", "xtrmetl-cdc"))
-                .with("schema.include.list", getEnv("CDC_SCHEMA_INCLUDE_LIST", "public"))
-                .with("table.include.list", getEnv("CDC_TABLE_INCLUDE_LIST", "public.processed_data"))
-                .with("plugin.name", getEnv("CDC_PLUGIN_NAME", "pgoutput"))
-                .with("slot.name", getEnv("CDC_SLOT_NAME", "xtrmetl_slot"))
-                .with("publication.autocreate.mode", getEnv("CDC_PUBLICATION_AUTOCREATE_MODE", "filtered"))
-                .with("publication.name", getEnv("CDC_PUBLICATION_NAME", "xtrmetl_publication"))
+                .with("database.hostname", EnvUtils.requireEnv("PGHOST"))
+                .with("database.port", EnvUtils.requireEnv("PGPORT"))
+                .with("database.user", EnvUtils.requireEnv("PGUSER"))
+                .with("database.password", EnvUtils.requireEnv("PGPASSWORD"))
+                .with("database.dbname", EnvUtils.requireEnv("PGDATABASE"))
+                .with("topic.prefix", EnvUtils.getEnv("CDC_TOPIC_PREFIX", "xtrmetl-cdc"))
+                .with("schema.include.list", EnvUtils.getEnv("CDC_SCHEMA_INCLUDE_LIST", "public"))
+                .with("table.include.list", EnvUtils.getEnv("CDC_TABLE_INCLUDE_LIST", "public.processed_data"))
+                .with("plugin.name", EnvUtils.getEnv("CDC_PLUGIN_NAME", "pgoutput"))
+                .with("slot.name", EnvUtils.getEnv("CDC_SLOT_NAME", "xtrmetl_slot"))
+                .with("publication.autocreate.mode", EnvUtils.getEnv("CDC_PUBLICATION_AUTOCREATE_MODE", "filtered"))
+                .with("publication.name", EnvUtils.getEnv("CDC_PUBLICATION_NAME", "xtrmetl_publication"))
                 .with("offset.storage", "org.apache.kafka.connect.storage.FileOffsetBackingStore")
                 .with("offset.storage.file.filename", offsetFile)
-                .with("offset.flush.interval.ms", getEnv("CDC_OFFSET_FLUSH_INTERVAL_MS", "1000"))
+                .with("offset.flush.interval.ms", EnvUtils.getEnv("CDC_OFFSET_FLUSH_INTERVAL_MS", "1000"))
                 .with("schema.history.internal", "io.debezium.storage.file.history.FileSchemaHistory")
                 .with("schema.history.internal.file.filename", schemaHistoryFile)
                 .build();
@@ -193,22 +194,6 @@ public class CdcService {
         String userHome = System.getProperty("user.home");
         Path baseDir = userHome == null || userHome.isBlank() ? Path.of(".") : Path.of(userHome);
         return baseDir.resolve(".xtrmetl").resolve("cdc");
-    }
-
-    private static String getEnv(String key, String defaultValue) {
-        String value = System.getenv(key);
-        if (value == null || value.isBlank()) {
-            return defaultValue;
-        }
-        return value;
-    }
-
-    private static String requireEnv(String key) {
-        String value = System.getenv(key);
-        if (value == null || value.isBlank()) {
-            throw new IllegalStateException("Missing required environment variable: " + key);
-        }
-        return value;
     }
 
     private static void ensureParentDirExists(String filePath) {

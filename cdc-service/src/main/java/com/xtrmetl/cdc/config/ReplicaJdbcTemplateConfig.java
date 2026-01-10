@@ -1,5 +1,6 @@
 package com.xtrmetl.cdc.config;
 
+import com.xtrmetl.cdc.util.EnvUtils;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -17,11 +18,11 @@ public class ReplicaJdbcTemplateConfig {
 
     @Bean(name = "replicaJdbcTemplate")
     public JdbcTemplate replicaJdbcTemplate() {
-        String host = requireEnv("REPLICA_PGHOST");
-        String port = getEnv("REPLICA_PGPORT", "5432");
-        String database = requireEnv("REPLICA_PGDATABASE");
-        String username = requireEnv("REPLICA_PGUSER");
-        String password = requireEnv("REPLICA_PGPASSWORD");
+        String host = EnvUtils.requireEnv("REPLICA_PGHOST");
+        String port = EnvUtils.getEnv("REPLICA_PGPORT", "5432");
+        String database = EnvUtils.requireEnv("REPLICA_PGDATABASE");
+        String username = EnvUtils.requireEnv("REPLICA_PGUSER");
+        String password = EnvUtils.requireEnv("REPLICA_PGPASSWORD");
 
         HikariConfig config = new HikariConfig();
         config.setPoolName("cdc-replica-pool");
@@ -40,21 +41,5 @@ public class ReplicaJdbcTemplateConfig {
         if (replicaDataSource != null) {
             replicaDataSource.close();
         }
-    }
-
-    private static String getEnv(String key, String defaultValue) {
-        String value = System.getenv(key);
-        if (value == null || value.isBlank()) {
-            return defaultValue;
-        }
-        return value;
-    }
-
-    private static String requireEnv(String key) {
-        String value = System.getenv(key);
-        if (value == null || value.isBlank()) {
-            throw new IllegalStateException("Missing required environment variable: " + key);
-        }
-        return value;
     }
 }
