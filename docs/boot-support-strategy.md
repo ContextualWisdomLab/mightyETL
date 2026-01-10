@@ -67,6 +67,7 @@
 - Jakarta namespace migration may break third-party libraries; audit dependencies, prioritize blockers, and track vendor patches with a migration checklist.
 - Performance characteristics may change; baseline P95 latency/throughput/lag, define thresholds, and run regression tests weekly.
 - Test coverage gaps may exist; target 80% unit coverage and add integration tests for CDC pipeline, auth, and recovery paths.
+- Dual-version support during rollout may be required; plan traffic routing, feature flags, and data compatibility rules, plus mixed-version CI gates and a Jakarta+Kafka async test matrix.
 
 ## Decision Log
 
