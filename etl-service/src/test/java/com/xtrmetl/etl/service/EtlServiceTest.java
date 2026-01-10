@@ -256,6 +256,17 @@ class EtlServiceTest {
         }
 
         @Test
+        @DisplayName("Should reject non-array JSON input")
+        void shouldRejectNonArrayJsonInput() throws Exception {
+            String testData = "{\"id\":\"1\",\"name\":\"Test\"}";
+            when(objectMapper.readTree(testData)).thenReturn(realObjectMapper.readTree(testData));
+
+            RuntimeException exception = assertThrows(RuntimeException.class, () -> etlService.processData(testData));
+            assertTrue(exception.getMessage().contains("Input must be a JSON array"));
+            verify(jdbcTemplate, never()).update(anyString(), anyString());
+        }
+
+        @Test
         @DisplayName("Should handle record without id field")
         void shouldHandleRecordWithoutId() throws Exception {
             String testData = "[{\"name\":\"Test\",\"email\":\"test@test.com\",\"amount\":\"100\"}]";
