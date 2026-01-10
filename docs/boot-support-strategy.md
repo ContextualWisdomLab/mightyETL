@@ -15,14 +15,14 @@
 - Modules: cdc-service, etl-service, config-server, eureka-server, zuul-gateway
 - Expected changes:
   - Java 17 baseline and Jakarta namespace migration
-  - Spring Cloud BOM upgrade (2023.x series)
+  - Spring Cloud BOM upgrade (`org.springframework.cloud:spring-cloud-dependencies:2023.0.2+` (Leyton), aligned with Boot 3.2.x)
   - Zuul replacement (Spring Cloud Gateway) with route definitions replacing Zuul filters
   - Spring Kafka async API: replace ListenableFuture usage with CompletableFuture
   - Test updates for API and package changes
 - Module impact:
   - cdc-service: KafkaTemplate async API migration, Debezium JSON event handling, Jakarta package updates.
   - etl-service: SecurityConfig DSL alignment, Jakarta namespace updates, security tests adjustment.
-  - config-server: Spring Cloud 2023.x alignment, Java 17 baseline, Jakarta migration in configuration.
+  - config-server: Spring Cloud 2023.0.x alignment, Java 17 baseline, Jakarta migration in configuration.
   - eureka-server: Spring Cloud BOM upgrade, Java 17 baseline, jakarta.* dependency updates.
   - zuul-gateway: replace Zuul filters with Spring Cloud Gateway routes/filters, update gateway security and tests.
 
@@ -58,10 +58,11 @@
 
 ### Compatibility Targets
 
-- Spring Boot 3.2.x with Spring Cloud 2023.x (Leyton)
+- Spring Boot 3.2.x with Spring Cloud `org.springframework.cloud:spring-cloud-dependencies:2023.0.2+` (Leyton)
 - Spring Kafka 3.1.x (CompletableFuture-based KafkaTemplate)
 - Debezium 3.x+ for embedded engine (Jakarta namespace compatible); alternatively run Debezium via Kafka Connect (separate process/JVM)
-- Spring Cloud Gateway 4.x (bundled with Cloud 2023.x)
+- Spring Cloud Gateway 4.0.x (via Spring Cloud 2023.0.x)
+- Note: patch versions and tested upper bounds are pinned during Step 2 and tracked in the Compatibility Matrix + CI output.
 
 ### Verification Gates
 
