@@ -100,14 +100,19 @@
 
 ## Decision Log
 
-- Date: 2026-01-09
+- Date: 2026-01-09 (decision meeting; PR opened 2026-01-10)
 - Owner: Product Engineering Team
 - Alternatives: Keep 2.7.x with commercial support vs upgrade to Boot 3.x (selected)
 - Rationale:
   - Keep 2.7.x: commercial support cost (~EUR 10k/yr), lower migration effort, retains Zuul short-term.
   - Upgrade to 3.x: OSS security updates, Spring Cloud/Kafka feature access, Java 17 alignment, Boot 3.2 LTS window.
   - Decision drivers: reduce post-EOL security exposure, pay down tech debt, align with platform roadmap.
-- Participants: Product Engineering Team, Architecture stakeholders
+- Participants:
+  - engineering lead (Product Engineering)
+  - platform architect (Architecture)
+  - security lead (Security)
+  - ops lead (Operations)
+  - product manager (Product)
 - Exit gate approvers:
   - Step 1 exit: engineering lead + platform architect
   - Step 2 exit: ops lead + security lead
