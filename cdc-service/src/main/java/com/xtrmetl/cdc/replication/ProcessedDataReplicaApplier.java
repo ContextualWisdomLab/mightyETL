@@ -16,7 +16,7 @@ public class ProcessedDataReplicaApplier {
 
     private static final Logger log = LoggerFactory.getLogger(ProcessedDataReplicaApplier.class);
 
-    static final String TABLE_NAME = "processed_data";
+    private static final String TABLE_NAME = "processed_data";
 
     private static final String UPSERT_SQL = """
             INSERT INTO processed_data (id, data)
