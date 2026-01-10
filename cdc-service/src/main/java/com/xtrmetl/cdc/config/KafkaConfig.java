@@ -21,12 +21,12 @@ import java.util.Map;
 public class KafkaConfig {
 
     /**
-     * 테스트 및 모킹 목적의 KafkaTemplate 빈을 생성한다.
+     * Creates a KafkaTemplate bean for tests/mocking.
      *
-     * 이 KafkaTemplate은 내부적으로 send(topic, data)를 오버라이드하여 실제 메시지 전송을 수행하지 않고
-     * 표준 출력에 전송 시도 내용을 기록한 뒤 즉시 성공한 SendResult를 담은 ListenableFuture를 반환한다.
+     * This template overrides send(...) to log the attempt to stdout and return an
+     * immediately completed SendResult without sending to Kafka.
      *
-     * @return KafkaTemplate<String, String> 인스턴스. send 호출이 실제 전송 대신 로그 출력과 즉시 완료된 SendResult를 반환하도록 오버라이드되어 있음.
+     * @return KafkaTemplate<String, String> that returns a completed SendResult for send calls.
      */
     @Bean
     public KafkaTemplate<String, String> kafkaTemplate() {
