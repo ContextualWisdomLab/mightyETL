@@ -141,7 +141,6 @@ services:
       REPLICA_PGPORT: ${REPLICA_PGPORT:-5432}
       REPLICA_PGDATABASE: ${REPLICA_POSTGRES_DB:-xtrmetl}
       REPLICA_PGUSER: ${REPLICA_POSTGRES_USER:-xtrmetl}
-      # NOTE: Defaults are for local development only. Override via .env / secrets for production.
       REPLICA_PGPASSWORD: ${REPLICA_POSTGRES_PASSWORD:-xtrmetl}
       EUREKA_HOST: eureka-server
       ZIPKIN_HOST: zipkin
