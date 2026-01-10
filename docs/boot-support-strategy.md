@@ -28,7 +28,7 @@
 
 ## Plan
 
-1. Pre-migration cleanup (this issue): fix nullability, deprecations, and test warnings.
+1. Pre-migration cleanup (Step 1): fix nullability, deprecations, and test warnings until all modules are unit-test green.
 2. Dependency alignment: upgrade parent BOMs and validate starters.
 3. Code migration: Jakarta imports, security DSL, Kafka async API updates.
 4. Verification: module builds, targeted integration tests, staged rollout.
@@ -40,6 +40,12 @@
 - Step 3: Q2 2026 late - Q3 2026 early (Jakarta, SecurityConfig DSL, Kafka async API).
 - Step 4: Q3 2026 (integration tests and canary validation).
 - Notes: Zuul replacement can proceed in parallel and is not a hard gate for other modules; Step 2 must complete per-module before Step 3 for that module.
+
+#### Per-Module Prerequisites (Parallelization Guidance)
+
+- Step 2 (per-module) can start only after Step 1 is green for that module and the baseline versions in `pom.xml` are reflected in the Compatibility Matrix.
+- Step 3 (per-module) can start only after Step 2 is complete for that module (BOMs aligned, dependency conflicts resolved, and a smoke build/test passes).
+- Suggested order (lower coupling → higher coupling): `eureka-server`/`config-server` → `etl-service`/`cdc-service` → `zuul-gateway` (route/auth parity work).
 
 ### Rollback Strategy
 
