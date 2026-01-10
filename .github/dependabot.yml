@@ -13,3 +13,7 @@ updates:
     directory: "/" # Location of Dockerfiles and docker-compose.yml
     schedule:
       interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "docker"
