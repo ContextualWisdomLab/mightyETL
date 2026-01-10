@@ -99,7 +99,7 @@ public class ProcessedDataReplicaApplier {
 
             return new DebeziumEnvelope(op, after);
         } catch (IOException e) {
-            log.debug("Failed to parse Debezium value JSON; skipping replica apply", e);
+            log.warn("Failed to parse Debezium value JSON; skipping replica apply", e);
             return null;
         }
     }
