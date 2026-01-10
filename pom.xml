@@ -23,7 +23,7 @@
         <spring-cloud.version>2021.0.8</spring-cloud.version>
         <micrometer-tracing.version>1.6.1</micrometer-tracing.version>
         <junit-jupiter.version>5.8.2</junit-jupiter.version>
-        <mockito.version>4.5.1</mockito.version>
+        <mockito.version>5.21.0</mockito.version>
     </properties>
 
     <dependencyManagement>
