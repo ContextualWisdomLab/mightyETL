@@ -44,13 +44,15 @@ services:
       POSTGRES_DB: ${REPLICA_POSTGRES_DB:-xtrmetl}
       POSTGRES_USER: ${REPLICA_POSTGRES_USER:-xtrmetl}
       POSTGRES_PASSWORD: ${REPLICA_POSTGRES_PASSWORD:-xtrmetl}
+      REPLICA_POSTGRES_DB: ${REPLICA_POSTGRES_DB:-xtrmetl}
+      REPLICA_POSTGRES_USER: ${REPLICA_POSTGRES_USER:-xtrmetl}
     ports:
       - "5433:5432"
     volumes:
       - postgres_replica_data:/var/lib/postgresql/data
       - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" -h localhost -p 5432"]
+      test: ["CMD-SHELL", "pg_isready -U \"$REPLICA_POSTGRES_USER\" -d \"$REPLICA_POSTGRES_DB\" -h localhost -p 5432"]
       interval: 5s
       timeout: 5s
       retries: 10
