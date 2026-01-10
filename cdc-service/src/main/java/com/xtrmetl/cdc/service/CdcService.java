@@ -48,7 +48,6 @@ public class CdcService {
      * Debezium CDC 엔진을 초기화하고 전용 단일 스레드 실행기에서 실행을 시작한다.
      *
      * 초기화된 엔진이 없으면 새 Debezium 엔진을 생성한 후 단일 스레드 실행기에 제출하여 비동기로 실행을 시작한다.
-     *
      */
     @PostConstruct
     public void maybeAutoStart() {
@@ -57,6 +56,16 @@ public class CdcService {
         }
     }
 
+    /**
+     * Debezium CDC 엔진 실행을 시작한다.
+     *
+     * <p>이 메서드는 idempotent 하며, 엔진이 이미 실행 중이면 아무 작업도 수행하지 않고 즉시 반환한다.</p>
+     *
+     * <p>동시에 여러 스레드에서 호출되더라도 {@code synchronized}로 보호되어 단일 실행만 보장한다.
+     * 엔진은 내부 전용 단일 스레드 실행기에서 비동기로 실행된다.</p>
+     *
+     * <p>{@link #stop()}으로 엔진을 종료한 뒤 다시 호출하면 새로운 엔진 인스턴스를 초기화한 후 재시작한다.</p>
+     */
     public synchronized void start() {
         if (engineTask != null && !engineTask.isDone()) {
             return;
