@@ -40,9 +40,9 @@ Pinned in `pom.xml` unless noted otherwise:
 
 CDC-specific (currently pinned in `cdc-service/pom.xml`):
 
-- Debezium API: `2.3.0.Final`
-- Debezium Embedded: `2.3.5.Final`
-- Debezium Postgres Connector: `2.5.3.Final`
+- Debezium API: `3.4.0.Final`
+- Debezium Embedded: `3.4.0.Final`
+- Debezium Postgres Connector: `3.4.0.Final`
 
 ## 5. Service Requirements
 

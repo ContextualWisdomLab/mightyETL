@@ -110,7 +110,7 @@ The platform consists of five independent microservices:
 - **Messaging**: Apache Kafka
 - **Service Discovery**: Netflix Eureka
 - **API Gateway**: Netflix Zuul
-- **CDC Engine**: Debezium 2.3.x - 2.5.x
+- **CDC Engine**: Debezium 3.4.0.Final (embedded engine)
 - **Monitoring**: Zipkin (distributed tracing), Micrometer
 - **Build Tool**: Maven
 

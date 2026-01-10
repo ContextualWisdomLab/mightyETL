@@ -4,19 +4,24 @@ import io.debezium.engine.ChangeEvent;
 import io.debezium.engine.DebeziumEngine;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.io.IOException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @SuppressWarnings("null")
+@ExtendWith(MockitoExtension.class)
 class CdcServiceTest {
 
     @Mock
@@ -25,18 +30,69 @@ class CdcServiceTest {
     @Mock
     private DebeziumEngine<ChangeEvent<String, String>> debeziumEngine;
 
-    @InjectMocks
     private CdcService cdcService;
 
     @BeforeEach
     void setUp() {
-        MockitoAnnotations.openMocks(this);
+        cdcService = new CdcService(kafkaTemplate, false);
         ReflectionTestUtils.setField(cdcService, "debeziumEngine", debeziumEngine);
     }
 
     @Test
     void testStart() {
         assertDoesNotThrow(() -> cdcService.start());
+    }
+
+    @Test
+    void maybeAutoStartDoesNothingWhenDisabled() {
+        CdcService service = new CdcService(kafkaTemplate, false);
+        ReflectionTestUtils.setField(service, "debeziumEngine", debeziumEngine);
+
+        service.maybeAutoStart();
+
+        assertNull(ReflectionTestUtils.getField(service, "engineTask"));
+    }
+
+    @Test
+    void maybeAutoStartStartsEngineWhenEnabled() {
+        CdcService service = new CdcService(kafkaTemplate, true);
+        ReflectionTestUtils.setField(service, "debeziumEngine", debeziumEngine);
+
+        service.maybeAutoStart();
+
+        assertNotNull(ReflectionTestUtils.getField(service, "engineTask"));
+        service.shutdown();
+    }
+
+    @Test
+    void shutdownStopsEngineAndClearsExecutor() throws IOException {
+        cdcService.start();
+
+        cdcService.shutdown();
+
+        assertNull(ReflectionTestUtils.getField(cdcService, "executor"));
+        assertNull(ReflectionTestUtils.getField(cdcService, "engineTask"));
+        verify(debeziumEngine, times(1)).close();
+    }
+
+    @Test
+    void shutdownInterruptsThreadAndForcesShutdownNow() throws InterruptedException {
+        ExecutorService executor = mock(ExecutorService.class);
+        when(executor.awaitTermination(anyLong(), any(TimeUnit.class))).thenThrow(new InterruptedException("test"));
+
+        CdcService service = new CdcService(kafkaTemplate, false);
+        ReflectionTestUtils.setField(service, "executor", executor);
+
+        service.shutdown();
+
+        verify(executor, times(1)).shutdown();
+        verify(executor, times(1)).shutdownNow();
+        try {
+            assertTrue(Thread.currentThread().isInterrupted());
+        } finally {
+            // Clear interrupt status to avoid leaking it into subsequent tests.
+            Thread.interrupted();
+        }
     }
 
     @Test
@@ -60,7 +116,9 @@ class CdcServiceTest {
         IOException exception = assertThrows(IOException.class, () -> cdcService.stop());
 
         // Verify the exception message
-        assertEquals("Error stopping CDC: Test exception", exception.getMessage());
+        assertEquals("Error stopping CDC", exception.getMessage());
+        assertNotNull(exception.getCause());
+        assertEquals("Test exception", exception.getCause().getMessage());
 
         // Verify that close() was called on the debeziumEngine
         verify(debeziumEngine, times(1)).close();

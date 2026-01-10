@@ -10,13 +10,53 @@ services:
       - -c
       - max_wal_senders=4
     environment:
-      POSTGRES_DB: xtrmetl
-      POSTGRES_USER: xtrmetl
-      POSTGRES_PASSWORD: xtrmetl
+      # NOTE: Defaults are for local development only. Override via .env / secrets for production.
+      POSTGRES_DB: ${POSTGRES_DB:-xtrmetl}
+      POSTGRES_USER: ${POSTGRES_USER:-xtrmetl}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-xtrmetl}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" -h localhost -p 5432"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  postgres-replica:
+    image: postgres:16-alpine
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - max_replication_slots=4
+      - -c
+      - max_wal_senders=4
+    environment:
+      # NOTE: Defaults are for local development only. Override via .env / secrets for production.
+      POSTGRES_DB: ${REPLICA_POSTGRES_DB:-xtrmetl}
+      POSTGRES_USER: ${REPLICA_POSTGRES_USER:-xtrmetl}
+      POSTGRES_PASSWORD: ${REPLICA_POSTGRES_PASSWORD:-xtrmetl}
+      REPLICA_POSTGRES_DB: ${REPLICA_POSTGRES_DB:-xtrmetl}
+      REPLICA_POSTGRES_USER: ${REPLICA_POSTGRES_USER:-xtrmetl}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_replica_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$REPLICA_POSTGRES_USER\" -d \"$REPLICA_POSTGRES_DB\" -h localhost -p 5432"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   zookeeper:
     image: confluentinc/cp-zookeeper:7.6.0
@@ -62,15 +102,18 @@ services:
       args:
         SERVICE: etl-service
     depends_on:
-      - postgres
-      - eureka-server
-      - zipkin
+      postgres:
+        condition: service_healthy
+      eureka-server:
+        condition: service_started
+      zipkin:
+        condition: service_started
     environment:
       PGHOST: postgres
       PGPORT: 5432
-      PGDATABASE: xtrmetl
-      PGUSER: xtrmetl
-      PGPASSWORD: xtrmetl
+      PGDATABASE: ${POSTGRES_DB:-xtrmetl}
+      PGUSER: ${POSTGRES_USER:-xtrmetl}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-xtrmetl}
       EUREKA_HOST: eureka-server
       ZIPKIN_HOST: zipkin
     ports:
@@ -83,16 +126,28 @@ services:
       args:
         SERVICE: cdc-service
     depends_on:
-      - postgres
-      - kafka
-      - eureka-server
-      - zipkin
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      eureka-server:
+        condition: service_started
+      zipkin:
+        condition: service_started
     environment:
       PGHOST: postgres
       PGPORT: 5432
-      PGDATABASE: xtrmetl
-      PGUSER: xtrmetl
-      PGPASSWORD: xtrmetl
+      PGDATABASE: ${POSTGRES_DB:-xtrmetl}
+      PGUSER: ${POSTGRES_USER:-xtrmetl}
+      # NOTE: Defaults are for local development only. Override via .env / secrets for production.
+      PGPASSWORD: ${POSTGRES_PASSWORD:-xtrmetl}
+      # NOTE: postgres-replica is intentionally not in depends_on so CDC can run without the replica when REPLICA_ENABLED=false.
+      REPLICA_ENABLED: ${REPLICA_ENABLED:-true}
+      REPLICA_PGHOST: ${REPLICA_PGHOST:-postgres-replica}
+      REPLICA_PGPORT: ${REPLICA_PGPORT:-5432}
+      REPLICA_PGDATABASE: ${REPLICA_POSTGRES_DB:-xtrmetl}
+      REPLICA_PGUSER: ${REPLICA_POSTGRES_USER:-xtrmetl}
+      REPLICA_PGPASSWORD: ${REPLICA_POSTGRES_PASSWORD:-xtrmetl}
       EUREKA_HOST: eureka-server
       ZIPKIN_HOST: zipkin
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
@@ -118,3 +173,4 @@ services:
 
 volumes:
   postgres_data:
+  postgres_replica_data:

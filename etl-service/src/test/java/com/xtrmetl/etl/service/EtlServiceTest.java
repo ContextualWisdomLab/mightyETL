@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.mockito.ArgumentMatchers;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
@@ -182,7 +183,7 @@ class EtlServiceTest {
 
             etlService.processData(testData);
 
-            verify(jdbcTemplate).update(anyString(), argThat(data -> 
+            verify(jdbcTemplate).update(anyString(), ArgumentMatchers.<String>argThat(data ->
                 data.contains("ID:") && data.contains("NAME:") && 
                 data.contains("EMAIL:") && data.contains("AMOUNT:")
             ));
@@ -253,6 +254,17 @@ class EtlServiceTest {
             when(objectMapper.readTree(testData)).thenReturn(realObjectMapper.readTree(testData));
 
             assertThrows(RuntimeException.class, () -> etlService.processData(testData));
+        }
+
+        @Test
+        @DisplayName("Should reject non-array JSON input")
+        void shouldRejectNonArrayJsonInput() throws Exception {
+            String testData = "{\"id\":\"1\",\"name\":\"Test\"}";
+            when(objectMapper.readTree(testData)).thenReturn(realObjectMapper.readTree(testData));
+
+            RuntimeException exception = assertThrows(RuntimeException.class, () -> etlService.processData(testData));
+            assertTrue(exception.getMessage().contains("Input must be a JSON array"));
+            verify(jdbcTemplate, never()).update(anyString(), anyString());
         }
 
         @Test
