@@ -1,14 +1,19 @@
 package com.xtrmetl.cdc.config;
 
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.datasource.DriverManagerDataSource;
+
+import javax.annotation.PreDestroy;
 
 @Configuration
 @ConditionalOnProperty(prefix = "xtrmetl.replica", name = "enabled", havingValue = "true")
 public class ReplicaJdbcTemplateConfig {
+
+    private HikariDataSource replicaDataSource;
 
     @Bean(name = "replicaJdbcTemplate")
     public JdbcTemplate replicaJdbcTemplate() {
@@ -18,13 +23,23 @@ public class ReplicaJdbcTemplateConfig {
         String username = requireEnv("REPLICA_PGUSER");
         String password = requireEnv("REPLICA_PGPASSWORD");
 
-        DriverManagerDataSource dataSource = new DriverManagerDataSource();
-        dataSource.setDriverClassName("org.postgresql.Driver");
-        dataSource.setUrl("jdbc:postgresql://" + host + ":" + port + "/" + database);
-        dataSource.setUsername(username);
-        dataSource.setPassword(password);
+        HikariConfig config = new HikariConfig();
+        config.setPoolName("cdc-replica-pool");
+        config.setDriverClassName("org.postgresql.Driver");
+        config.setJdbcUrl("jdbc:postgresql://" + host + ":" + port + "/" + database);
+        config.setUsername(username);
+        config.setPassword(password);
 
-        return new JdbcTemplate(dataSource);
+        this.replicaDataSource = new HikariDataSource(config);
+
+        return new JdbcTemplate(replicaDataSource);
+    }
+
+    @PreDestroy
+    public void shutdownReplicaDataSource() {
+        if (replicaDataSource != null) {
+            replicaDataSource.close();
+        }
     }
 
     private static String getEnv(String key, String defaultValue) {
@@ -43,4 +58,3 @@ public class ReplicaJdbcTemplateConfig {
         return value;
     }
 }
-
