@@ -2,8 +2,6 @@ package com.xtrmetl.cdc.service;
 
 import io.debezium.engine.ChangeEvent;
 import io.debezium.engine.DebeziumEngine;
-import io.debezium.engine.RecordChangeEvent;
-import org.apache.kafka.connect.source.SourceRecord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
@@ -15,7 +13,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.io.IOException;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 class CdcServiceTest {
@@ -24,7 +22,7 @@ class CdcServiceTest {
     private KafkaTemplate<String, String> kafkaTemplate;
 
     @Mock
-    private DebeziumEngine<RecordChangeEvent<SourceRecord>> debeziumEngine;
+    private DebeziumEngine<ChangeEvent<String, String>> debeziumEngine;
 
     @InjectMocks
     private CdcService cdcService;
@@ -72,16 +70,32 @@ class CdcServiceTest {
 
     @Test
     void testHandleChangeEvent() {
-        RecordChangeEvent<SourceRecord> changeEvent = mock(RecordChangeEvent.class);
-        SourceRecord sourceRecord = mock(SourceRecord.class);
+        @SuppressWarnings("unchecked")
+        ChangeEvent<String, String> changeEvent =
+            (ChangeEvent<String, String>) mock(ChangeEvent.class);
 
-        when(changeEvent.record()).thenReturn(sourceRecord);
-        when(sourceRecord.topic()).thenReturn("test-topic");
-        when(sourceRecord.key()).thenReturn("test-key");
-        when(sourceRecord.value()).thenReturn("test-value");
+        when(changeEvent.destination()).thenReturn("test-topic");
+        when(changeEvent.key()).thenReturn("test-key");
+        when(changeEvent.value()).thenReturn("test-value");
 
         cdcService.handleChangeEvent(changeEvent);
 
-        verify(kafkaTemplate, times(1)).send(anyString(), anyString(), anyString());
+        verify(kafkaTemplate, times(1)).send(eq("test-topic"), eq("test-key"), eq("test-value"));
+    }
+
+    @Test
+    void testHandleChangeEventWithoutKey() {
+        @SuppressWarnings("unchecked")
+        ChangeEvent<String, String> changeEvent =
+            (ChangeEvent<String, String>) mock(ChangeEvent.class);
+
+        when(changeEvent.destination()).thenReturn("test-topic");
+        when(changeEvent.key()).thenReturn(null);
+        when(changeEvent.value()).thenReturn("test-value");
+
+        cdcService.handleChangeEvent(changeEvent);
+
+        verify(kafkaTemplate, times(1)).send(eq("test-topic"), eq("test-value"));
+        verify(kafkaTemplate, never()).send(eq("test-topic"), anyString(), eq("test-value"));
     }
 }
