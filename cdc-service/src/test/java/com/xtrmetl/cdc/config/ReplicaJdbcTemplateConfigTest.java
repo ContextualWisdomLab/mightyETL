@@ -6,6 +6,7 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import javax.sql.DataSource;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -21,6 +22,8 @@ class ReplicaJdbcTemplateConfigTest {
 
     @Test
     void createsJdbcTemplateWithConfiguredReplicaDataSource() {
+        AtomicReference<HikariDataSource> hikariRef = new AtomicReference<>();
+
         contextRunner
                 .withPropertyValues(
                         "xtrmetl.replica.enabled=true",
@@ -42,7 +45,13 @@ class ReplicaJdbcTemplateConfigTest {
                     assertEquals("jdbc:postgresql://replica-host:15432/xtrmetl", hikari.getJdbcUrl());
                     assertEquals("xtrmetl_user", hikari.getUsername());
                     assertEquals("xtrmetl_password", hikari.getPassword());
+                    assertEquals("cdc-replica-pool", hikari.getPoolName());
+                    assertEquals(-1L, hikari.getInitializationFailTimeout());
+
+                    hikariRef.set(hikari);
                 });
+
+        assertTrue(hikariRef.get().isClosed());
     }
 
     @Test
