@@ -40,6 +40,27 @@ class CdcServiceTest {
     }
 
     @Test
+    void maybeAutoStartDoesNothingWhenDisabled() {
+        CdcService service = new CdcService(kafkaTemplate, false);
+        ReflectionTestUtils.setField(service, "debeziumEngine", debeziumEngine);
+
+        service.maybeAutoStart();
+
+        assertNull(ReflectionTestUtils.getField(service, "engineTask"));
+    }
+
+    @Test
+    void maybeAutoStartStartsEngineWhenEnabled() {
+        CdcService service = new CdcService(kafkaTemplate, true);
+        ReflectionTestUtils.setField(service, "debeziumEngine", debeziumEngine);
+
+        service.maybeAutoStart();
+
+        assertNotNull(ReflectionTestUtils.getField(service, "engineTask"));
+        service.shutdown();
+    }
+
+    @Test
     void testStop() throws IOException {
         // Call the stop method
         cdcService.stop();
