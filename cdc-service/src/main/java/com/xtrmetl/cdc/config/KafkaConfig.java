@@ -6,6 +6,8 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.core.ProducerFactory;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.support.SendResult;
+import org.springframework.lang.NonNull;
+import org.springframework.lang.Nullable;
 import org.springframework.util.concurrent.ListenableFuture;
 import org.springframework.util.concurrent.SettableListenableFuture;
 
@@ -24,7 +26,8 @@ public class KafkaConfig {
         
         return new KafkaTemplate<String, String>(producerFactory) {
             @Override
-            public ListenableFuture<SendResult<String, String>> send(String topic, String data) {
+            @NonNull
+            public ListenableFuture<SendResult<String, String>> send(@NonNull String topic, @Nullable String data) {
                 System.out.println("Mock Kafka: Sending data to topic " + topic + ": " + data);
                 SettableListenableFuture<SendResult<String, String>> future = new SettableListenableFuture<>();
                 future.set(new SendResult<>(null, null));

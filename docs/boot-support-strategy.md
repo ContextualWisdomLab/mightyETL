@@ -1,0 +1,37 @@
+# Spring Boot Support Strategy
+
+## Decision
+
+- Adopt a Spring Boot 3.x upgrade path (target 3.2.x LTS) with Java 17.
+- Keep 2.7.13 in the short term while aligning code to the newer APIs.
+
+## Rationale
+
+- Spring Boot 2.7.x OSS support ended, increasing security and maintenance risk.
+- Spring Security and Spring Kafka APIs are already moving toward 3.x patterns.
+
+## Scope And Impact
+
+- Modules: cdc-service, etl-service, config-server, eureka-server, zuul-gateway
+- Expected changes:
+  - Java 17 baseline and Jakarta namespace migration
+  - Spring Cloud BOM upgrade (2023.x series)
+  - Zuul replacement (Spring Cloud Gateway)
+  - Test updates for API and package changes
+
+## Plan
+
+1. Pre-migration cleanup (this issue): fix nullability, deprecations, and test warnings.
+2. Dependency alignment: upgrade parent BOMs and validate starters.
+3. Code migration: Jakarta imports, security DSL, Kafka async API updates.
+4. Verification: module builds, targeted integration tests, staged rollout.
+
+## Risks And Mitigations
+
+- Zuul replacement is required for Boot 3.x; plan migration early.
+- Validate Debezium and Kafka compatibility before dependency bumps.
+
+## Decision Log
+
+- Date: 2026-01-09
+- Owner: Product Engineering Team

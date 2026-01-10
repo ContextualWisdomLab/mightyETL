@@ -1,6 +1,5 @@
 package com.xtrmetl.cdc.service;
 
-import io.debezium.engine.ChangeEvent;
 import io.debezium.engine.DebeziumEngine;
 import io.debezium.engine.RecordChangeEvent;
 import org.apache.kafka.connect.source.SourceRecord;
@@ -15,7 +14,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.io.IOException;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 class CdcServiceTest {
@@ -72,7 +71,9 @@ class CdcServiceTest {
 
     @Test
     void testHandleChangeEvent() {
-        RecordChangeEvent<SourceRecord> changeEvent = mock(RecordChangeEvent.class);
+        @SuppressWarnings("unchecked")
+        RecordChangeEvent<SourceRecord> changeEvent =
+            (RecordChangeEvent<SourceRecord>) mock(RecordChangeEvent.class);
         SourceRecord sourceRecord = mock(SourceRecord.class);
 
         when(changeEvent.record()).thenReturn(sourceRecord);
@@ -82,6 +83,6 @@ class CdcServiceTest {
 
         cdcService.handleChangeEvent(changeEvent);
 
-        verify(kafkaTemplate, times(1)).send(anyString(), anyString(), anyString());
+        verify(kafkaTemplate, times(1)).send(eq("test-topic"), eq("test-key"), eq("test-value"));
     }
 }

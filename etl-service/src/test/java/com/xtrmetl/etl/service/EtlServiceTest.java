@@ -11,7 +11,7 @@ import org.mockito.MockitoAnnotations;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 class EtlServiceTest {
@@ -33,16 +33,18 @@ class EtlServiceTest {
     @Test
     void testProcessData() throws Exception {
         String testData = "[{\"id\":\"1\",\"name\":\"John Doe\",\"email\":\"john@example.com\",\"amount\":\"100.50\"}]";
+        String expectedSql = "INSERT INTO processed_data (data) VALUES (?)";
+        String expectedTransformedData = "ID:1,NAME:JOHN DOE,EMAIL:john@example.com,AMOUNT:100.50,";
         JsonNode jsonNode = new ObjectMapper().readTree(testData);
 
         when(objectMapper.readTree(testData)).thenReturn(jsonNode);
-        when(jdbcTemplate.update(anyString(), anyString())).thenReturn(1);
+        when(jdbcTemplate.update(eq(expectedSql), eq(expectedTransformedData))).thenReturn(1);
 
         String result = etlService.processData(testData);
 
         assertNotNull(result);
         assertTrue(result.contains("Processed: 1"));
-        verify(jdbcTemplate, times(1)).update(anyString(), anyString());
+        verify(jdbcTemplate, times(1)).update(eq(expectedSql), eq(expectedTransformedData));
     }
 
     @Test

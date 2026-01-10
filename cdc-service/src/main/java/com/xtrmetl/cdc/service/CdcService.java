@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import java.io.IOException;
+import java.util.Objects;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
@@ -27,8 +28,10 @@ public class CdcService {
 
     @PostConstruct
     public void start() {
-        initializeDebeziumEngine();
-        this.executor.execute(debeziumEngine);
+        if (this.debeziumEngine == null) {
+            initializeDebeziumEngine();
+        }
+        this.executor.execute(Objects.requireNonNull(debeziumEngine, "Debezium engine"));
     }
 
     @PreDestroy
@@ -53,9 +56,9 @@ public class CdcService {
 
     protected void handleChangeEvent(RecordChangeEvent<SourceRecord> sourceRecordRecordChangeEvent) {
         SourceRecord sourceRecord = sourceRecordRecordChangeEvent.record();
-        String topic = sourceRecord.topic();
-        String key = sourceRecord.key().toString();
-        String value = sourceRecord.value().toString();
+        String topic = Objects.requireNonNull(sourceRecord.topic(), "CDC source record topic");
+        String key = Objects.requireNonNull(sourceRecord.key(), "CDC source record key").toString();
+        String value = Objects.requireNonNull(sourceRecord.value(), "CDC source record value").toString();
 
         kafkaTemplate.send(topic, key, value);
     }
