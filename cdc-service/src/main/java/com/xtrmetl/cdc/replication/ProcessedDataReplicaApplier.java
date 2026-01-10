@@ -60,12 +60,19 @@ public class ProcessedDataReplicaApplier {
             return;
         }
 
-        String data = extractTextOrJson(envelope.after(), "data");
-        if (data == null) {
-            log.error("Replica apply failed: missing processed_data.data (topic={}, id={})", topic, id);
-            throw new IllegalStateException("Missing processed_data.data in CDC event for id=" + id);
+        JsonNode after = envelope.after();
+        if (after == null || after.isNull() || !after.has("data")) {
+            log.error("Replica apply failed: missing processed_data.data field (topic={}, id={})", topic, id);
+            throw new IllegalStateException("Missing processed_data.data field in CDC event for id=" + id);
         }
 
+        JsonNode dataNode = after.get("data");
+        if (dataNode.isNull()) {
+            log.error("Replica apply failed: processed_data.data is null (topic={}, id={})", topic, id);
+            throw new IllegalStateException("processed_data.data is null in CDC event for id=" + id);
+        }
+
+        String data = dataNode.isTextual() ? dataNode.asText() : dataNode.toString();
         jdbcTemplate.update(UPSERT_SQL, id, data);
     }
 
@@ -142,23 +149,6 @@ public class ProcessedDataReplicaApplier {
         }
 
         return null;
-    }
-
-    private static String extractTextOrJson(JsonNode object, String fieldName) {
-        if (object == null || object.isNull()) {
-            return null;
-        }
-
-        JsonNode value = object.get(fieldName);
-        if (value == null || value.isNull()) {
-            return null;
-        }
-
-        if (value.isTextual()) {
-            return value.asText();
-        }
-
-        return value.toString();
     }
 
     private record DebeziumEnvelope(String op, JsonNode after) {}
