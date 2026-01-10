@@ -7,6 +7,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -30,7 +31,7 @@ class DocumentationValidationTest {
 
     private static final Path PROJECT_ROOT = findProjectRoot();
     private static final Pattern MARKDOWN_LINK_PATTERN = Pattern.compile("\\[([^\\]]+)\\]\\(([^)]+)\\)");
-    private static final Pattern MARKDOWN_HEADER_PATTERN = Pattern.compile("^#{1,6}\\s+(.+)$");
+    private static final Pattern MARKDOWN_HEADER_PATTERN = Pattern.compile("^#{1,6}\\s+(.+)$", Pattern.MULTILINE);
     private static final Pattern CODE_BLOCK_PATTERN = Pattern.compile("```([a-zA-Z]*)\n(.*?)\n```", Pattern.DOTALL);
     private static final Pattern URL_PATTERN = Pattern.compile("https?://[^\\s)]+");
 
@@ -39,13 +40,24 @@ class DocumentationValidationTest {
      */
     private static Path findProjectRoot() {
         Path current = Paths.get(System.getProperty("user.dir")).toAbsolutePath();
+        Path lastPomParent = null;
         while (current != null) {
-            if (Files.exists(current.resolve("pom.xml")) || Files.exists(current.resolve(".git"))) {
+            if (Files.exists(current.resolve(".git"))) {
                 return current;
+            }
+            if (Files.exists(current.resolve("pom.xml"))) {
+                lastPomParent = current;
             }
             current = current.getParent();
         }
-        throw new IllegalStateException("Could not find project root (no pom.xml or .git found)");
+        if (lastPomParent != null) {
+            return lastPomParent;
+        }
+        throw new IllegalStateException("Could not find project root (no .git or pom.xml found)");
+    }
+
+    private static String readUtf8File(Path path) throws IOException {
+        return new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
     }
 
     @Nested
@@ -58,7 +70,7 @@ class DocumentationValidationTest {
         void setUp() throws IOException {
             Path readmePath = PROJECT_ROOT.resolve("README.md");
             assertTrue(Files.exists(readmePath), "README.md should exist");
-            readmeContent = Files.readString(readmePath);
+            readmeContent = readUtf8File(readmePath);
         }
 
         @Test
@@ -69,9 +81,12 @@ class DocumentationValidationTest {
             
             // Check for essential sections
             assertTrue(readmeContent.contains("# xtrmETL"), "Should have main title");
-            assertTrue(readmeContent.contains("## Quick Start"), "Should have Quick Start section");
-            assertTrue(readmeContent.contains("## Architecture"), "Should have Architecture section");
-            assertTrue(readmeContent.contains("## Services"), "Should have Services section");
+            assertTrue(readmeContent.contains("## Quick Start") || readmeContent.contains("## 🚀 Quick Start"),
+                "Should have Quick Start section");
+            assertTrue(readmeContent.contains("## Architecture") || readmeContent.contains("## 🏗️ Architecture"),
+                "Should have Architecture section");
+            assertTrue(readmeContent.contains("## Services") || readmeContent.contains("## 📚 Services"),
+                "Should have Services section");
         }
 
         @Test
@@ -121,13 +136,12 @@ class DocumentationValidationTest {
         @Test
         @DisplayName("README should reference correct ports")
         void shouldReferenceCorrectPorts() {
-            Map<String, String> expectedPorts = Map.of(
-                "8080", "Zuul Gateway",
-                "8000", "ETL Service",
-                "8001", "CDC Service",
-                "8761", "Eureka Server",
-                "9412", "Zipkin"
-            );
+            Map<String, String> expectedPorts = new HashMap<>();
+            expectedPorts.put("8080", "Zuul Gateway");
+            expectedPorts.put("8000", "ETL Service");
+            expectedPorts.put("8001", "CDC Service");
+            expectedPorts.put("8761", "Eureka Server");
+            expectedPorts.put("9412", "Zipkin");
             
             for (Map.Entry<String, String> entry : expectedPorts.entrySet()) {
                 assertTrue(readmeContent.contains(entry.getKey()),
@@ -178,7 +192,7 @@ class DocumentationValidationTest {
         void setUp() throws IOException {
             Path prdPath = PROJECT_ROOT.resolve("PRD.md");
             assertTrue(Files.exists(prdPath), "PRD.md should exist");
-            prdContent = Files.readString(prdPath);
+            prdContent = readUtf8File(prdPath);
             headers = extractHeaders(prdContent);
         }
 
@@ -296,7 +310,7 @@ class DocumentationValidationTest {
         void setUp() throws IOException {
             Path archPath = PROJECT_ROOT.resolve("ARCHITECTURE.md");
             assertTrue(Files.exists(archPath), "ARCHITECTURE.md should exist");
-            archContent = Files.readString(archPath);
+            archContent = readUtf8File(archPath);
         }
 
         @Test
@@ -391,7 +405,7 @@ class DocumentationValidationTest {
         void setUp() throws IOException {
             Path changelogPath = PROJECT_ROOT.resolve("CHANGELOG.md");
             assertTrue(Files.exists(changelogPath), "CHANGELOG.md should exist");
-            changelogContent = Files.readString(changelogPath);
+            changelogContent = readUtf8File(changelogPath);
         }
 
         @Test
@@ -455,7 +469,7 @@ class DocumentationValidationTest {
         void setUp() throws IOException {
             Path summaryPath = PROJECT_ROOT.resolve("SUMMARY_KR.md");
             assertTrue(Files.exists(summaryPath), "SUMMARY_KR.md should exist");
-            summaryKrContent = Files.readString(summaryPath);
+            summaryKrContent = readUtf8File(summaryPath);
         }
 
         @Test
@@ -471,7 +485,7 @@ class DocumentationValidationTest {
         @DisplayName("Korean summary should contain Korean characters")
         void shouldContainKoreanCharacters() {
             // Check for Hangul characters (Korean alphabet)
-            assertTrue(summaryKrContent.matches(".*[\\uAC00-\\uD7AF].*"),
+            assertTrue(Pattern.compile("[\\uAC00-\\uD7AF]").matcher(summaryKrContent).find(),
                 "Korean summary should contain Korean characters");
         }
 
@@ -494,21 +508,20 @@ class DocumentationValidationTest {
         @org.junit.jupiter.api.BeforeEach
         void setUp() throws IOException {
             allDocs = new HashMap<>();
-            allDocs.put("README", Files.readString(PROJECT_ROOT.resolve("README.md")));
-            allDocs.put("PRD", Files.readString(PROJECT_ROOT.resolve("PRD.md")));
-            allDocs.put("ARCHITECTURE", Files.readString(PROJECT_ROOT.resolve("ARCHITECTURE.md")));
-            allDocs.put("CHANGELOG", Files.readString(PROJECT_ROOT.resolve("CHANGELOG.md")));
+            allDocs.put("README", readUtf8File(PROJECT_ROOT.resolve("README.md")));
+            allDocs.put("PRD", readUtf8File(PROJECT_ROOT.resolve("PRD.md")));
+            allDocs.put("ARCHITECTURE", readUtf8File(PROJECT_ROOT.resolve("ARCHITECTURE.md")));
+            allDocs.put("CHANGELOG", readUtf8File(PROJECT_ROOT.resolve("CHANGELOG.md")));
         }
 
         @Test
         @DisplayName("Service ports should be consistent across documents")
         void servicePortsShouldBeConsistent() {
-            Map<String, String> portMappings = Map.of(
-                "8080", "Zuul",
-                "8000", "ETL",
-                "8001", "CDC",
-                "8761", "Eureka"
-            );
+            Map<String, String> portMappings = new HashMap<>();
+            portMappings.put("8080", "Zuul");
+            portMappings.put("8000", "ETL");
+            portMappings.put("8001", "CDC");
+            portMappings.put("8761", "Eureka");
             
             for (Map.Entry<String, String> entry : portMappings.entrySet()) {
                 String port = entry.getKey();
@@ -570,7 +583,7 @@ class DocumentationValidationTest {
             Pattern versionPattern = Pattern.compile("(?:version|Version|v)[:\\s]*([0-9]+\\.[0-9]+(?:\\.[0-9]+)?)");
             
             // Documents that can have multiple versions (e.g., changelogs, READMEs with historical info)
-            Set<String> allowedMultiVersionDocs = Set.of("README.md", "CHANGELOG.md");
+            Set<String> allowedMultiVersionDocs = new HashSet<>(Arrays.asList("README", "CHANGELOG"));
             
             Map<String, Set<String>> versionsByDoc = new HashMap<>();
             for (Map.Entry<String, String> doc : allDocs.entrySet()) {
@@ -620,9 +633,9 @@ class DocumentationValidationTest {
         @DisplayName("Documents should have balanced code blocks")
         void shouldHaveBalancedCodeBlocks(String filename) throws IOException {
             Path filePath = PROJECT_ROOT.resolve(filename);
-            String content = Files.readString(filePath);
+            String content = readUtf8File(filePath);
             
-            long openingBlocks = content.lines()
+            long openingBlocks = Arrays.stream(content.split("\\r?\\n"))
                 .filter(line -> line.trim().startsWith("```"))
                 .count();
             
@@ -635,7 +648,7 @@ class DocumentationValidationTest {
         @DisplayName("Documents should not have broken markdown links")
         void shouldNotHaveBrokenMarkdownLinks(String filename) throws IOException {
             Path filePath = PROJECT_ROOT.resolve(filename);
-            String content = Files.readString(filePath);
+            String content = readUtf8File(filePath);
             
             // Check for common markdown link errors
             assertFalse(content.contains("](]"),
@@ -654,7 +667,7 @@ class DocumentationValidationTest {
         @DisplayName("Documents should have consistent header hierarchy")
         void shouldHaveConsistentHeaderHierarchy(String filename) throws IOException {
             Path filePath = PROJECT_ROOT.resolve(filename);
-            String content = Files.readString(filePath);
+            String content = readUtf8File(filePath);
             
             List<Integer> headerLevels = new ArrayList<>();
             Pattern headerPattern = Pattern.compile("^(#{1,6})\\s+", Pattern.MULTILINE);
