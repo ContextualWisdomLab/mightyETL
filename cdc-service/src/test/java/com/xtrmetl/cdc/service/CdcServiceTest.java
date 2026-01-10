@@ -60,7 +60,9 @@ class CdcServiceTest {
         IOException exception = assertThrows(IOException.class, () -> cdcService.stop());
 
         // Verify the exception message
-        assertEquals("Error stopping CDC: Test exception", exception.getMessage());
+        assertEquals("Error stopping CDC", exception.getMessage());
+        assertNotNull(exception.getCause());
+        assertEquals("Test exception", exception.getCause().getMessage());
 
         // Verify that close() was called on the debeziumEngine
         verify(debeziumEngine, times(1)).close();

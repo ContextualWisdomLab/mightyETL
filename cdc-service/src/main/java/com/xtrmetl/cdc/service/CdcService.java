@@ -89,7 +89,7 @@ public class CdcService {
             try {
                 this.debeziumEngine.close();
             } catch (IOException e) {
-                throw new IOException("Error stopping CDC: " + e.getMessage(), e);
+                throw new IOException("Error stopping CDC", e);
             } finally {
                 this.debeziumEngine = null;
                 this.engineTask = null;
