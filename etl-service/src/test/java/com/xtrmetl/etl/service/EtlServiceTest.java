@@ -31,16 +31,16 @@ class EtlServiceTest {
     }
 
     @Test
-    void testProcessData() throws Exception {
-        String testData = "[{\"id\":\"1\",\"name\":\"John Doe\",\"email\":\"john@example.com\",\"amount\":\"100.50\"}]";
-        String expectedSql = "INSERT INTO processed_data (data) VALUES (?)";
-        String expectedTransformedData = "ID:1,NAME:JOHN DOE,EMAIL:john@example.com,AMOUNT:100.50,";
+	    void testProcessData() throws Exception {
+	        String testData = "[{\"id\":\"1\",\"name\":\"John Doe\",\"email\":\"john@example.com\",\"amount\":\"100.50\"}]";
+	        String expectedSql = "INSERT INTO processed_data (data) VALUES (?)";
+	        String expectedTransformedData = "ID:1,NAME:JOHN DOE,EMAIL:john@example.com,AMOUNT:100.50,";
 	        JsonNode jsonNode = new ObjectMapper().readTree(testData);
 
 	        when(objectMapper.readTree(testData)).thenReturn(jsonNode);
 	        when(jdbcTemplate.update(expectedSql, expectedTransformedData)).thenReturn(1);
 
-        String result = etlService.processData(testData);
+	        String result = etlService.processData(testData);
 
 	        assertNotNull(result);
 	        assertTrue(result.contains("Processed: 1"));
