@@ -31,6 +31,9 @@
 
 - Zuul replacement is required for Boot 3.x; plan migration early.
 - Validate Debezium and Kafka compatibility before dependency bumps.
+- Jakarta namespace migration may break third-party libraries; audit dependencies early.
+- Performance characteristics may change; establish baseline metrics before migration.
+- Test coverage gaps may exist; enhance integration tests for critical paths.
 
 ## Decision Log
 
