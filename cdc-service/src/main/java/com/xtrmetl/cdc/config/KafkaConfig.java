@@ -64,7 +64,7 @@ public class KafkaConfig {
                         0L,
                         0L,
                         System.currentTimeMillis(),
-                        Long.valueOf(0L),
+                        0L,
                         key != null ? key.length() : 0,
                         data != null ? data.length() : 0
                 );
