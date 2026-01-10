@@ -18,7 +18,7 @@ It complements `PRD.md` (what/why) and `ARCHITECTURE.md` (how it fits together).
 
 ## 2. Runtime & Build Requirements
 
-- Java: 17 (build and runtime)
+- Java: 25 (build and runtime)
 - Build tool: Maven (3.6+)
 - OS: Linux/macOS compatible development environment
 
@@ -36,7 +36,7 @@ Pinned in `pom.xml` unless noted otherwise:
 
 - Spring Boot: `2.7.14`
 - Spring Cloud: `2021.0.8`
-- Compiler target: `maven-compiler-plugin` uses `release=${java.version}` (Java 17)
+- Compiler target: `maven-compiler-plugin` uses `release=${java.version}` (Java 25)
 
 CDC-specific (currently pinned in `cdc-service/pom.xml`):
 

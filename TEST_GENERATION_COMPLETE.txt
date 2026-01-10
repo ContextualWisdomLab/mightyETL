@@ -5,7 +5,7 @@ DOCUMENTATION TEST SUITE GENERATION - COMPLETION REPORT
 PROJECT: xtrmETL
 DATE: 2026-01-08
 FRAMEWORK: JUnit 5 (Jupiter)
-LANGUAGE: Java 17
+LANGUAGE: Java 25
 
 ================================================================================
 GENERATED FILES

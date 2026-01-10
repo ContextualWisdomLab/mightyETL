@@ -180,7 +180,7 @@ Update these tests when:
 This test suite uses only existing project dependencies:
 
 - JUnit 5 (Jupiter API and Engine)
-- Java 17 NIO.2 for file operations
+- Java 25 NIO.2 for file operations
 - Standard Java regex and collections
 
 No additional dependencies are required.
