@@ -1,0 +1,120 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - max_replication_slots=4
+      - -c
+      - max_wal_senders=4
+    environment:
+      POSTGRES_DB: xtrmetl
+      POSTGRES_USER: xtrmetl
+      POSTGRES_PASSWORD: xtrmetl
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    ports:
+      - "29092:29092"
+
+  zipkin:
+    image: openzipkin/zipkin:2
+    ports:
+      - "9412:9412"
+
+  eureka-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE: eureka-server
+    ports:
+      - "8761:8761"
+
+  etl-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE: etl-service
+    depends_on:
+      - postgres
+      - eureka-server
+      - zipkin
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGDATABASE: xtrmetl
+      PGUSER: xtrmetl
+      PGPASSWORD: xtrmetl
+      EUREKA_HOST: eureka-server
+      ZIPKIN_HOST: zipkin
+    ports:
+      - "8000:8000"
+
+  cdc-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE: cdc-service
+    depends_on:
+      - postgres
+      - kafka
+      - eureka-server
+      - zipkin
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGDATABASE: xtrmetl
+      PGUSER: xtrmetl
+      PGPASSWORD: xtrmetl
+      EUREKA_HOST: eureka-server
+      ZIPKIN_HOST: zipkin
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    ports:
+      - "8001:8001"
+
+  zuul-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE: zuul-gateway
+    depends_on:
+      - eureka-server
+      - zipkin
+      - etl-service
+      - cdc-service
+    environment:
+      EUREKA_HOST: eureka-server
+      ZIPKIN_HOST: zipkin
+    ports:
+      - "8080:8080"
+
+volumes:
+  postgres_data:
