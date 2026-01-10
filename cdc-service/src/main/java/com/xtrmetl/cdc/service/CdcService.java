@@ -42,6 +42,8 @@ public class CdcService {
     }
 
     /**
+     * Auto-starts the Debezium CDC engine when enabled.
+     *
      * Debezium CDC 엔진을 초기화하고 전용 단일 스레드 실행기에서 실행을 시작한다.
      *
      * 초기화된 엔진이 없으면 새 Debezium 엔진을 생성한 후 단일 스레드 실행기에 제출하여 비동기로 실행을 시작한다.
@@ -54,12 +56,21 @@ public class CdcService {
     }
 
     /**
+     * Starts the Debezium CDC engine.
+     *
      * Debezium CDC 엔진 실행을 시작한다.
+     *
+     * <p>This method is idempotent; if the engine is already running, it returns immediately.</p>
      *
      * <p>이 메서드는 idempotent 하며, 엔진이 이미 실행 중이면 아무 작업도 수행하지 않고 즉시 반환한다.</p>
      *
+     * <p>This method is {@code synchronized} and safe to call concurrently. The engine runs asynchronously on a
+     * dedicated single-thread executor.</p>
+     *
      * <p>동시에 여러 스레드에서 호출되더라도 {@code synchronized}로 보호되어 단일 실행만 보장한다.
      * 엔진은 내부 전용 단일 스레드 실행기에서 비동기로 실행된다.</p>
+     *
+     * <p>After {@link #stop()}, calling {@code start()} again will initialize a new engine instance and restart.</p>
      *
      * <p>{@link #stop()}으로 엔진을 종료한 뒤 다시 호출하면 새로운 엔진 인스턴스를 초기화한 후 재시작한다.</p>
      */
@@ -81,7 +92,12 @@ public class CdcService {
     }
 
     /**
+     * Stops the Debezium CDC engine and clears internal references.
+     *
      * Debezium CDC 엔진을 종료하고 내부 참조를 해제한다.
+     *
+     * Calls {@code close()} when the engine instance exists. Any {@link IOException} is wrapped and rethrown.
+     * If the engine is {@code null}, this method does nothing.
      *
      * 엔진 인스턴스가 존재하면 `close()`를 호출하여 종료하며 종료 중 발생한 `IOException`은 메시지를 추가해 래핑하여 다시 던진다.
      * 엔진이 `null`이면 아무 작업도 수행하지 않는다.
@@ -102,7 +118,13 @@ public class CdcService {
     }
 
     /**
+     * Cleans up the Debezium engine and executor during application shutdown.
+     *
      * 애플리케이션 종료 시 Debezium 엔진 및 내부 실행기를 정리한다.
+     *
+     * <p>Stops the engine via {@link #stop()} and then shuts down the dedicated executor. Waits up to 5 seconds for
+     * termination and falls back to {@code shutdownNow()}. If interrupted, restores the interrupt flag and attempts a
+     * forceful shutdown.</p>
      *
      * <p>{@link #stop()}을 호출해 엔진을 종료하고, 이후 전용 단일 스레드 실행기를 종료한다.
      * 실행기 종료는 최대 5초까지 대기하며, 제한 시간 내 종료되지 않으면 {@code shutdownNow()}로 강제 종료한다.
@@ -140,7 +162,11 @@ public class CdcService {
     }
 
     /**
+     * Publishes Debezium key/value JSON to the destination Kafka topic.
+     *
      * Debezium에서 받은 CDC 변경 이벤트의 JSON key/value를 해당 topic으로 전송한다.
+     *
+     * Uses a key-less send overload when the key is absent, following Spring Kafka conventions.
      *
      * key가 없으면 Spring Kafka 계약에 맞게 key-less send 오버로드를 사용한다.
      *
