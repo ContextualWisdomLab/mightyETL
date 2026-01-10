@@ -51,7 +51,7 @@
 
 - Spring Boot 3.2.x with Spring Cloud 2023.x (Leyton)
 - Spring Kafka 3.1.x (CompletableFuture-based KafkaTemplate)
-- Debezium 2.5.x+ (validate against Boot 3.2/Jakarta dependencies)
+- Debezium 3.x+ for embedded engine (Jakarta namespace compatible); alternatively run Debezium via Kafka Connect (separate process/JVM)
 - Spring Cloud Gateway 4.x (bundled with Cloud 2023.x)
 
 ### Verification Gates
