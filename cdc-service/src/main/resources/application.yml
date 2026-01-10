@@ -5,9 +5,10 @@ spring:
   application:
     name: cdc-service
   datasource:
-    # NOTE: This datasource is intended for the replica applier component and is only used when
-    # `xtrmetl.replica.enabled=true`. It points to the replica via `REPLICA_PG*` variables (falling
-    # back to `PG*`), while Debezium continues to use `PG*` variables to read CDC from the primary DB.
+    # NOTE: This datasource is intended for the replica applier component. It is always configured,
+    # but is only used by the replica applier when `xtrmetl.replica.enabled=true`. It resolves its
+    # connection using `REPLICA_PG*` variables, falling back to `PG*` (which may point to the primary),
+    # while Debezium continues to use `PG*` variables directly to read CDC from the primary DB.
     url: jdbc:postgresql://${REPLICA_PGHOST:${PGHOST}}:${REPLICA_PGPORT:${PGPORT}}/${REPLICA_PGDATABASE:${PGDATABASE}}
     username: ${REPLICA_PGUSER:${PGUSER}}
     password: ${REPLICA_PGPASSWORD:${PGPASSWORD}}
