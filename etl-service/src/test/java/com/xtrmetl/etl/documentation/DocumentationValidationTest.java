@@ -33,7 +33,6 @@ class DocumentationValidationTest {
     private static final Pattern MARKDOWN_LINK_PATTERN = Pattern.compile("\\[([^\\]]+)\\]\\(([^)]+)\\)");
     private static final Pattern MARKDOWN_HEADER_PATTERN = Pattern.compile("^#{1,6}\\s+(.+)$", Pattern.MULTILINE);
     private static final Pattern CODE_BLOCK_PATTERN = Pattern.compile("```([a-zA-Z]*)\n(.*?)\n```", Pattern.DOTALL);
-    private static final Pattern URL_PATTERN = Pattern.compile("https?://[^\\s)]+");
 
     /**
      * Locates the project root by walking up the directory tree until finding a marker file.
@@ -57,7 +56,7 @@ class DocumentationValidationTest {
     }
 
     private static String readUtf8File(Path path) throws IOException {
-        return Files.readString(path, StandardCharsets.UTF_8);
+        return new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
     }
 
     @Nested
