@@ -14,6 +14,12 @@ import java.io.IOException;
 
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
+    /**
+     * HTTP 요청에서 JWT 유사 토큰을 추출·검증하여 유효한 경우 보안 컨텍스트에 인증 정보를 설정하고 필터 체인을 계속 진행한다.
+     *
+     * @throws ServletException 요청 필터링 처리 중 서블릿 관련 오류가 발생한 경우
+     * @throws IOException      요청 또는 응답 처리 중 입출력 오류가 발생한 경우
+     */
     @Override
     protected void doFilterInternal(@NonNull HttpServletRequest request,
                                     @NonNull HttpServletResponse response,

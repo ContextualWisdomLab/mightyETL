@@ -12,6 +12,15 @@ import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 @EnableWebSecurity
 public class SecurityConfig {
 
+    /**
+     * 애플리케이션의 HTTP 보안 필터 체인을 구성한다.
+     *
+     * 구성 내용: CSRF 비활성화, "/api/**" 경로에 대해 인증 요구, 다른 모든 요청 허용, HTTP Basic 인증 활성화.
+     *
+     * @param http 구성에 사용되는 HttpSecurity 인스턴스
+     * @return 구성된 SecurityFilterChain 인스턴스
+     * @throws Exception 보안 구성을 적용하는 동안 오류가 발생한 경우
+     */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
