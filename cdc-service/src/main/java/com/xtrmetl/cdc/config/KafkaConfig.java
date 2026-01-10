@@ -1,5 +1,8 @@
 package com.xtrmetl.cdc.config;
 
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.clients.producer.RecordMetadata;
+import org.apache.kafka.common.TopicPartition;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -37,8 +40,18 @@ public class KafkaConfig {
             @NonNull
             public ListenableFuture<SendResult<String, String>> send(@NonNull String topic, @Nullable String data) {
                 System.out.println("Mock Kafka: Sending data to topic " + topic + ": " + data);
+                ProducerRecord<String, String> producerRecord = new ProducerRecord<>(topic, data);
+                RecordMetadata recordMetadata = new RecordMetadata(
+                        new TopicPartition(topic, 0),
+                        0L,
+                        0L,
+                        System.currentTimeMillis(),
+                        Long.valueOf(0L),
+                        0,
+                        data != null ? data.length() : 0
+                );
                 SettableListenableFuture<SendResult<String, String>> future = new SettableListenableFuture<>();
-                future.set(new SendResult<>(null, null));
+                future.set(new SendResult<>(producerRecord, recordMetadata));
                 return future;
             }
         };
