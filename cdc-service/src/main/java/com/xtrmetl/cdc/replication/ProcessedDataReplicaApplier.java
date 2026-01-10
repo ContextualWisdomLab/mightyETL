@@ -19,7 +19,8 @@ public class ProcessedDataReplicaApplier {
 
     private static final String TABLE_NAME = "processed_data";
 
-    // created_at is managed by the replica DB (DEFAULT) and intentionally preserved on updates.
+    // created_at is set by the replica DB on insert (DEFAULT) and intentionally not updated on upserts.
+    // This replication path currently tracks only the latest `data` value; it does not maintain an `updated_at`.
     private static final String UPSERT_SQL = """
             INSERT INTO processed_data (id, data)
             VALUES (?, ?)
