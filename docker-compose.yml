@@ -18,6 +18,12 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U xtrmetl -d xtrmetl -h localhost -p 5432"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   postgres-replica:
     image: postgres:16-alpine
@@ -30,6 +36,12 @@ services:
     volumes:
       - postgres_replica_data:/var/lib/postgresql/data
       - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U xtrmetl -d xtrmetl -h localhost -p 5432"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   zookeeper:
     image: confluentinc/cp-zookeeper:7.6.0
@@ -75,9 +87,12 @@ services:
       args:
         SERVICE: etl-service
     depends_on:
-      - postgres
-      - eureka-server
-      - zipkin
+      postgres:
+        condition: service_healthy
+      eureka-server:
+        condition: service_started
+      zipkin:
+        condition: service_started
     environment:
       PGHOST: postgres
       PGPORT: 5432
@@ -96,11 +111,16 @@ services:
       args:
         SERVICE: cdc-service
     depends_on:
-      - postgres
-      - postgres-replica
-      - kafka
-      - eureka-server
-      - zipkin
+      postgres:
+        condition: service_healthy
+      postgres-replica:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      eureka-server:
+        condition: service_started
+      zipkin:
+        condition: service_started
     environment:
       PGHOST: postgres
       PGPORT: 5432
