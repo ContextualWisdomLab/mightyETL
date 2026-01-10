@@ -97,6 +97,13 @@ public class CdcService {
         }
     }
 
+    /**
+     * 애플리케이션 종료 시 Debezium 엔진 및 내부 실행기를 정리한다.
+     *
+     * <p>{@link #stop()}을 호출해 엔진을 종료하고, 이후 전용 단일 스레드 실행기를 종료한다.
+     * 실행기 종료는 최대 5초까지 대기하며, 제한 시간 내 종료되지 않으면 {@code shutdownNow()}로 강제 종료한다.
+     * 대기 중 인터럽트가 발생하면 인터럽트 플래그를 복원한 뒤 강제 종료를 시도한다.</p>
+     */
     @PreDestroy
     public void shutdown() {
         try {
