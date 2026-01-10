@@ -71,6 +71,8 @@ public class CdcService {
     /**
      * Debezium에서 받은 CDC 변경 이벤트의 JSON key/value를 해당 topic으로 전송한다.
      *
+     * key가 없으면 Spring Kafka 계약에 맞게 key-less send 오버로드를 사용한다.
+     *
      * @param changeEvent Debezium의 변경 이벤트로부터 key/value와 destination을 포함하는 이벤트 객체
      */
     protected void handleChangeEvent(ChangeEvent<String, String> changeEvent) {
@@ -82,7 +84,11 @@ public class CdcService {
         String key = changeEvent.key();
         String value = changeEvent.value();
 
-        kafkaTemplate.send(topic, key, value);
+        if (key != null) {
+            kafkaTemplate.send(topic, key, value);
+        } else {
+            kafkaTemplate.send(topic, value);
+        }
     }
 
     private Configuration getCdcConfiguration() {

@@ -82,4 +82,20 @@ class CdcServiceTest {
 
         verify(kafkaTemplate, times(1)).send(eq("test-topic"), eq("test-key"), eq("test-value"));
     }
+
+    @Test
+    void testHandleChangeEventWithoutKey() {
+        @SuppressWarnings("unchecked")
+        ChangeEvent<String, String> changeEvent =
+            (ChangeEvent<String, String>) mock(ChangeEvent.class);
+
+        when(changeEvent.destination()).thenReturn("test-topic");
+        when(changeEvent.key()).thenReturn(null);
+        when(changeEvent.value()).thenReturn("test-value");
+
+        cdcService.handleChangeEvent(changeEvent);
+
+        verify(kafkaTemplate, times(1)).send(eq("test-topic"), eq("test-value"));
+        verify(kafkaTemplate, never()).send(eq("test-topic"), anyString(), eq("test-value"));
+    }
 }
