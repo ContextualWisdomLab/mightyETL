@@ -11,8 +11,12 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.io.IOException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -58,6 +62,33 @@ class CdcServiceTest {
 
         assertNotNull(ReflectionTestUtils.getField(service, "engineTask"));
         service.shutdown();
+    }
+
+    @Test
+    void shutdownStopsEngineAndClearsExecutor() throws IOException {
+        cdcService.start();
+
+        cdcService.shutdown();
+
+        assertNull(ReflectionTestUtils.getField(cdcService, "executor"));
+        assertNull(ReflectionTestUtils.getField(cdcService, "engineTask"));
+        verify(debeziumEngine, times(1)).close();
+    }
+
+    @Test
+    void shutdownInterruptsThreadAndForcesShutdownNow() throws InterruptedException {
+        ExecutorService executor = mock(ExecutorService.class);
+        when(executor.awaitTermination(anyLong(), any(TimeUnit.class))).thenThrow(new InterruptedException("test"));
+
+        CdcService service = new CdcService(kafkaTemplate, false);
+        ReflectionTestUtils.setField(service, "executor", executor);
+
+        service.shutdown();
+
+        verify(executor, times(1)).shutdown();
+        verify(executor, times(1)).shutdownNow();
+        assertTrue(Thread.currentThread().isInterrupted());
+        Thread.interrupted();
     }
 
     @Test
