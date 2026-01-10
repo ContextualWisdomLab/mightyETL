@@ -56,11 +56,11 @@
 
 ## Risks And Mitigations
 
-- Zuul replacement is required for Boot 3.x; plan migration early.
-- Validate Debezium and Kafka compatibility before dependency bumps.
-- Jakarta namespace migration may break third-party libraries; audit dependencies early.
-- Performance characteristics may change; establish baseline metrics before migration.
-- Test coverage gaps may exist; enhance integration tests for critical paths.
+- Zuul replacement is required for Boot 3.x; target Q2 2026, owner: Platform team, migrate auth/routing/filter parity, rollback gate keeps 2.7.13 branch.
+- Validate Debezium and Kafka compatibility before dependency bumps; maintain version matrix and run weekly CI compatibility checks with rollback to pinned versions.
+- Jakarta namespace migration may break third-party libraries; audit dependencies, prioritize blockers, and track vendor patches with a migration checklist.
+- Performance characteristics may change; baseline P95 latency/throughput/lag, define thresholds, and run regression tests weekly.
+- Test coverage gaps may exist; target 80% unit coverage and add integration tests for CDC pipeline, auth, and recovery paths.
 
 ## Decision Log
 
