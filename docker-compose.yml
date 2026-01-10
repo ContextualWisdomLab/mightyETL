@@ -123,8 +123,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      postgres-replica:
-        condition: service_healthy
       kafka:
         condition: service_started
       eureka-server:
@@ -138,9 +136,9 @@ services:
       PGUSER: ${POSTGRES_USER:-xtrmetl}
       # NOTE: Defaults are for local development only. Override via .env / secrets for production.
       PGPASSWORD: ${POSTGRES_PASSWORD:-xtrmetl}
-      REPLICA_ENABLED: "true"
-      REPLICA_PGHOST: postgres-replica
-      REPLICA_PGPORT: 5432
+      REPLICA_ENABLED: ${REPLICA_ENABLED:-true}
+      REPLICA_PGHOST: ${REPLICA_PGHOST:-postgres-replica}
+      REPLICA_PGPORT: ${REPLICA_PGPORT:-5432}
       REPLICA_PGDATABASE: ${REPLICA_POSTGRES_DB:-xtrmetl}
       REPLICA_PGUSER: ${REPLICA_POSTGRES_USER:-xtrmetl}
       # NOTE: Defaults are for local development only. Override via .env / secrets for production.

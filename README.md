@@ -92,6 +92,8 @@ export REPLICA_PGPASSWORD=your_password
 export REPLICA_PGDATABASE=your_database
 ```
 
+If you don’t need replication, set `REPLICA_ENABLED=false` and the CDC service will skip replica applies.
+
 ### Build
 
 ```bash
