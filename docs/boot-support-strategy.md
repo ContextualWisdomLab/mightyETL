@@ -36,3 +36,5 @@
 
 - Date: 2026-01-09
 - Owner: Product Engineering Team
+- Alternatives: Keep 2.7.x with commercial support vs upgrade to Boot 3.x (selected)
+- Participants: Product Engineering Team, Architecture stakeholders
