@@ -52,6 +52,7 @@ public class KafkaConfig {
                 return mockSend(topic, key, data);
             }
 
+            @NonNull
             private ListenableFuture<SendResult<String, String>> mockSend(
                     @NonNull String topic,
                     @Nullable String key,
@@ -62,9 +63,8 @@ public class KafkaConfig {
                 RecordMetadata recordMetadata = new RecordMetadata(
                         new TopicPartition(topic, 0),
                         0L,
-                        0L,
+                        0,
                         System.currentTimeMillis(),
-                        0L,
                         key != null ? key.length() : 0,
                         data != null ? data.length() : 0
                 );
