@@ -81,7 +81,7 @@ export PGPASSWORD=your_password
 export PGDATABASE=your_database
 ```
 
-Optional: enable CDC-based replication to a secondary PostgreSQL (DB 이중화):
+Optional: enable CDC-based replication to a secondary PostgreSQL (database redundancy/replication):
 
 ```bash
 export REPLICA_ENABLED=true
