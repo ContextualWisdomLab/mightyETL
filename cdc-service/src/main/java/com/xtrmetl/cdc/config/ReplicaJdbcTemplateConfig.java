@@ -38,9 +38,17 @@ public class ReplicaJdbcTemplateConfig {
         config.setPoolName("cdc-replica-pool");
         // Default -1 disables fail-fast startup checks (allows the service to start even if the replica DB is temporarily unavailable).
         // Set REPLICA_HIKARI_INITIALIZATION_FAIL_TIMEOUT_MS (e.g. 30000) to fail fast during startup instead.
-        long initializationFailTimeout = Long.parseLong(
-                environment.getProperty("REPLICA_HIKARI_INITIALIZATION_FAIL_TIMEOUT_MS", "-1")
-        );
+        String initializationFailTimeoutValue =
+                environment.getProperty("REPLICA_HIKARI_INITIALIZATION_FAIL_TIMEOUT_MS", "-1");
+        long initializationFailTimeout;
+        try {
+            initializationFailTimeout = Long.parseLong(initializationFailTimeoutValue);
+        } catch (NumberFormatException e) {
+            throw new IllegalStateException(
+                    "Invalid value for REPLICA_HIKARI_INITIALIZATION_FAIL_TIMEOUT_MS: " + initializationFailTimeoutValue,
+                    e
+            );
+        }
         config.setInitializationFailTimeout(initializationFailTimeout);
         config.setDriverClassName("org.postgresql.Driver");
         config.setJdbcUrl(String.format("jdbc:postgresql://%s:%s/%s", host, port, database));

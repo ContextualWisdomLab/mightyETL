@@ -78,4 +78,22 @@ class ReplicaJdbcTemplateConfigTest {
                 .withPropertyValues("xtrmetl.replica.enabled=true")
                 .run(context -> assertNotNull(context.getStartupFailure()));
     }
+
+    @Test
+    void failsWithHelpfulMessageWhenInitializationFailTimeoutIsNotANumber() {
+        contextRunner
+                .withPropertyValues(
+                        "xtrmetl.replica.enabled=true",
+                        "REPLICA_PGHOST=replica-host",
+                        "REPLICA_PGDATABASE=xtrmetl",
+                        "REPLICA_PGUSER=xtrmetl_user",
+                        "REPLICA_PGPASSWORD=xtrmetl_password",
+                        "REPLICA_HIKARI_INITIALIZATION_FAIL_TIMEOUT_MS=not-a-number"
+                )
+                .run(context -> {
+                    Throwable failure = context.getStartupFailure();
+                    assertNotNull(failure);
+                    assertTrue(failure.getMessage().contains("REPLICA_HIKARI_INITIALIZATION_FAIL_TIMEOUT_MS"));
+                });
+    }
 }
