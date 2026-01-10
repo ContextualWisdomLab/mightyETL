@@ -35,17 +35,17 @@ class EtlServiceTest {
         String testData = "[{\"id\":\"1\",\"name\":\"John Doe\",\"email\":\"john@example.com\",\"amount\":\"100.50\"}]";
         String expectedSql = "INSERT INTO processed_data (data) VALUES (?)";
         String expectedTransformedData = "ID:1,NAME:JOHN DOE,EMAIL:john@example.com,AMOUNT:100.50,";
-        JsonNode jsonNode = new ObjectMapper().readTree(testData);
+	        JsonNode jsonNode = new ObjectMapper().readTree(testData);
 
-        when(objectMapper.readTree(testData)).thenReturn(jsonNode);
-        when(jdbcTemplate.update(eq(expectedSql), eq(expectedTransformedData))).thenReturn(1);
+	        when(objectMapper.readTree(testData)).thenReturn(jsonNode);
+	        when(jdbcTemplate.update(expectedSql, expectedTransformedData)).thenReturn(1);
 
         String result = etlService.processData(testData);
 
-        assertNotNull(result);
-        assertTrue(result.contains("Processed: 1"));
-        verify(jdbcTemplate, times(1)).update(eq(expectedSql), eq(expectedTransformedData));
-    }
+	        assertNotNull(result);
+	        assertTrue(result.contains("Processed: 1"));
+	        verify(jdbcTemplate, times(1)).update(expectedSql, expectedTransformedData);
+	    }
 
     @Test
     void testProcessDataWithEmptyInput() throws JsonProcessingException {
