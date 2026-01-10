@@ -46,6 +46,9 @@
 - Maintain a Boot 2.7.x support branch (currently 2.7.14) for rollback during migration phases.
 - Require verification gates at each step before proceeding.
 - Use staged rollout with canary deployment for production environments.
+- Rollback triggers (canary window): sustained elevated error rate, P99 latency regression vs baseline, or Kafka lag/consumer errors above agreed thresholds.
+- Rollback runbook: stop rollout → route traffic back to the stable release → redeploy last-known-good from the Boot 2.7.x support branch (tagged) → validate health checks + key SLOs + data compatibility.
+- Data compatibility rules: prefer additive DB migrations + feature flags during canary; avoid irreversible schema changes until Step 4 exit gates are met.
 
 ### Compatibility Targets
 
