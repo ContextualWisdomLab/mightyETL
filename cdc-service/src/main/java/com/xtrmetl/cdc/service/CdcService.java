@@ -77,9 +77,15 @@ public class CdcService {
      */
     protected void handleChangeEvent(RecordChangeEvent<SourceRecord> sourceRecordRecordChangeEvent) {
         SourceRecord sourceRecord = sourceRecordRecordChangeEvent.record();
-        String topic = Objects.requireNonNull(sourceRecord.topic(), "CDC source record topic");
-        String key = Objects.requireNonNull(sourceRecord.key(), "CDC source record key").toString();
-        String value = Objects.requireNonNull(sourceRecord.value(), "CDC source record value").toString();
+        String topic = sourceRecord.topic();
+        if (topic == null) {
+            return;
+        }
+
+        Object keyObject = sourceRecord.key();
+        String key = keyObject != null ? keyObject.toString() : null;
+        Object valueObject = sourceRecord.value();
+        String value = valueObject != null ? valueObject.toString() : null;
 
         kafkaTemplate.send(topic, key, value);
     }
