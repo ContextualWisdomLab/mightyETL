@@ -129,8 +129,9 @@ public class CdcService {
     }
 
     private Configuration getCdcConfiguration() {
-        String offsetFile = getEnv("CDC_OFFSET_FILE", "data/offsets.dat");
-        String schemaHistoryFile = getEnv("CDC_SCHEMA_HISTORY_FILE", "data/schemahistory.dat");
+        Path defaultCdcDataDir = defaultCdcDataDir();
+        String offsetFile = getEnv("CDC_OFFSET_FILE", defaultCdcDataDir.resolve("offsets.dat").toString());
+        String schemaHistoryFile = getEnv("CDC_SCHEMA_HISTORY_FILE", defaultCdcDataDir.resolve("schemahistory.dat").toString());
         ensureParentDirExists(offsetFile);
         ensureParentDirExists(schemaHistoryFile);
 
@@ -155,6 +156,12 @@ public class CdcService {
                 .with("schema.history.internal", "io.debezium.storage.file.history.FileSchemaHistory")
                 .with("schema.history.internal.file.filename", schemaHistoryFile)
                 .build();
+    }
+
+    private static Path defaultCdcDataDir() {
+        String userHome = System.getProperty("user.home");
+        Path baseDir = userHome == null || userHome.isBlank() ? Path.of(".") : Path.of(userHome);
+        return baseDir.resolve(".xtrmetl").resolve("cdc");
     }
 
     private static String getEnv(String key, String defaultValue) {
