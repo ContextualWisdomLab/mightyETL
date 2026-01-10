@@ -205,6 +205,7 @@ public class CdcService {
                 .with("database.password", EnvUtils.requireEnv("PGPASSWORD"))
                 .with("database.dbname", EnvUtils.requireEnv("PGDATABASE"))
                 .with("topic.prefix", EnvUtils.getEnv("CDC_TOPIC_PREFIX", "xtrmetl-cdc"))
+                .with("include.schema.changes", EnvUtils.getEnv("CDC_INCLUDE_SCHEMA_CHANGES", "true"))
                 .with("schema.include.list", EnvUtils.getEnv("CDC_SCHEMA_INCLUDE_LIST", "public"))
                 .with("table.include.list", EnvUtils.getEnv("CDC_TABLE_INCLUDE_LIST", "public.processed_data"))
                 .with("plugin.name", EnvUtils.getEnv("CDC_PLUGIN_NAME", "pgoutput"))

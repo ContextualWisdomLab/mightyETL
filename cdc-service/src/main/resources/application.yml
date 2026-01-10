@@ -30,6 +30,7 @@ xtrmetl:
     enabled: ${REPLICA_ENABLED:false}
     group-id: ${REPLICA_GROUP_ID:xtrmetl-cdc-replica}
     topic-pattern: ${REPLICA_TOPIC_PATTERN:xtrmetl-cdc\..*}
+    ddl-enabled: ${REPLICA_DDL_ENABLED:true}
 
 management:
   tracing:

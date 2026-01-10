@@ -9,10 +9,17 @@ import org.springframework.stereotype.Component;
 @ConditionalOnProperty(prefix = "xtrmetl.replica", name = "enabled", havingValue = "true")
 public class CdcReplicaConsumer {
 
-    private final ProcessedDataReplicaApplier processedDataReplicaApplier;
+    private static final String SCHEMA_CHANGES_SUFFIX = ".schema-changes";
 
-    public CdcReplicaConsumer(ProcessedDataReplicaApplier processedDataReplicaApplier) {
+    private final ProcessedDataReplicaApplier processedDataReplicaApplier;
+    private final SchemaChangeReplicaApplier schemaChangeReplicaApplier;
+
+    public CdcReplicaConsumer(
+            ProcessedDataReplicaApplier processedDataReplicaApplier,
+            SchemaChangeReplicaApplier schemaChangeReplicaApplier
+    ) {
         this.processedDataReplicaApplier = processedDataReplicaApplier;
+        this.schemaChangeReplicaApplier = schemaChangeReplicaApplier;
     }
 
     @KafkaListener(
@@ -20,7 +27,12 @@ public class CdcReplicaConsumer {
             groupId = "${xtrmetl.replica.group-id}"
     )
     public void onMessage(ConsumerRecord<String, String> record) {
-        processedDataReplicaApplier.apply(record.topic(), record.key(), record.value());
+        String topic = record.topic();
+        if (topic != null && topic.endsWith(SCHEMA_CHANGES_SUFFIX)) {
+            schemaChangeReplicaApplier.apply(topic, record.key(), record.value());
+            return;
+        }
+
+        processedDataReplicaApplier.apply(topic, record.key(), record.value());
     }
 }
-
