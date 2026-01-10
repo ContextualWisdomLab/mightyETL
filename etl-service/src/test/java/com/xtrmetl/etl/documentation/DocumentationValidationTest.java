@@ -57,7 +57,7 @@ class DocumentationValidationTest {
     }
 
     private static String readUtf8File(Path path) throws IOException {
-        return new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
+        return Files.readString(path, StandardCharsets.UTF_8);
     }
 
     @Nested
