@@ -16,6 +16,7 @@ import java.io.IOException;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
+@SuppressWarnings("null")
 class JwtAuthenticationFilterTest {
 
     @InjectMocks
