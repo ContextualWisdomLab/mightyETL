@@ -13,6 +13,7 @@ import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @ExtendWith(MockitoExtension.class)
 class ProcessedDataReplicaApplierTest {
@@ -42,6 +43,16 @@ class ProcessedDataReplicaApplierTest {
     @Test
     void ignoresMissingPayload() {
         applier.apply("xtrmetl-cdc.public.processed_data", "{\"payload\":{\"id\":1}}", "{\"not_payload\":{\"op\":\"c\"}}");
+        verifyNoInteractions(jdbcTemplate);
+    }
+
+    @Test
+    void throwsWhenDataIsNull() {
+        String topic = "xtrmetl-cdc.public.processed_data";
+        String keyJson = "{\"payload\":{\"id\":1}}";
+        String valueJson = "{\"payload\":{\"op\":\"u\",\"after\":{\"id\":1,\"data\":null}}}";
+
+        assertThrows(IllegalStateException.class, () -> applier.apply(topic, keyJson, valueJson));
         verifyNoInteractions(jdbcTemplate);
     }
 

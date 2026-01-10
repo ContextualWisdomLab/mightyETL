@@ -62,8 +62,8 @@ public class ProcessedDataReplicaApplier {
 
         String data = extractTextOrJson(envelope.after(), "data");
         if (data == null) {
-            log.debug("Skipping replica apply: missing data (topic={}, id={})", topic, id);
-            return;
+            log.error("Replica apply failed: missing processed_data.data (topic={}, id={})", topic, id);
+            throw new IllegalStateException("Missing processed_data.data in CDC event for id=" + id);
         }
 
         jdbcTemplate.update(UPSERT_SQL, id, data);
