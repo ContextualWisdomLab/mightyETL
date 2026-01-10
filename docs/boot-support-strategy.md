@@ -19,6 +19,12 @@
   - Zuul replacement (Spring Cloud Gateway) with route definitions replacing Zuul filters
   - Spring Kafka async API: replace ListenableFuture usage with CompletableFuture
   - Test updates for API and package changes
+- Module impact:
+  - cdc-service: KafkaTemplate async API migration, Debezium JSON event handling, Jakarta package updates.
+  - etl-service: SecurityConfig DSL alignment, Jakarta namespace updates, security tests adjustment.
+  - config-server: Spring Cloud 2023.x alignment, Java 17 baseline, Jakarta migration in configuration.
+  - eureka-server: Spring Cloud BOM upgrade, Java 17 baseline, jakarta.* dependency updates.
+  - zuul-gateway: replace Zuul filters with Spring Cloud Gateway routes/filters, update gateway security and tests.
 
 ## Plan
 
