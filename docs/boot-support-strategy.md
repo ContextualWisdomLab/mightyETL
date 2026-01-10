@@ -17,6 +17,7 @@
   - Java 17 baseline and Jakarta namespace migration
   - Spring Cloud BOM upgrade (2023.x series)
   - Zuul replacement (Spring Cloud Gateway)
+  - Spring Kafka async API: replace ListenableFuture usage with CompletableFuture
   - Test updates for API and package changes
 
 ## Plan
