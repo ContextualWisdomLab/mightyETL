@@ -4,24 +4,44 @@ import io.debezium.config.Configuration;
 import io.debezium.engine.ChangeEvent;
 import io.debezium.engine.DebeziumEngine;
 import io.debezium.engine.format.Json;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import java.io.IOException;
-import java.util.concurrent.Executor;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 @Service
 public class CdcService {
 
-    private final Executor executor = Executors.newSingleThreadExecutor();
-    private DebeziumEngine<ChangeEvent<String, String>> debeziumEngine;
+    private static final Logger log = LoggerFactory.getLogger(CdcService.class);
 
-    @Autowired
-    private KafkaTemplate<String, String> kafkaTemplate;
+    private final ExecutorService executor = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "cdc-debezium-engine");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private final KafkaTemplate<String, String> kafkaTemplate;
+    private final boolean autoStart;
+
+    private DebeziumEngine<ChangeEvent<String, String>> debeziumEngine;
+    private Future<?> engineTask;
+
+    public CdcService(
+            KafkaTemplate<String, String> kafkaTemplate,
+            @Value("${xtrmetl.cdc.autostart:true}") boolean autoStart
+    ) {
+        this.kafkaTemplate = kafkaTemplate;
+        this.autoStart = autoStart;
+    }
 
     /**
      * Debezium CDC 엔진을 초기화하고 전용 단일 스레드 실행기에서 실행을 시작한다.
@@ -30,14 +50,20 @@ public class CdcService {
      *
      */
     @PostConstruct
-    public void start() {
+    public void maybeAutoStart() {
+        if (autoStart) {
+            start();
+        }
+    }
+
+    public synchronized void start() {
+        if (engineTask != null && !engineTask.isDone()) {
+            return;
+        }
         if (this.debeziumEngine == null) {
             initializeDebeziumEngine();
         }
-        if (this.debeziumEngine == null) {
-            throw new IllegalStateException("Debezium engine not initialized");
-        }
-        this.executor.execute(debeziumEngine);
+        this.engineTask = this.executor.submit(debeziumEngine);
     }
 
     /**
@@ -48,8 +74,7 @@ public class CdcService {
      *
      * @throws IOException 엔진의 `close()` 호출 중 발생한 입출력 예외를 래핑하여 던짐
      */
-    @PreDestroy
-    public void stop() throws IOException {
+    public synchronized void stop() throws IOException {
         if (this.debeziumEngine != null) {
             try {
                 this.debeziumEngine.close();
@@ -57,7 +82,19 @@ public class CdcService {
                 throw new IOException("Error stopping CDC: " + e.getMessage(), e);
             } finally {
                 this.debeziumEngine = null;
+                this.engineTask = null;
             }
+        }
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        try {
+            stop();
+        } catch (IOException e) {
+            log.warn("Error while stopping CDC engine during shutdown", e);
+        } finally {
+            executor.shutdownNow();
         }
     }
 
@@ -92,19 +129,59 @@ public class CdcService {
     }
 
     private Configuration getCdcConfiguration() {
+        String offsetFile = getEnv("CDC_OFFSET_FILE", "data/offsets.dat");
+        String schemaHistoryFile = getEnv("CDC_SCHEMA_HISTORY_FILE", "data/schemahistory.dat");
+        ensureParentDirExists(offsetFile);
+        ensureParentDirExists(schemaHistoryFile);
+
         return Configuration.create()
-                .with("name", "xtrmetl-postgres-connector")
+                .with("name", getEnv("CDC_CONNECTOR_NAME", "xtrmetl-postgres-connector"))
                 .with("connector.class", "io.debezium.connector.postgresql.PostgresConnector")
-                .with("database.hostname", System.getenv("PGHOST"))
-                .with("database.port", System.getenv("PGPORT"))
-                .with("database.user", System.getenv("PGUSER"))
-                .with("database.password", System.getenv("PGPASSWORD"))
-                .with("database.dbname", System.getenv("PGDATABASE"))
-                .with("database.server.name", "xtrmetl-server")
-                .with("topic.prefix", "xtrmetl-cdc")
-                .with("schema.include.list", "public")
-                .with("table.include.list", "public.your_table_name") // Replace with your actual table name
-                .with("plugin.name", "pgoutput")
+                .with("database.hostname", requireEnv("PGHOST"))
+                .with("database.port", requireEnv("PGPORT"))
+                .with("database.user", requireEnv("PGUSER"))
+                .with("database.password", requireEnv("PGPASSWORD"))
+                .with("database.dbname", requireEnv("PGDATABASE"))
+                .with("topic.prefix", getEnv("CDC_TOPIC_PREFIX", "xtrmetl-cdc"))
+                .with("schema.include.list", getEnv("CDC_SCHEMA_INCLUDE_LIST", "public"))
+                .with("table.include.list", getEnv("CDC_TABLE_INCLUDE_LIST", "public.processed_data"))
+                .with("plugin.name", getEnv("CDC_PLUGIN_NAME", "pgoutput"))
+                .with("slot.name", getEnv("CDC_SLOT_NAME", "xtrmetl_slot"))
+                .with("publication.autocreate.mode", getEnv("CDC_PUBLICATION_AUTOCREATE_MODE", "filtered"))
+                .with("publication.name", getEnv("CDC_PUBLICATION_NAME", "xtrmetl_publication"))
+                .with("offset.storage", "org.apache.kafka.connect.storage.FileOffsetBackingStore")
+                .with("offset.storage.file.filename", offsetFile)
+                .with("offset.flush.interval.ms", getEnv("CDC_OFFSET_FLUSH_INTERVAL_MS", "1000"))
+                .with("schema.history.internal", "io.debezium.storage.file.history.FileSchemaHistory")
+                .with("schema.history.internal.file.filename", schemaHistoryFile)
                 .build();
+    }
+
+    private static String getEnv(String key, String defaultValue) {
+        String value = System.getenv(key);
+        if (value == null || value.isBlank()) {
+            return defaultValue;
+        }
+        return value;
+    }
+
+    private static String requireEnv(String key) {
+        String value = System.getenv(key);
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException("Missing required environment variable: " + key);
+        }
+        return value;
+    }
+
+    private static void ensureParentDirExists(String filePath) {
+        Path parent = Path.of(filePath).toAbsolutePath().getParent();
+        if (parent == null) {
+            return;
+        }
+        try {
+            Files.createDirectories(parent);
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to create directory for " + filePath + ": " + parent, e);
+        }
     }
 }

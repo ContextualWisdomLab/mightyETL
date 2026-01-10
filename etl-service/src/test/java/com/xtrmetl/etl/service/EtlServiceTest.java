@@ -182,7 +182,7 @@ class EtlServiceTest {
 
             etlService.processData(testData);
 
-            verify(jdbcTemplate).update(anyString(), argThat(data -> 
+            verify(jdbcTemplate).update(anyString(), argThat((String data) ->
                 data.contains("ID:") && data.contains("NAME:") && 
                 data.contains("EMAIL:") && data.contains("AMOUNT:")
             ));

@@ -49,7 +49,7 @@ xtrmETL provides enterprise-grade capabilities for:
 
 ### Docker Compose
 
-Spin up PostgreSQL, Kafka, Zipkin, Eureka, and the application services:
+Spin up PostgreSQL (primary + replica), Kafka, Zipkin, Eureka, and the application services:
 
 ```bash
 docker compose up --build
@@ -76,6 +76,17 @@ export PGPORT=5432
 export PGUSER=your_username
 export PGPASSWORD=your_password
 export PGDATABASE=your_database
+```
+
+Optional: enable CDC-based replication to a secondary PostgreSQL (DB 이중화):
+
+```bash
+export REPLICA_ENABLED=true
+export REPLICA_PGHOST=localhost
+export REPLICA_PGPORT=5433
+export REPLICA_PGUSER=your_username
+export REPLICA_PGPASSWORD=your_password
+export REPLICA_PGDATABASE=your_database
 ```
 
 ### Build

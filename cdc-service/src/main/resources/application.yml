@@ -5,19 +5,31 @@ spring:
   application:
     name: cdc-service
   datasource:
-    url: jdbc:postgresql://${PGHOST}:${PGPORT}/${PGDATABASE}
-    username: ${PGUSER}
-    password: ${PGPASSWORD}
+    url: jdbc:postgresql://${REPLICA_PGHOST:${PGHOST}}:${REPLICA_PGPORT:${PGPORT}}/${REPLICA_PGDATABASE:${PGDATABASE}}
+    username: ${REPLICA_PGUSER:${PGUSER}}
+    password: ${REPLICA_PGPASSWORD:${PGPASSWORD}}
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      auto-offset-reset: earliest
   zipkin:
     base-url: http://${ZIPKIN_HOST:localhost}:9412
   sleuth:
     sampler:
       probability: 1.0
+
+xtrmetl:
+  cdc:
+    autostart: ${CDC_AUTOSTART:true}
+  replica:
+    enabled: ${REPLICA_ENABLED:false}
+    group-id: ${REPLICA_GROUP_ID:xtrmetl-cdc-replica}
+    topic-pattern: ${REPLICA_TOPIC_PATTERN:xtrmetl-cdc\..*}
 
 management:
   tracing:

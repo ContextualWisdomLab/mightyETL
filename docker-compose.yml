@@ -17,6 +17,19 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+
+  postgres-replica:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: xtrmetl
+      POSTGRES_USER: xtrmetl
+      POSTGRES_PASSWORD: xtrmetl
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_replica_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
 
   zookeeper:
     image: confluentinc/cp-zookeeper:7.6.0
@@ -84,6 +97,7 @@ services:
         SERVICE: cdc-service
     depends_on:
       - postgres
+      - postgres-replica
       - kafka
       - eureka-server
       - zipkin
@@ -93,6 +107,12 @@ services:
       PGDATABASE: xtrmetl
       PGUSER: xtrmetl
       PGPASSWORD: xtrmetl
+      REPLICA_ENABLED: "true"
+      REPLICA_PGHOST: postgres-replica
+      REPLICA_PGPORT: 5432
+      REPLICA_PGDATABASE: xtrmetl
+      REPLICA_PGUSER: xtrmetl
+      REPLICA_PGPASSWORD: xtrmetl
       EUREKA_HOST: eureka-server
       ZIPKIN_HOST: zipkin
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
@@ -118,3 +138,4 @@ services:
 
 volumes:
   postgres_data:
+  postgres_replica_data:

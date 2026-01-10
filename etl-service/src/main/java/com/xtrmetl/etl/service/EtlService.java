@@ -26,6 +26,9 @@ public class EtlService {
     public String processData(String data) {
         try {
             JsonNode jsonNode = objectMapper.readTree(data);
+            if (jsonNode == null || jsonNode.isNull() || !jsonNode.isArray()) {
+                throw new IllegalArgumentException("Input must be a JSON array");
+            }
             List<CompletableFuture<String>> futures = new ArrayList<>();
 
             // Parallel processing of each record

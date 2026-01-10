@@ -4,9 +4,9 @@ import io.debezium.engine.ChangeEvent;
 import io.debezium.engine.DebeziumEngine;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -17,6 +17,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @SuppressWarnings("null")
+@ExtendWith(MockitoExtension.class)
 class CdcServiceTest {
 
     @Mock
@@ -25,12 +26,11 @@ class CdcServiceTest {
     @Mock
     private DebeziumEngine<ChangeEvent<String, String>> debeziumEngine;
 
-    @InjectMocks
     private CdcService cdcService;
 
     @BeforeEach
     void setUp() {
-        MockitoAnnotations.openMocks(this);
+        cdcService = new CdcService(kafkaTemplate, false);
         ReflectionTestUtils.setField(cdcService, "debeziumEngine", debeziumEngine);
     }
 
