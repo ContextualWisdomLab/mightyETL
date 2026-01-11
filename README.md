@@ -333,6 +333,14 @@ CREATE TABLE processed_data (
 mvn test
 ```
 
+### Billing-Independent Checks (Local)
+
+If GitHub-hosted Actions runners are unavailable (billing/spending limit), run the local check script:
+
+```bash
+./scripts/ci.sh
+```
+
 ### Run Service-Specific Tests
 
 ```bash
