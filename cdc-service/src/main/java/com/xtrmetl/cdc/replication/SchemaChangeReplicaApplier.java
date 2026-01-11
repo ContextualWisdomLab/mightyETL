@@ -163,6 +163,11 @@ public class SchemaChangeReplicaApplier {
         );
 
         rewritten = rewritten.replaceFirst(
+                "(?i)^CREATE\\s+SCHEMA\\s+(?!IF\\s+NOT\\s+EXISTS\\b)",
+                "CREATE SCHEMA IF NOT EXISTS "
+        );
+
+        rewritten = rewritten.replaceFirst(
                 "(?i)^CREATE\\s+UNIQUE\\s+INDEX\\s+CONCURRENTLY\\s+(?!IF\\s+NOT\\s+EXISTS\\b)",
                 "CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS "
         );
@@ -179,11 +184,24 @@ public class SchemaChangeReplicaApplier {
                 "CREATE INDEX IF NOT EXISTS "
         );
 
+        rewritten = rewritten.replaceFirst(
+                "(?i)^DROP\\s+INDEX\\s+CONCURRENTLY\\s+(?!IF\\s+EXISTS\\b)",
+                "DROP INDEX CONCURRENTLY IF EXISTS "
+        );
+        rewritten = rewritten.replaceFirst(
+                "(?i)^DROP\\s+INDEX\\s+(?!CONCURRENTLY\\b)(?!IF\\s+EXISTS\\b)",
+                "DROP INDEX IF EXISTS "
+        );
+
         String upper = rewritten.toUpperCase(Locale.ROOT);
         if (upper.startsWith("ALTER TABLE")) {
             rewritten = rewritten.replaceAll(
                     "(?i)\\bADD\\s+COLUMN\\s+(?!IF\\s+NOT\\s+EXISTS(?![A-Za-z0-9_]))",
                     "ADD COLUMN IF NOT EXISTS "
+            );
+            rewritten = rewritten.replaceAll(
+                    "(?i)\\bDROP\\s+COLUMN\\s+(?!IF\\s+EXISTS(?![A-Za-z0-9_]))",
+                    "DROP COLUMN IF EXISTS "
             );
         }
 

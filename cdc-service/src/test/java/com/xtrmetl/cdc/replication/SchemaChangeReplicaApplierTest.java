@@ -107,6 +107,26 @@ class SchemaChangeReplicaApplierTest {
     }
 
     @Test
+    void rewritesCreateSchemaToIfNotExists() {
+        SchemaChangeReplicaApplier applier = applier(true);
+
+        String ddl = "CREATE SCHEMA reporting";
+        applier.apply("xtrmetl-cdc.schema-changes", null, "{\"payload\":{\"ddl\":\"" + ddl + "\"}}");
+
+        verify(jdbcTemplate).execute(eq("CREATE SCHEMA IF NOT EXISTS reporting"));
+    }
+
+    @Test
+    void rewritesDropIndexToIfExists() {
+        SchemaChangeReplicaApplier applier = applier(true);
+
+        String ddl = "DROP INDEX idx_processed_data_id";
+        applier.apply("xtrmetl-cdc.schema-changes", null, "{\"payload\":{\"ddl\":\"" + ddl + "\"}}");
+
+        verify(jdbcTemplate).execute(eq("DROP INDEX IF EXISTS idx_processed_data_id"));
+    }
+
+    @Test
     void executesDdlFromRootWhenPayloadIsMissing() {
         SchemaChangeReplicaApplier applier = applier(true);
 
@@ -136,6 +156,16 @@ class SchemaChangeReplicaApplierTest {
         applier.apply("xtrmetl-cdc.schema-changes", null, "{\"payload\":{\"ddl\":\"" + ddl + "\"}}");
 
         verify(jdbcTemplate).execute(eq("ALTER TABLE processed_data ADD COLUMN IF NOT EXISTS new_col INT"));
+    }
+
+    @Test
+    void rewritesDropColumnToIfExists() {
+        SchemaChangeReplicaApplier applier = applier(true);
+
+        String ddl = "ALTER TABLE processed_data DROP COLUMN old_col";
+        applier.apply("xtrmetl-cdc.schema-changes", null, "{\"payload\":{\"ddl\":\"" + ddl + "\"}}");
+
+        verify(jdbcTemplate).execute(eq("ALTER TABLE processed_data DROP COLUMN IF EXISTS old_col"));
     }
 
     @Test
