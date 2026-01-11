@@ -238,7 +238,14 @@ public class SchemaChangeReplicaApplier {
         if (ddlValidationMode == DdlValidationMode.BLACKLIST) {
             boolean blocked = ddlBlockedPrefixes.stream().anyMatch(normalized::startsWith);
             if (blocked) {
-                log.warn("Blocked DDL by validation policy (topic={}): {}", topic, normalized);
+                if (log.isWarnEnabled()) {
+                    log.warn(
+                            "Blocked DDL by validation policy (mode={}, topic={}, ddl={})",
+                            ddlValidationMode,
+                            topic,
+                            truncateForLog(ddl)
+                    );
+                }
                 throw new IllegalArgumentException("DDL blocked by validation policy");
             }
             return;
@@ -247,7 +254,14 @@ public class SchemaChangeReplicaApplier {
         if (ddlValidationMode == DdlValidationMode.WHITELIST) {
             boolean allowed = ddlAllowedPrefixes.stream().anyMatch(normalized::startsWith);
             if (!allowed) {
-                log.warn("Blocked DDL by validation policy (topic={}): {}", topic, normalized);
+                if (log.isWarnEnabled()) {
+                    log.warn(
+                            "Blocked DDL by validation policy (mode={}, topic={}, ddl={})",
+                            ddlValidationMode,
+                            topic,
+                            truncateForLog(ddl)
+                    );
+                }
                 throw new IllegalArgumentException("DDL blocked by validation policy");
             }
             return;
