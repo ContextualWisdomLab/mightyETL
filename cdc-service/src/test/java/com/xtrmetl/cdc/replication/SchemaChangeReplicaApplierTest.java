@@ -105,6 +105,16 @@ class SchemaChangeReplicaApplierTest {
     }
 
     @Test
+    void rewritesCreateUniqueIndexToIfNotExists() {
+        SchemaChangeReplicaApplier applier = applier(true);
+
+        String ddl = "CREATE UNIQUE INDEX idx_processed_data_id ON processed_data (id)";
+        applier.apply("xtrmetl-cdc.schema-changes", null, "{\"payload\":{\"ddl\":\"" + ddl + "\"}}");
+
+        verify(jdbcTemplate).execute(eq("CREATE UNIQUE INDEX IF NOT EXISTS idx_processed_data_id ON processed_data (id)"));
+    }
+
+    @Test
     void rewritesCreateIndexConcurrentlyToIfNotExists() {
         SchemaChangeReplicaApplier applier = applier(true);
 
