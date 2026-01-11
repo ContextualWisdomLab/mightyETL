@@ -611,6 +611,27 @@ Processed: 2
 - **Dead Letter Queue**: Failed message handling
 - **Metrics Dashboard**: Real-time monitoring UI
 
+#### 10.1.1 Web UI / Admin Console (Management Screen)
+
+**Goal**: Provide a secure, self-service console to configure pipelines and monitor operations without requiring direct database/Kafka access.
+
+**Primary users**:
+
+- **Data Engineers**: Manage CDC/ETL pipelines and view processing status
+- **System Administrators**: Monitor platform health, manage users/roles, and review operational events
+
+**MVP (v2.0)**:
+
+- Authentication + RBAC (ADMIN-only for management actions)
+- Pipeline control: start/stop CDC, toggle replica apply, view current configuration
+- Observability dashboard: service health, CDC lag, error rates, links to logs/traces
+- Operational audit: record who changed what and when for state-changing actions
+
+**Non-goals (initially)**:
+
+- Visual drag-and-drop pipeline builder
+- Multi-tenant organization management
+
 ### 10.2 Technical Debt
 
 - **Common Module**: Referenced in documentation but not implemented
