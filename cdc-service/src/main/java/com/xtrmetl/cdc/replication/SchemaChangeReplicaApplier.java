@@ -226,10 +226,13 @@ public class SchemaChangeReplicaApplier {
             return;
         }
 
-        boolean allowed = ddlAllowedPrefixes.stream().anyMatch(normalized::startsWith);
-        if (!allowed) {
-            log.warn("Blocked DDL by validation policy (topic={}): {}", topic, normalized);
-            throw new IllegalArgumentException("DDL blocked by validation policy");
+        if (ddlValidationMode == DdlValidationMode.WHITELIST) {
+            boolean allowed = ddlAllowedPrefixes.stream().anyMatch(normalized::startsWith);
+            if (!allowed) {
+                log.warn("Blocked DDL by validation policy (topic={}): {}", topic, normalized);
+                throw new IllegalArgumentException("DDL blocked by validation policy");
+            }
+            return;
         }
     }
 
