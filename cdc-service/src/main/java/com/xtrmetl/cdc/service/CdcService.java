@@ -8,12 +8,13 @@ import io.debezium.engine.DebeziumEngine;
 import io.debezium.engine.format.Json;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
-import javax.annotation.PostConstruct;
-import javax.annotation.PreDestroy;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -23,7 +24,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 @Service
-public class CdcService {
+public class CdcService implements DisposableBean {
 
     private static final Logger log = LoggerFactory.getLogger(CdcService.class);
 
@@ -49,11 +50,15 @@ public class CdcService {
      *
      * 초기화된 엔진이 없으면 새 Debezium 엔진을 생성한 후 단일 스레드 실행기에 제출하여 비동기로 실행을 시작한다.
      */
-    @PostConstruct
     public void maybeAutoStart() {
         if (autoStart) {
             start();
         }
+    }
+
+    @EventListener(ApplicationReadyEvent.class)
+    public void onApplicationReady() {
+        maybeAutoStart();
     }
 
     /**
@@ -131,7 +136,6 @@ public class CdcService {
      * 실행기 종료는 최대 5초까지 대기하며, 제한 시간 내 종료되지 않으면 {@code shutdownNow()}로 강제 종료한다.
      * 대기 중 인터럽트가 발생하면 인터럽트 플래그를 복원한 뒤 강제 종료를 시도한다.</p>
      */
-    @PreDestroy
     public synchronized void shutdown() {
         try {
             stop();
@@ -160,6 +164,11 @@ public class CdcService {
                 .using(getCdcConfiguration().asProperties())
                 .notifying(this::handleChangeEvent)
                 .build();
+    }
+
+    @Override
+    public void destroy() {
+        shutdown();
     }
 
     /**

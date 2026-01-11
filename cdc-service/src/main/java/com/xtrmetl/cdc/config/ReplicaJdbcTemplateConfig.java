@@ -3,22 +3,21 @@ package com.xtrmetl.cdc.config;
 import com.xtrmetl.cdc.util.ValidationUtils;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 import org.springframework.jdbc.core.JdbcTemplate;
 
-import javax.annotation.PreDestroy;
+import javax.sql.DataSource;
 
 @Configuration
 @ConditionalOnProperty(prefix = "xtrmetl.replica", name = "enabled", havingValue = "true")
 public class ReplicaJdbcTemplateConfig {
 
-    private HikariDataSource replicaDataSource;
-
-    @Bean(name = "replicaJdbcTemplate")
-    public JdbcTemplate replicaJdbcTemplate(Environment environment) {
+    @Bean(name = "replicaDataSource", destroyMethod = "close")
+    public HikariDataSource replicaDataSource(Environment environment) {
         String host = ValidationUtils.requireValidHost(
                 environment.getRequiredProperty("REPLICA_PGHOST"),
                 "REPLICA_PGHOST"
@@ -55,15 +54,11 @@ public class ReplicaJdbcTemplateConfig {
         config.setUsername(username);
         config.setPassword(password);
 
-        this.replicaDataSource = new HikariDataSource(config);
-
-        return new JdbcTemplate(replicaDataSource);
+        return new HikariDataSource(config);
     }
 
-    @PreDestroy
-    public void shutdownReplicaDataSource() {
-        if (replicaDataSource != null) {
-            replicaDataSource.close();
-        }
+    @Bean(name = "replicaJdbcTemplate")
+    public JdbcTemplate replicaJdbcTemplate(@Qualifier("replicaDataSource") DataSource dataSource) {
+        return new JdbcTemplate(dataSource);
     }
 }
