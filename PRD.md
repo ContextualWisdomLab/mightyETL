@@ -105,11 +105,11 @@ The platform consists of five independent microservices:
 #### 3.2.2 Technology Stack
 
 - **Runtime**: Java 25
-- **Framework**: Spring Boot 2.7.18, Spring Cloud 2021.0.9
+- **Framework**: Spring Boot 3.2.12, Spring Cloud 2023.0.5
 - **Database**: PostgreSQL
 - **Messaging**: Apache Kafka
 - **Service Discovery**: Netflix Eureka
-- **API Gateway**: Netflix Zuul
+- **API Gateway**: Spring Cloud Gateway
 - **CDC Engine**: Debezium 3.4.0.Final (embedded engine)
 - **Monitoring**: Zipkin (distributed tracing), Micrometer
 - **Build Tool**: Maven

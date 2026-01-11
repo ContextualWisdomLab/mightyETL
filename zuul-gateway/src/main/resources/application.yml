@@ -4,11 +4,6 @@ server:
 spring:
   application:
     name: zuul-gateway
-  zipkin:
-    base-url: http://${ZIPKIN_HOST:localhost}:9412
-  sleuth:
-    sampler:
-      probability: 1.0
   cloud:
     gateway:
       routes:
@@ -26,6 +21,12 @@ spring:
             - StripPrefix=1
 
 management:
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: http://${ZIPKIN_HOST:localhost}:9412/api/v2/spans
   endpoints:
     web:
       exposure:
