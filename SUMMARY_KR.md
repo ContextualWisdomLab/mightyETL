@@ -71,8 +71,8 @@ PostgreSQL     Kafka
 | 구성요소 | 기술 | 버전 |
 | --------- | ----- | ------ |
 | 런타임 | Java | 25 |
-| 프레임워크 | Spring Boot | 3.2.12 |
-| 클라우드 | Spring Cloud | 2023.0.5 |
+| 프레임워크 | Spring Boot | 3.5.9 |
+| 클라우드 | Spring Cloud | 2025.0.1 |
 | CDC 엔진 | Debezium | 3.4.0.Final |
 | 데이터베이스 | PostgreSQL | 12+ |
 | 메시징 | Apache Kafka | - |
