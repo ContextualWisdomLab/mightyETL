@@ -55,6 +55,8 @@ Spin up PostgreSQL (primary + replica), Kafka, Zipkin, Eureka, and the applicati
 docker compose up --build
 ```
 
+Podman을 사용한다면 `docs/podman.md`를 참고하세요.
+
 Note: `docker-compose.yml` includes development defaults for database credentials. Override them via `.env`
 (e.g. `POSTGRES_PASSWORD`, `REPLICA_POSTGRES_PASSWORD`) and use secrets for production deployments.
 
