@@ -11,6 +11,14 @@ spring:
       probability: 1.0
 
 management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
   tracing:
     sampling:
       probability: 1.0

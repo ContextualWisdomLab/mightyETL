@@ -36,6 +36,14 @@ xtrmetl:
     ddl-blocked-prefixes: ${REPLICA_DDL_BLOCKED_PREFIXES:DROP TABLE,DROP SCHEMA,DROP DATABASE,TRUNCATE}
 
 management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
   tracing:
     sampling:
       probability: 1.0
