@@ -440,12 +440,12 @@ docker build -t xtrmetl/eureka-server:latest ./eureka-server
 | Component | Technology | Version |
 | ----------- | ----------- | --------- |
 | Runtime | Java | 25 |
-| Framework | Spring Boot | 2.7.18 |
-| Cloud | Spring Cloud | 2021.0.9 |
+| Framework | Spring Boot | 3.2.12 |
+| Cloud | Spring Cloud | 2023.0.5 |
 | CDC Engine | Debezium | 3.4.0.Final |
 | Database | PostgreSQL | 12+ |
 | Messaging | Apache Kafka | Latest |
-| Gateway | Netflix Zuul | Latest |
+| Gateway | Spring Cloud Gateway | Latest |
 | Discovery | Netflix Eureka | Latest |
 | Tracing | Zipkin | Latest |
 | Security | Spring Security + JWT | Latest |

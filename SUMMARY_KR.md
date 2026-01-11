@@ -49,7 +49,7 @@
 ```text
 외부 클라이언트
      ↓
-Zuul API Gateway (8080) ← 인증 및 라우팅
+API Gateway (Spring Cloud Gateway, 8080) ← 인증 및 라우팅
      ↓
 ┌────────────────┬────────────────┐
 ↓                ↓                ↓
@@ -71,12 +71,12 @@ PostgreSQL     Kafka
 | 구성요소 | 기술 | 버전 |
 | --------- | ----- | ------ |
 | 런타임 | Java | 25 |
-| 프레임워크 | Spring Boot | 2.7.18 |
-| 클라우드 | Spring Cloud | 2021.0.9 |
+| 프레임워크 | Spring Boot | 3.2.12 |
+| 클라우드 | Spring Cloud | 2023.0.5 |
 | CDC 엔진 | Debezium | 3.4.0.Final |
 | 데이터베이스 | PostgreSQL | 12+ |
 | 메시징 | Apache Kafka | - |
-| 게이트웨이 | Netflix Zuul | - |
+| 게이트웨이 | Spring Cloud Gateway | - |
 | 서비스 디스커버리 | Netflix Eureka | - |
 | 추적 | Zipkin | - |
 | 빌드 도구 | Maven | - |

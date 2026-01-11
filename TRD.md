@@ -14,7 +14,7 @@ It complements `PRD.md` (what/why) and `ARCHITECTURE.md` (how it fits together).
 
 - Web UI / admin console (planned for v2; see `PRD.md` 10.1.1)
 - Multi-database support beyond PostgreSQL
-- Full Spring Boot 3.x migration work (tracked separately; see `docs/boot-support-strategy.md`)
+- Large framework upgrade efforts beyond the current baseline (tracked separately; see `docs/boot-support-strategy.md`)
 
 ## 2. Runtime & Build Requirements
 
@@ -34,8 +34,8 @@ It complements `PRD.md` (what/why) and `ARCHITECTURE.md` (how it fits together).
 
 Pinned in `pom.xml` unless noted otherwise:
 
-- Spring Boot: `2.7.18`
-- Spring Cloud: `2021.0.9`
+- Spring Boot: `3.2.12`
+- Spring Cloud: `2023.0.5`
 - Compiler target: `maven-compiler-plugin` uses `release=${java.version}` (Java 25)
 
 CDC-specific (currently pinned in `cdc-service/pom.xml`):

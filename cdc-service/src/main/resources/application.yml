@@ -17,11 +17,6 @@ spring:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       auto-offset-reset: earliest
-  zipkin:
-    base-url: http://${ZIPKIN_HOST:localhost}:9412
-  sleuth:
-    sampler:
-      probability: 1.0
 
 xtrmetl:
   cdc:
@@ -36,6 +31,12 @@ xtrmetl:
     ddl-blocked-prefixes: ${REPLICA_DDL_BLOCKED_PREFIXES:DROP TABLE,DROP SCHEMA,DROP DATABASE,TRUNCATE}
 
 management:
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: http://${ZIPKIN_HOST:localhost}:9412/api/v2/spans
   endpoints:
     web:
       exposure:
