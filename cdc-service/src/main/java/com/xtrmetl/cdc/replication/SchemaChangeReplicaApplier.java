@@ -55,7 +55,7 @@ public class SchemaChangeReplicaApplier {
             ObjectMapper objectMapper,
             @Value("${xtrmetl.replica.ddl-enabled:true}") boolean ddlEnabled,
             @Value("${xtrmetl.replica.ddl-validation-mode:none}") String ddlValidationMode,
-            @Value("${xtrmetl.replica.ddl-allowed-prefixes:CREATE TABLE,ALTER TABLE,CREATE INDEX,DROP INDEX}") String ddlAllowedPrefixes,
+            @Value("${xtrmetl.replica.ddl-allowed-prefixes:CREATE TABLE,ALTER TABLE,CREATE INDEX}") String ddlAllowedPrefixes,
             @Value("${xtrmetl.replica.ddl-blocked-prefixes:DROP TABLE,DROP SCHEMA,DROP DATABASE,TRUNCATE}") String ddlBlockedPrefixes
     ) {
         this.jdbcTemplate = jdbcTemplate;
