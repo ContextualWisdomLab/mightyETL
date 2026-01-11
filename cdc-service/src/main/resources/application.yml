@@ -31,6 +31,9 @@ xtrmetl:
     group-id: ${REPLICA_GROUP_ID:xtrmetl-cdc-replica}
     topic-pattern: ${REPLICA_TOPIC_PATTERN:xtrmetl-cdc\..*}
     ddl-enabled: ${REPLICA_DDL_ENABLED:false}
+    ddl-validation-mode: ${REPLICA_DDL_VALIDATION_MODE:none}
+    ddl-allowed-prefixes: ${REPLICA_DDL_ALLOWED_PREFIXES:CREATE TABLE,ALTER TABLE,CREATE INDEX}
+    ddl-blocked-prefixes: ${REPLICA_DDL_BLOCKED_PREFIXES:DROP TABLE,DROP SCHEMA,DROP DATABASE,TRUNCATE}
 
 management:
   tracing:
