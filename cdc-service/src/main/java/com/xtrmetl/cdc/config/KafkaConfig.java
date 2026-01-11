@@ -7,12 +7,12 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.kafka.core.ConsumerFactory;
-import org.springframework.kafka.core.KafkaOperations;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.listener.ContainerProperties;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
+import org.springframework.lang.NonNull;
 import org.springframework.util.backoff.FixedBackOff;
 
 /**
@@ -26,15 +26,12 @@ public class KafkaConfig {
 
     @Bean
     public DefaultErrorHandler kafkaListenerErrorHandler(
-            KafkaTemplate<String, String> kafkaTemplate,
+            @NonNull KafkaTemplate<String, String> kafkaTemplate,
             @Value("${xtrmetl.replica.kafka.retry-backoff-ms:1000}") long retryBackoffMs,
             @Value("${xtrmetl.replica.kafka.retry-max-attempts:30}") long retryMaxAttempts
     ) {
-        @SuppressWarnings("unchecked")
-        KafkaOperations<Object, Object> operations = (KafkaOperations<Object, Object>) (KafkaOperations<?, ?>) kafkaTemplate;
-
         DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(
-                operations,
+                kafkaTemplate,
                 (record, ex) -> new TopicPartition(record.topic() + ".DLT", record.partition())
         );
 
@@ -48,8 +45,8 @@ public class KafkaConfig {
 
     @Bean
     public ConcurrentKafkaListenerContainerFactory<String, String> kafkaListenerContainerFactory(
-            ConsumerFactory<String, String> consumerFactory,
-            DefaultErrorHandler kafkaListenerErrorHandler,
+            @NonNull ConsumerFactory<String, String> consumerFactory,
+            @NonNull DefaultErrorHandler kafkaListenerErrorHandler,
             @Value("${xtrmetl.replica.kafka.concurrency:1}") int concurrency
     ) {
         ConcurrentKafkaListenerContainerFactory<String, String> factory = new ConcurrentKafkaListenerContainerFactory<>();

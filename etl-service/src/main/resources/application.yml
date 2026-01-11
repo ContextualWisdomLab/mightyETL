@@ -29,9 +29,6 @@ management:
     health:
       probes:
         enabled: true
-  tracing:
-    sampling:
-      probability: 1.0
 
 eureka:
   client:
@@ -41,8 +38,11 @@ eureka:
 logging:
   level:
     root: INFO
-    com.xtrmetl: DEBUG
-    org.springframework.web: DEBUG
+    com:
+      xtrmetl: DEBUG
+    org:
+      springframework:
+        web: DEBUG
 
 # Enable Spring Retry
 spring.retry:

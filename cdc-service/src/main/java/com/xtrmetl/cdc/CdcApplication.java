@@ -8,6 +8,7 @@ import org.springframework.kafka.annotation.EnableKafka;
 @SpringBootApplication
 @EnableDiscoveryClient
 @EnableKafka
+@org.springframework.boot.context.properties.EnableConfigurationProperties(com.xtrmetl.cdc.config.XtrmetlProperties.class)
 public class CdcApplication {
     public static void main(String[] args) {
         SpringApplication.run(CdcApplication.class, args);

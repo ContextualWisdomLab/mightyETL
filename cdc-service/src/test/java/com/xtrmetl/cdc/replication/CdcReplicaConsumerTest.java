@@ -45,6 +45,7 @@ class CdcReplicaConsumerTest {
     @Test
     void delegatesNullTopicToProcessedDataApplier() {
         CdcReplicaConsumer consumer = new CdcReplicaConsumer(processedDataReplicaApplier, schemaChangeReplicaApplier);
+        @SuppressWarnings("unchecked")
         ConsumerRecord<String, String> record = mock(ConsumerRecord.class);
         when(record.topic()).thenReturn(null);
         when(record.key()).thenReturn("k");
