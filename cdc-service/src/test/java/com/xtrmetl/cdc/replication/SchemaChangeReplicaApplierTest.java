@@ -83,6 +83,16 @@ class SchemaChangeReplicaApplierTest {
     }
 
     @Test
+    void executesDdlFromRootWhenPayloadIsMissing() {
+        SchemaChangeReplicaApplier applier = new SchemaChangeReplicaApplier(jdbcTemplate, objectMapper, true);
+
+        String ddl = "CREATE TABLE test(id int)";
+        applier.apply("xtrmetl-cdc.schema-changes", null, "{\"ddl\":\"" + ddl + "\"}");
+
+        verify(jdbcTemplate).execute(eq(ddl));
+    }
+
+    @Test
     void rethrowsAndLogsWhenJdbcExecutionFails() {
         SchemaChangeReplicaApplier applier = new SchemaChangeReplicaApplier(jdbcTemplate, objectMapper, true);
         Logger logger = (Logger) LoggerFactory.getLogger(SchemaChangeReplicaApplier.class);
