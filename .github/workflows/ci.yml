@@ -5,18 +5,46 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      use_self_hosted:
+        description: Run on a self-hosted runner (avoids GitHub-hosted minutes)
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
 
 jobs:
   test:
-    if: ${{ github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && !inputs.use_self_hosted }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+
+      - name: Run tests (Unix)
+        if: runner.os != 'Windows'
+        run: ./mvnw -B test
+
+      - name: Run tests (Windows)
+        if: runner.os == 'Windows'
+        run: .\\mvnw.cmd -B test
+
+  test_self_hosted:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.use_self_hosted }}
+    runs-on: self-hosted
     steps:
       - name: Checkout
         uses: actions/checkout@v4

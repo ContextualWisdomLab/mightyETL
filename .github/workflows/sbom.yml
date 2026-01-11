@@ -5,13 +5,19 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      use_self_hosted:
+        description: Run on a self-hosted runner (avoids GitHub-hosted minutes)
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
 
 jobs:
   sbom:
-    if: ${{ github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && !inputs.use_self_hosted }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -26,6 +32,36 @@ jobs:
 
       - name: Generate CycloneDX SBOM (aggregate)
         run: mvn -B -DskipTests org.cyclonedx:cyclonedx-maven-plugin:2.9.1:makeAggregateBom -DoutputFormat=all -Dcyclonedx.skipAttach=true
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cyclonedx-sbom
+          path: |
+            target/bom.json
+            target/bom.xml
+
+  sbom_self_hosted:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.use_self_hosted }}
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+
+      - name: Generate CycloneDX SBOM (aggregate)
+        if: runner.os != 'Windows'
+        run: ./mvnw -B -DskipTests org.cyclonedx:cyclonedx-maven-plugin:2.9.1:makeAggregateBom -DoutputFormat=all -Dcyclonedx.skipAttach=true
+
+      - name: Generate CycloneDX SBOM (aggregate, Windows)
+        if: runner.os == 'Windows'
+        run: .\\mvnw.cmd -B -DskipTests org.cyclonedx:cyclonedx-maven-plugin:2.9.1:makeAggregateBom -DoutputFormat=all -Dcyclonedx.skipAttach=true
 
       - name: Upload SBOM artifact
         uses: actions/upload-artifact@v4
