@@ -1,0 +1,89 @@
+{
+  "groups": [
+    {
+      "name": "xtrmetl",
+      "type": "com.xtrmetl.cdc.config.XtrmetlProperties",
+      "description": "xtrmETL application-specific properties."
+    }
+  ],
+  "properties": [
+    {
+      "name": "xtrmetl.cdc.autostart",
+      "type": "java.lang.Boolean",
+      "description": "Whether to automatically start CDC on application startup."
+    },
+    {
+      "name": "xtrmetl.replica.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Whether to enable replica apply pipeline."
+    },
+    {
+      "name": "xtrmetl.replica.group-id",
+      "type": "java.lang.String",
+      "description": "Kafka consumer group id for the replica pipeline."
+    },
+    {
+      "name": "xtrmetl.replica.topic-pattern",
+      "type": "java.lang.String",
+      "description": "Regex pattern for replica-consumed topics."
+    },
+    {
+      "name": "xtrmetl.replica.ddl-enabled",
+      "type": "java.lang.Boolean",
+      "description": "Whether to apply DDL events to the replica DB."
+    },
+    {
+      "name": "xtrmetl.replica.ddl-validation-mode",
+      "type": "java.lang.String",
+      "description": "DDL validation mode (none|whitelist|blocklist)."
+    },
+    {
+      "name": "xtrmetl.replica.ddl-allowed-prefixes",
+      "type": "java.lang.String",
+      "description": "Comma-separated DDL prefixes allowed when validation-mode=whitelist."
+    },
+    {
+      "name": "xtrmetl.replica.ddl-blocked-prefixes",
+      "type": "java.lang.String",
+      "description": "Comma-separated DDL prefixes blocked when validation-mode=blocklist."
+    },
+    {
+      "name": "xtrmetl.replica.kafka.concurrency",
+      "type": "java.lang.Integer",
+      "description": "Kafka listener concurrency for the replica consumer."
+    },
+    {
+      "name": "xtrmetl.replica.kafka.retry-backoff-ms",
+      "type": "java.lang.Long",
+      "description": "Backoff interval (ms) between retry attempts."
+    },
+    {
+      "name": "xtrmetl.replica.kafka.retry-max-attempts",
+      "type": "java.lang.Long",
+      "description": "Maximum retry attempts for failed replica apply."
+    }
+  ],
+  "hints": [
+    {
+      "name": "xtrmetl.replica.ddl-validation-mode",
+      "values": [
+        {
+          "value": "none",
+          "description": "No validation."
+        },
+        {
+          "value": "whitelist",
+          "description": "Allow only configured prefixes."
+        },
+        {
+          "value": "blocklist",
+          "description": "Block configured prefixes."
+        },
+        {
+          "value": "blacklist",
+          "description": "Alias for blocklist."
+        }
+      ]
+    }
+  ]
+}
