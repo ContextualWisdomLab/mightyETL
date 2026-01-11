@@ -45,9 +45,9 @@ public class SchemaChangeReplicaApplier {
      * @param jdbcTemplate  레플리카 데이터베이스에 DDL을 실행하는 JdbcTemplate (빈 이름 "replicaJdbcTemplate" 사용)
      * @param objectMapper  Debezium 이벤트의 JSON 페이로드에서 DDL을 추출하기 위해 사용하는 ObjectMapper
      * @param ddlEnabled    레플리카에 DDL 적용을 활성화할지 여부; `true`이면 수신된 스키마 변경 DDL을 실행함
-     * @param ddlValidationMode DDL 적용 전 검증 모드 (none|whitelist|blacklist)
+     * @param ddlValidationMode DDL 적용 전 검증 모드 (none|whitelist|blacklist|blocklist)
      * @param ddlAllowedPrefixes whitelist 모드에서 허용할 DDL 접두어(Comma-separated)
-     * @param ddlBlockedPrefixes blacklist 모드에서 차단할 DDL 접두어(Comma-separated)
+     * @param ddlBlockedPrefixes blacklist/blocklist 모드에서 차단할 DDL 접두어(Comma-separated)
      */
     public SchemaChangeReplicaApplier(
             @Qualifier("replicaJdbcTemplate") JdbcTemplate jdbcTemplate,
@@ -335,6 +335,9 @@ public class SchemaChangeReplicaApplier {
                 return NONE;
             }
             String normalized = value.trim().toUpperCase(Locale.ROOT);
+            if ("BLOCKLIST".equals(normalized)) {
+                return BLACKLIST;
+            }
             for (DdlValidationMode mode : values()) {
                 if (mode.name().equals(normalized)) {
                     return mode;

@@ -107,7 +107,7 @@ export REPLICA_DDL_ENABLED=true
 If you don’t need replication, set `REPLICA_ENABLED=false` and the CDC service will skip replica applies.
 
 Security note: enabling `REPLICA_DDL_ENABLED` can apply destructive DDL (e.g. `DROP`, `TRUNCATE`) on the replica.
-For production, consider configuring `XTRMETL_REPLICA_DDL_VALIDATION_MODE=whitelist` (or `blacklist`) and tightening the
+For production, consider configuring `XTRMETL_REPLICA_DDL_VALIDATION_MODE=whitelist` (or `blocklist`) and tightening the
 allowed/blocked prefix lists accordingly.
 
 ### Build
