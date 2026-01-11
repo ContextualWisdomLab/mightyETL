@@ -17,3 +17,5 @@ Outputs:
 ## CI
 
 GitHub Actions workflow: `.github/workflows/sbom.yml`
+
+Note: the workflow job is currently gated to run only on `workflow_dispatch` (manual) to avoid failing checks when hosted runners are unavailable.
