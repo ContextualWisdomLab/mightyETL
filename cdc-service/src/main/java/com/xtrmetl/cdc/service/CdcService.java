@@ -189,6 +189,13 @@ public class CdcService {
         }
     }
 
+    /**
+     * Debezium PostgreSQL 커넥터용 CDC 설정을 환경 변수와 기본값으로 구성하여 생성한다.
+     *
+     * 생성된 구성은 오프셋 및 스키마 히스토리 파일 경로를 포함하며, 해당 파일의 부모 디렉터리가 존재하도록 보장한다.
+     *
+     * @return Debezium Engine에서 사용할 Configuration 인스턴스
+     */
     private Configuration getCdcConfiguration() {
         Path defaultCdcDataDir = defaultCdcDataDir();
         String offsetFile = EnvUtils.getEnv("CDC_OFFSET_FILE", defaultCdcDataDir.resolve("offsets.dat").toString());
