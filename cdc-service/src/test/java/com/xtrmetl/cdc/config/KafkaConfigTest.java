@@ -26,7 +26,7 @@ class KafkaConfigTest {
         KafkaConfig config = new KafkaConfig();
 
         KafkaTemplate<String, String> kafkaTemplate = mock(KafkaTemplate.class);
-        DefaultErrorHandler errorHandler = config.kafkaListenerErrorHandler(kafkaTemplate);
+        DefaultErrorHandler errorHandler = config.kafkaListenerErrorHandler(kafkaTemplate, 1000L, 30L);
 
         Object failureTracker = ReflectionTestUtils.getField(errorHandler, "failureTracker");
         assertNotNull(failureTracker);
@@ -40,7 +40,7 @@ class KafkaConfigTest {
         assertTrue(backOff instanceof FixedBackOff);
         FixedBackOff fixedBackOff = (FixedBackOff) backOff;
         assertEquals(1000L, fixedBackOff.getInterval());
-        assertEquals(3L, fixedBackOff.getMaxAttempts());
+        assertEquals(30L, fixedBackOff.getMaxAttempts());
 
         BinaryExceptionClassifier classifier =
                 (BinaryExceptionClassifier) ReflectionTestUtils.invokeMethod(errorHandler, "getClassifier");
@@ -54,11 +54,11 @@ class KafkaConfigTest {
         KafkaConfig config = new KafkaConfig();
 
         KafkaTemplate<String, String> kafkaTemplate = mock(KafkaTemplate.class);
-        DefaultErrorHandler errorHandler = config.kafkaListenerErrorHandler(kafkaTemplate);
+        DefaultErrorHandler errorHandler = config.kafkaListenerErrorHandler(kafkaTemplate, 1000L, 30L);
         ConsumerFactory<String, String> consumerFactory = mock(ConsumerFactory.class);
 
         ConcurrentKafkaListenerContainerFactory<String, String> factory =
-                config.kafkaListenerContainerFactory(consumerFactory, errorHandler);
+                config.kafkaListenerContainerFactory(consumerFactory, errorHandler, 1);
 
         assertEquals(ContainerProperties.AckMode.RECORD, factory.getContainerProperties().getAckMode());
         assertSame(errorHandler, ReflectionTestUtils.getField(factory, "commonErrorHandler"));

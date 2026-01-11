@@ -1,6 +1,7 @@
 package com.xtrmetl.cdc.config;
 
 import org.apache.kafka.common.TopicPartition;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.kafka.core.ConsumerFactory;
@@ -19,7 +20,11 @@ import org.springframework.util.backoff.FixedBackOff;
 public class KafkaConfig {
 
     @Bean
-    public DefaultErrorHandler kafkaListenerErrorHandler(KafkaTemplate<String, String> kafkaTemplate) {
+    public DefaultErrorHandler kafkaListenerErrorHandler(
+            KafkaTemplate<String, String> kafkaTemplate,
+            @Value("${xtrmetl.replica.kafka.retry-backoff-ms:1000}") long retryBackoffMs,
+            @Value("${xtrmetl.replica.kafka.retry-max-attempts:30}") long retryMaxAttempts
+    ) {
         @SuppressWarnings("unchecked")
         KafkaOperations<Object, Object> operations = (KafkaOperations<Object, Object>) (KafkaOperations<?, ?>) kafkaTemplate;
 
@@ -28,7 +33,10 @@ public class KafkaConfig {
                 (record, ex) -> new TopicPartition(record.topic() + ".DLT", record.partition())
         );
 
-        DefaultErrorHandler errorHandler = new DefaultErrorHandler(recoverer, new FixedBackOff(1000L, 3L));
+        DefaultErrorHandler errorHandler = new DefaultErrorHandler(
+                recoverer,
+                new FixedBackOff(retryBackoffMs, retryMaxAttempts)
+        );
         errorHandler.addNotRetryableExceptions(IllegalArgumentException.class, IllegalStateException.class);
         return errorHandler;
     }
@@ -36,10 +44,12 @@ public class KafkaConfig {
     @Bean
     public ConcurrentKafkaListenerContainerFactory<String, String> kafkaListenerContainerFactory(
             ConsumerFactory<String, String> consumerFactory,
-            DefaultErrorHandler kafkaListenerErrorHandler
+            DefaultErrorHandler kafkaListenerErrorHandler,
+            @Value("${xtrmetl.replica.kafka.concurrency:1}") int concurrency
     ) {
         ConcurrentKafkaListenerContainerFactory<String, String> factory = new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(consumerFactory);
+        factory.setConcurrency(Math.max(1, concurrency));
 
         // Commit offsets only after a record has been successfully applied to the replica DB.
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.RECORD);
