@@ -25,6 +25,7 @@ public class SchemaChangeReplicaApplier {
     private static final Logger log = LoggerFactory.getLogger(SchemaChangeReplicaApplier.class);
 
     private static final String SCHEMA_CHANGES_SUFFIX = ".schema-changes";
+    private static final int DDL_LOG_MAX_LENGTH = 500;
     private static final Set<String> IDEMPOTENT_DDL_SQL_STATES = Set.of(
             "42P06", // duplicate_schema
             "42P07", // duplicate_table
@@ -96,13 +97,22 @@ public class SchemaChangeReplicaApplier {
 
         try {
             jdbcTemplate.execute(ddl);
-            log.info("Applied schema change DDL on replica (topic={})", topic);
+            log.info("Applied schema change DDL on replica (topic={}, ddl={})", topic, truncateForLog(ddl));
         } catch (DataAccessException e) {
             if (isIdempotentDuplicate(e)) {
-                log.info("Schema change DDL already applied; skipping duplicate (topic={})", topic);
+                log.info(
+                        "Schema change DDL already applied; skipping duplicate (topic={}, ddl={})",
+                        topic,
+                        truncateForLog(ddl)
+                );
                 return;
             }
-            log.error("Failed to apply schema change DDL on replica (topic={})", topic, e);
+            log.error(
+                    "Failed to apply schema change DDL on replica (topic={}, ddl={})",
+                    topic,
+                    truncateForLog(ddl),
+                    e
+            );
             throw e;
         }
     }
@@ -206,6 +216,18 @@ public class SchemaChangeReplicaApplier {
 
     private static String normalizeForValidation(String ddl) {
         return ddl.trim().replaceAll("\\s+", " ").toUpperCase(Locale.ROOT);
+    }
+
+    private static String truncateForLog(String ddl) {
+        if (ddl == null) {
+            return null;
+        }
+
+        String normalized = ddl.trim().replaceAll("\\s+", " ");
+        if (normalized.length() <= DDL_LOG_MAX_LENGTH) {
+            return normalized;
+        }
+        return normalized.substring(0, DDL_LOG_MAX_LENGTH) + "...";
     }
 
     private enum DdlValidationMode {
