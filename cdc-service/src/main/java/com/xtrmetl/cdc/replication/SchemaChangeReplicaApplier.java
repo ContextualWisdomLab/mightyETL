@@ -150,8 +150,8 @@ public class SchemaChangeReplicaApplier {
 
         String upper = rewritten.toUpperCase(Locale.ROOT);
         if (upper.startsWith("ALTER TABLE")) {
-            rewritten = rewritten.replaceFirst(
-                    "(?i)\\bADD\\s+COLUMN\\s+(?!IF\\s+NOT\\s+EXISTS\\b)",
+            rewritten = rewritten.replaceAll(
+                    "(?i)\\bADD\\s+COLUMN\\s+(?!IF\\s+NOT\\s+EXISTS(?![A-Za-z0-9_]))",
                     "ADD COLUMN IF NOT EXISTS "
             );
         }

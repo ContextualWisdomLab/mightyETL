@@ -107,6 +107,18 @@ class SchemaChangeReplicaApplierTest {
     }
 
     @Test
+    void rewritesAllAddColumnClausesToIfNotExists() {
+        SchemaChangeReplicaApplier applier = applier(true);
+
+        String ddl = "ALTER TABLE processed_data ADD COLUMN new_col INT, ADD COLUMN other_col TEXT";
+        applier.apply("xtrmetl-cdc.schema-changes", null, "{\"payload\":{\"ddl\":\"" + ddl + "\"}}");
+
+        verify(jdbcTemplate).execute(eq(
+                "ALTER TABLE processed_data ADD COLUMN IF NOT EXISTS new_col INT, ADD COLUMN IF NOT EXISTS other_col TEXT"
+        ));
+    }
+
+    @Test
     void blocksDdlWhenValidationModeIsBlacklist() {
         SchemaChangeReplicaApplier applier = new SchemaChangeReplicaApplier(
                 jdbcTemplate,
