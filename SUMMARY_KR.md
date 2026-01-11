@@ -200,7 +200,6 @@ cd zuul-gateway && mvn spring-boot:run
 - **MyBatis 통합**: 의존성은 있으나 사용되지 않음
 - **Redis 통합**: 의존성은 있으나 활용되지 않음
 - **Config Server**: 구현되었으나 활발히 사용되지 않음
-- **Health Check**: Spring Boot Actuator 엔드포인트 추가 필요
 
 ## 결론
 

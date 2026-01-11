@@ -366,11 +366,17 @@ All services are configured to send traces to Zipkin with 100% sampling rate.
 
 ### Health Checks
 
-Check service health via Eureka dashboard:
+Spring Boot Actuator health endpoints are exposed for each service:
 
 ```text
-http://localhost:8761
+http://localhost:8000/actuator/health  (etl-service)
+http://localhost:8001/actuator/health  (cdc-service)
+http://localhost:8080/actuator/health  (zuul-gateway)
+http://localhost:8761/actuator/health  (eureka-server)
+http://localhost:8888/actuator/health  (config-server)
 ```
+
+Eureka dashboard: `http://localhost:8761`
 
 ## 🔧 Configuration
 
