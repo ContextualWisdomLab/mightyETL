@@ -105,6 +105,28 @@ class SchemaChangeReplicaApplierTest {
     }
 
     @Test
+    void rewritesCreateIndexConcurrentlyToIfNotExists() {
+        SchemaChangeReplicaApplier applier = applier(true);
+
+        String ddl = "CREATE INDEX CONCURRENTLY idx_processed_data_id ON processed_data (id)";
+        applier.apply("xtrmetl-cdc.schema-changes", null, "{\"payload\":{\"ddl\":\"" + ddl + "\"}}");
+
+        verify(jdbcTemplate).execute(eq("CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_processed_data_id ON processed_data (id)"));
+    }
+
+    @Test
+    void rewritesCreateUniqueIndexConcurrentlyToIfNotExists() {
+        SchemaChangeReplicaApplier applier = applier(true);
+
+        String ddl = "CREATE UNIQUE INDEX CONCURRENTLY idx_processed_data_id ON processed_data (id)";
+        applier.apply("xtrmetl-cdc.schema-changes", null, "{\"payload\":{\"ddl\":\"" + ddl + "\"}}");
+
+        verify(jdbcTemplate).execute(eq(
+                "CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS idx_processed_data_id ON processed_data (id)"
+        ));
+    }
+
+    @Test
     void rewritesCreateSchemaToIfNotExists() {
         SchemaChangeReplicaApplier applier = applier(true);
 
@@ -134,6 +156,16 @@ class SchemaChangeReplicaApplierTest {
         applier.apply("xtrmetl-cdc.schema-changes", null, "{\"payload\":{\"ddl\":\"" + ddl + "\"}}");
 
         verify(jdbcTemplate).execute(eq("DROP INDEX IF EXISTS idx_processed_data_id"));
+    }
+
+    @Test
+    void rewritesDropIndexConcurrentlyToIfExists() {
+        SchemaChangeReplicaApplier applier = applier(true);
+
+        String ddl = "DROP INDEX CONCURRENTLY idx_processed_data_id";
+        applier.apply("xtrmetl-cdc.schema-changes", null, "{\"payload\":{\"ddl\":\"" + ddl + "\"}}");
+
+        verify(jdbcTemplate).execute(eq("DROP INDEX CONCURRENTLY IF EXISTS idx_processed_data_id"));
     }
 
     @Test
