@@ -8,6 +8,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class CdcReplicaConsumerTest {
@@ -38,5 +40,19 @@ class CdcReplicaConsumerTest {
 
         verify(schemaChangeReplicaApplier).apply("xtrmetl-cdc.schema-changes", "k", "v");
         verify(processedDataReplicaApplier, never()).apply("xtrmetl-cdc.schema-changes", "k", "v");
+    }
+
+    @Test
+    void delegatesNullTopicToProcessedDataApplier() {
+        CdcReplicaConsumer consumer = new CdcReplicaConsumer(processedDataReplicaApplier, schemaChangeReplicaApplier);
+        ConsumerRecord<String, String> record = mock(ConsumerRecord.class);
+        when(record.topic()).thenReturn(null);
+        when(record.key()).thenReturn("k");
+        when(record.value()).thenReturn("v");
+
+        consumer.onMessage(record);
+
+        verify(processedDataReplicaApplier).apply(null, "k", "v");
+        verify(schemaChangeReplicaApplier, never()).apply(null, "k", "v");
     }
 }
