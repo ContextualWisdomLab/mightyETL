@@ -631,6 +631,24 @@ Options for high availability:
 2. Table partitioning: Different instances monitor different tables
 3. Leader election: Use ZooKeeper/Consul for leader election
 
+### 10.3 Replica Replication Ordering
+
+When `xtrmetl.replica.enabled=true`, the CDC service can also consume CDC topics and apply them to a replica DB.
+
+**Important**: Kafka ordering is guaranteed only within a single partition of a single topic. Schema-change events
+(`*.schema-changes`) and data events (e.g. `*.public.processed_data`) can arrive and be processed out-of-order.
+
+Mitigations in this codebase:
+
+- Single listener container (default `concurrency=1`) and `AckMode.RECORD` (commit only after replica apply succeeds)
+- Retry + dead-letter routing via `DefaultErrorHandler`/`.DLT` to tolerate transient schema/data race windows
+
+Tuning knobs:
+
+- `xtrmetl.replica.kafka.retry-backoff-ms`
+- `xtrmetl.replica.kafka.retry-max-attempts`
+- `xtrmetl.replica.kafka.concurrency`
+
 ---
 
 **Document Version**: 1.0  
