@@ -343,6 +343,12 @@ If GitHub-hosted Actions runners are unavailable (billing/spending limit), run t
 ./scripts/ci.sh
 ```
 
+Windows (PowerShell):
+
+```powershell
+./scripts/ci.ps1
+```
+
 ### Run Service-Specific Tests
 
 ```bash
