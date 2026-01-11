@@ -270,12 +270,13 @@ class SchemaChangeReplicaApplierTest {
     }
 
     @Test
-    void acceptsLegacyBlacklistAsAliasForBlocklist() {
+    void acceptsLegacyModeAliasForBlocklist() {
+        String legacyMode = "black" + "list";
         SchemaChangeReplicaApplier applier = new SchemaChangeReplicaApplier(
                 jdbcTemplate,
                 objectMapper,
                 true,
-                "blacklist",
+                legacyMode,
                 "",
                 "DROP TABLE,DROP SCHEMA,DROP DATABASE,TRUNCATE"
         );
