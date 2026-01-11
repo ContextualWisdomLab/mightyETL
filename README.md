@@ -81,6 +81,14 @@ export PGPASSWORD=your_password
 export PGDATABASE=your_database
 ```
 
+Optional (CDC / Debezium):
+
+```bash
+# Whether Debezium emits schema change events (`*.schema-changes` topics).
+# If you set this to false, no DDL events will be produced/consumed.
+export CDC_INCLUDE_SCHEMA_CHANGES=true
+```
+
 Optional: enable CDC-based replication to a secondary PostgreSQL (database redundancy/replication):
 
 ```bash
@@ -90,9 +98,17 @@ export REPLICA_PGPORT=5433
 export REPLICA_PGUSER=your_username
 export REPLICA_PGPASSWORD=your_password
 export REPLICA_PGDATABASE=your_database
+
+# Whether the CDC service applies DDL events (`*.schema-changes`) on the replica DB.
+# Default: true (when replica is enabled). Consider setting to false if you only want data replication.
+export REPLICA_DDL_ENABLED=true
 ```
 
 If you don’t need replication, set `REPLICA_ENABLED=false` and the CDC service will skip replica applies.
+
+Security note: enabling `REPLICA_DDL_ENABLED` can apply destructive DDL (e.g. `DROP`, `TRUNCATE`) on the replica.
+For production, consider configuring `XTRMETL_REPLICA_DDL_VALIDATION_MODE=whitelist` (or `blacklist`) and tightening the
+allowed/blocked prefix lists accordingly.
 
 ### Build
 
