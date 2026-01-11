@@ -265,7 +265,6 @@ public class SchemaChangeReplicaApplier {
                 }
                 throw new IllegalArgumentException("DDL blocked by validation policy");
             }
-            return;
         }
 
         if (ddlValidationMode == DdlValidationMode.WHITELIST) {
@@ -281,7 +280,6 @@ public class SchemaChangeReplicaApplier {
                 }
                 throw new IllegalArgumentException("DDL blocked by validation policy");
             }
-            return;
         }
     }
 
