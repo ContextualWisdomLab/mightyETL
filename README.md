@@ -100,7 +100,7 @@ export REPLICA_PGPASSWORD=your_password
 export REPLICA_PGDATABASE=your_database
 
 # Whether the CDC service applies DDL events (`*.schema-changes`) on the replica DB.
-# Default: true (when replica is enabled). Consider setting to false if you only want data replication.
+# Default: false. Set to true to opt-in to applying DDL on the replica.
 export REPLICA_DDL_ENABLED=true
 ```
 

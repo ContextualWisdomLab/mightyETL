@@ -648,7 +648,7 @@ Tuning knobs (replica application, DDL handling, and CDC schema changes):
 - `xtrmetl.replica.kafka.retry-backoff-ms` (default: `1000`): backoff (ms) between retry attempts when replica apply fails
 - `xtrmetl.replica.kafka.retry-max-attempts` (default: `30`): maximum retry attempts before routing to the dead-letter topic (≈30s with defaults)
 - `xtrmetl.replica.kafka.concurrency` (default: `1`): number of concurrent listener threads for replica consumption
-- `xtrmetl.replica.ddl-enabled` (default: `true`): enable/disable applying DDL events (`*.schema-changes`) on the replica
+- `xtrmetl.replica.ddl-enabled` (default: `false`): enable/disable applying DDL events (`*.schema-changes`) on the replica
 - `xtrmetl.replica.ddl-validation-mode` (default: `none`): DDL validation strategy; `none` (no validation/blocking), `whitelist`, or `blacklist`
 - `xtrmetl.replica.ddl-allowed-prefixes`: comma-separated DDL prefixes allowed when `ddl-validation-mode=whitelist`
 - `xtrmetl.replica.ddl-blocked-prefixes` (effective only when `ddl-validation-mode=blacklist`; default blacklist includes `DROP TABLE`, `DROP SCHEMA`, `DROP DATABASE`, `TRUNCATE`): DDL prefixes blocked in blacklist mode
