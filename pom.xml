@@ -19,8 +19,8 @@
 
     <properties>
         <java.version>25</java.version>
-        <spring-boot.version>2.7.14</spring-boot.version>
-        <spring-cloud.version>2021.0.8</spring-cloud.version>
+        <spring-boot.version>2.7.18</spring-boot.version>
+        <spring-cloud.version>2021.0.9</spring-cloud.version>
         <micrometer-tracing.version>1.6.1</micrometer-tracing.version>
         <postgresql.version>42.7.8</postgresql.version>
         <spring-kafka.version>2.9.13</spring-kafka.version>
