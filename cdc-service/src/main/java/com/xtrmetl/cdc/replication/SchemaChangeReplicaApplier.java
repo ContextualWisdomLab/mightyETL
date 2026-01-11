@@ -210,6 +210,15 @@ public class SchemaChangeReplicaApplier {
                 "DROP INDEX IF EXISTS "
         );
 
+        rewritten = rewritten.replaceFirst(
+                "(?i)^DROP\\s+TABLE\\s+(?!IF\\s+EXISTS\\b)",
+                "DROP TABLE IF EXISTS "
+        );
+        rewritten = rewritten.replaceFirst(
+                "(?i)^DROP\\s+SCHEMA\\s+(?!IF\\s+EXISTS\\b)",
+                "DROP SCHEMA IF EXISTS "
+        );
+
         String upper = rewritten.toUpperCase(Locale.ROOT);
         if (upper.startsWith("ALTER TABLE")) {
             rewritten = rewritten.replaceAll(

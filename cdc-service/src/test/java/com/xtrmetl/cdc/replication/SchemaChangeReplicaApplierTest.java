@@ -179,6 +179,26 @@ class SchemaChangeReplicaApplierTest {
     }
 
     @Test
+    void rewritesDropTableToIfExists() {
+        SchemaChangeReplicaApplier applier = applier(true);
+
+        String ddl = "DROP TABLE processed_data";
+        applier.apply("xtrmetl-cdc.schema-changes", null, "{\"payload\":{\"ddl\":\"" + ddl + "\"}}");
+
+        verify(jdbcTemplate).execute(eq("DROP TABLE IF EXISTS processed_data"));
+    }
+
+    @Test
+    void rewritesDropSchemaToIfExists() {
+        SchemaChangeReplicaApplier applier = applier(true);
+
+        String ddl = "DROP SCHEMA reporting";
+        applier.apply("xtrmetl-cdc.schema-changes", null, "{\"payload\":{\"ddl\":\"" + ddl + "\"}}");
+
+        verify(jdbcTemplate).execute(eq("DROP SCHEMA IF EXISTS reporting"));
+    }
+
+    @Test
     void executesDdlFromRootWhenPayloadIsMissing() {
         SchemaChangeReplicaApplier applier = applier(true);
 
@@ -285,17 +305,23 @@ class SchemaChangeReplicaApplierTest {
     void executesDestructiveDdlWhenValidationModeIsNone() {
         SchemaChangeReplicaApplier applier = applier(true);
 
-        String[] ddls = {
+        String[] inputDdls = {
                 "DROP TABLE processed_data",
                 "TRUNCATE processed_data",
                 "DROP SCHEMA public"
         };
 
-        for (String ddl : ddls) {
+        String[] expectedDdls = {
+                "DROP TABLE IF EXISTS processed_data",
+                "TRUNCATE processed_data",
+                "DROP SCHEMA IF EXISTS public"
+        };
+
+        for (String ddl : inputDdls) {
             applier.apply("xtrmetl-cdc.schema-changes", null, "{\"payload\":{\"ddl\":\"" + ddl + "\"}}");
         }
 
-        for (String ddl : ddls) {
+        for (String ddl : expectedDdls) {
             verify(jdbcTemplate).execute(eq(ddl));
         }
     }
