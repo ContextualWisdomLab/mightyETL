@@ -649,6 +649,13 @@ Tuning knobs:
 - `xtrmetl.replica.kafka.retry-max-attempts`
 - `xtrmetl.replica.kafka.concurrency`
 
+DDL replication controls:
+
+- `xtrmetl.replica.ddl-enabled` (default: `true`): enable/disable applying DDL events (`*.schema-changes`) on the replica
+- `xtrmetl.replica.ddl-validation-mode` (default: `none`): `none`, `whitelist`, or `blacklist`
+- `xtrmetl.replica.ddl-allowed-prefixes`: comma-separated prefixes used when `ddl-validation-mode=whitelist`
+- `xtrmetl.replica.ddl-blocked-prefixes` (default includes `DROP TABLE`, `DROP SCHEMA`, `DROP DATABASE`, `TRUNCATE`): prefixes used when `ddl-validation-mode=blacklist`
+
 ---
 
 **Document Version**: 1.0  
