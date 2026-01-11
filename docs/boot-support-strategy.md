@@ -3,7 +3,7 @@
 ## Decision
 
 - Adopt a Spring Boot 3.x upgrade path (target 3.2.x LTS) with Java 25.
-- Keep 2.7.14 through Step 1 (Q1 2026) while aligning code to the newer APIs; begin Step 2 once Step 1 exit gates are met.
+- Keep 2.7.18 through Step 1 (Q1 2026) while aligning code to the newer APIs; begin Step 2 once Step 1 exit gates are met.
 
 ## Rationale
 
@@ -49,7 +49,7 @@
 
 ### Rollback Strategy
 
-- Maintain a Boot 2.7.x support branch (currently 2.7.14) for rollback during migration phases.
+- Maintain a Boot 2.7.x support branch (currently 2.7.18) for rollback during migration phases.
 - Require verification gates at each step before proceeding.
 - Use staged rollout with canary deployment for production environments.
 - Rollback triggers (canary window): sustained elevated error rate, P99 latency regression vs baseline, or Kafka lag/consumer errors above agreed thresholds.
@@ -73,7 +73,7 @@
 
 ## Risks And Mitigations
 
-- Zuul replacement is required for Boot 3.x; target Q2 2026, owner: Platform team, migrate auth/routing/filter parity, rollback gate keeps the Boot 2.7.x support branch (currently 2.7.14).
+- Zuul replacement is required for Boot 3.x; target Q2 2026, owner: Platform team, migrate auth/routing/filter parity, rollback gate keeps the Boot 2.7.x support branch (currently 2.7.18).
 - Validate Debezium and Kafka compatibility before dependency bumps; maintain version matrix and run weekly CI compatibility checks with rollback to pinned versions.
 - Jakarta namespace migration may break third-party libraries; audit dependencies, prioritize blockers, and track vendor patches with a migration checklist.
 - Performance characteristics may change; baseline P95 latency/throughput/lag, define thresholds, and run regression tests weekly.
@@ -99,7 +99,7 @@
 
 | Profile | Java | Boot | Cloud | Notes |
 | --- | --- | --- | --- | --- |
-| Baseline (current) | 25 | 2.7.14 | 2021.0.8 | Production-compatible, used for Step 1 cleanup and rollback |
+| Baseline (current) | 25 | 2.7.18 | 2021.0.9 | Production-compatible, used for Step 1 cleanup and rollback |
 | Candidate (target) | 25 | 3.2.x | 2023.x | Target stack for Steps 2–4; start as compile-only until migrations land |
 
 #### Weekly CI Compatibility Coverage
