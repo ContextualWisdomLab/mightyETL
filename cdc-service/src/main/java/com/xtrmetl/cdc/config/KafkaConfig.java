@@ -67,6 +67,12 @@ public class KafkaConfig {
             );
             effectiveConcurrency = MAX_CONCURRENCY;
         }
+        if (effectiveConcurrency > 1) {
+            log.warn(
+                    "xtrmetl.replica.kafka.concurrency={} may increase out-of-order processing risk between DDL and data events across partitions; prefer concurrency=1 for DDL replication scenarios",
+                    effectiveConcurrency
+            );
+        }
         factory.setConcurrency(effectiveConcurrency);
 
         // Commit offsets only after a record has been successfully applied to the replica DB.
