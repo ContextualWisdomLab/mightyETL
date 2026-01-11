@@ -192,6 +192,14 @@ class SchemaChangeReplicaApplierTest {
     }
 
     @Test
+    void requiresAllowedPrefixesWhenValidationModeIsWhitelist() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new SchemaChangeReplicaApplier(jdbcTemplate, objectMapper, true, "whitelist", "   ", "")
+        );
+    }
+
+    @Test
     void executesDestructiveDdlWhenValidationModeIsNone() {
         SchemaChangeReplicaApplier applier = applier(true);
 

@@ -64,6 +64,12 @@ public class SchemaChangeReplicaApplier {
         this.ddlValidationMode = DdlValidationMode.from(ddlValidationMode);
         this.ddlAllowedPrefixes = parseDdlPrefixes(ddlAllowedPrefixes);
         this.ddlBlockedPrefixes = parseDdlPrefixes(ddlBlockedPrefixes);
+
+        if (ddlEnabled && this.ddlValidationMode == DdlValidationMode.WHITELIST && this.ddlAllowedPrefixes.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "xtrmetl.replica.ddl-validation-mode=whitelist requires non-empty xtrmetl.replica.ddl-allowed-prefixes"
+            );
+        }
     }
 
     /**
