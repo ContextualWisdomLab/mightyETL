@@ -85,6 +85,17 @@ class SchemaChangeReplicaApplierTest {
     }
 
     @Test
+    void ignoresMalformedJsonInputs(CapturedOutput output) {
+        SchemaChangeReplicaApplier applier = applier(true);
+
+        assertDoesNotThrow(() -> applier.apply("xtrmetl-cdc.schema-changes", null, "{not-json"));
+
+        verifyNoInteractions(jdbcTemplate);
+        String logs = output.getOut() + output.getErr();
+        assertTrue(logs.contains("Failed to parse Debezium schema change JSON"));
+    }
+
+    @Test
     void executesDdlWhenPresent() {
         SchemaChangeReplicaApplier applier = applier(true);
 
