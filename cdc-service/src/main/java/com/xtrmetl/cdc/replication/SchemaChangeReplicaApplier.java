@@ -168,6 +168,12 @@ public class SchemaChangeReplicaApplier {
         }
     }
 
+    /**
+     * 레플리카 적용 시 카프카 재전달/재시도로 인한 중복 실행을 고려하여 DDL을 가능한 한 idempotent하게 변환한다.
+     *
+     * <p>주의: 변환에는 PostgreSQL 9.6+ 문법(예: {@code ALTER TABLE ... ADD COLUMN IF NOT EXISTS})이 포함되므로,
+     * 레플리카 DB는 PostgreSQL 9.6 이상이어야 한다.
+     */
     private String makeIdempotent(String ddl) {
         if (ddl == null) {
             return null;

@@ -653,6 +653,7 @@ Tuning knobs (replica application, DDL handling, and CDC schema changes):
 - `xtrmetl.replica.ddl-allowed-prefixes`: comma-separated DDL prefixes allowed when `ddl-validation-mode=whitelist`
 - `xtrmetl.replica.ddl-blocked-prefixes` (effective only when `ddl-validation-mode=blacklist`; default blacklist includes `DROP TABLE`, `DROP SCHEMA`, `DROP DATABASE`, `TRUNCATE`): DDL prefixes blocked in blacklist mode
 - `CDC_INCLUDE_SCHEMA_CHANGES` (default: `true`): controls whether Debezium emits schema change events (`*.schema-changes`)
+- **PostgreSQL requirement**: schema-change DDL idempotency rewrites assume PostgreSQL `>= 9.6` (notably `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`)
 
 ---
 
