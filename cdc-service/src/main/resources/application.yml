@@ -53,6 +53,10 @@ eureka:
 logging:
   level:
     root: INFO
-    com.xtrmetl: DEBUG
-    io.debezium: INFO
-    org.springframework.web: DEBUG
+    com:
+      xtrmetl: DEBUG
+    io:
+      debezium: INFO
+    org:
+      springframework:
+        web: DEBUG
