@@ -137,6 +137,25 @@ class SchemaChangeReplicaApplierTest {
     }
 
     @Test
+    void executesDestructiveDdlWhenValidationModeIsNone() {
+        SchemaChangeReplicaApplier applier = applier(true);
+
+        String[] ddls = {
+                "DROP TABLE processed_data",
+                "TRUNCATE processed_data",
+                "DROP SCHEMA public"
+        };
+
+        for (String ddl : ddls) {
+            applier.apply("xtrmetl-cdc.schema-changes", null, "{\"payload\":{\"ddl\":\"" + ddl + "\"}}");
+        }
+
+        for (String ddl : ddls) {
+            verify(jdbcTemplate).execute(eq(ddl));
+        }
+    }
+
+    @Test
     void ignoresDuplicateDdlErrors() {
         SchemaChangeReplicaApplier applier = applier(true);
         Logger logger = (Logger) LoggerFactory.getLogger(SchemaChangeReplicaApplier.class);
