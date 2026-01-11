@@ -157,6 +157,41 @@ class SchemaChangeReplicaApplierTest {
     }
 
     @Test
+    void allowsDdlWhenValidationModeIsWhitelist() {
+        SchemaChangeReplicaApplier applier = new SchemaChangeReplicaApplier(
+                jdbcTemplate,
+                objectMapper,
+                true,
+                "whitelist",
+                "CREATE TABLE,ALTER TABLE,CREATE INDEX,DROP INDEX",
+                ""
+        );
+
+        String ddl = "CREATE TABLE test(id int)";
+        applier.apply("xtrmetl-cdc.schema-changes", null, "{\"payload\":{\"ddl\":\"" + ddl + "\"}}");
+
+        verify(jdbcTemplate).execute(eq("CREATE TABLE IF NOT EXISTS test(id int)"));
+    }
+
+    @Test
+    void blocksDdlWhenValidationModeIsWhitelist() {
+        SchemaChangeReplicaApplier applier = new SchemaChangeReplicaApplier(
+                jdbcTemplate,
+                objectMapper,
+                true,
+                "whitelist",
+                "CREATE TABLE,ALTER TABLE,CREATE INDEX,DROP INDEX",
+                ""
+        );
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> applier.apply("xtrmetl-cdc.schema-changes", null, "{\"payload\":{\"ddl\":\"DROP TABLE test\"}}")
+        );
+        verifyNoInteractions(jdbcTemplate);
+    }
+
+    @Test
     void executesDestructiveDdlWhenValidationModeIsNone() {
         SchemaChangeReplicaApplier applier = applier(true);
 
