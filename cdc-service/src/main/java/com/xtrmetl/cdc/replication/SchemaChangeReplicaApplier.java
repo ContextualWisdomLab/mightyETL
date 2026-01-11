@@ -98,6 +98,7 @@ public class SchemaChangeReplicaApplier {
         if (ddl == null || ddl.isBlank()) {
             return;
         }
+        ddl = requireSingleStatement(topic, ddl);
         ddl = makeIdempotent(ddl);
         validateDdl(topic, ddl);
 
@@ -129,6 +130,22 @@ public class SchemaChangeReplicaApplier {
             }
             throw e;
         }
+    }
+
+    private String requireSingleStatement(String topic, String ddl) {
+        String trimmed = ddl.trim();
+        while (trimmed.endsWith(";")) {
+            trimmed = trimmed.substring(0, trimmed.length() - 1).trim();
+        }
+
+        if (trimmed.contains(";")) {
+            if (log.isWarnEnabled()) {
+                log.warn("Blocked multi-statement DDL (topic={}, ddl={})", topic, truncateForLog(ddl));
+            }
+            throw new IllegalArgumentException("Multiple SQL statements are not allowed");
+        }
+
+        return trimmed;
     }
 
     /**

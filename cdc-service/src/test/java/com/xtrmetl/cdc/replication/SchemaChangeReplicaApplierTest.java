@@ -117,6 +117,18 @@ class SchemaChangeReplicaApplierTest {
     }
 
     @Test
+    void blocksMultiStatementDdl() {
+        SchemaChangeReplicaApplier applier = applier(true);
+
+        String ddl = "CREATE TABLE test(id int); DROP TABLE processed_data";
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> applier.apply("xtrmetl-cdc.schema-changes", null, "{\"payload\":{\"ddl\":\"" + ddl + "\"}}")
+        );
+        verifyNoInteractions(jdbcTemplate);
+    }
+
+    @Test
     void rewritesDropIndexToIfExists() {
         SchemaChangeReplicaApplier applier = applier(true);
 
