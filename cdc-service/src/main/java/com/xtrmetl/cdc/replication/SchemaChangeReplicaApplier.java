@@ -103,22 +103,30 @@ public class SchemaChangeReplicaApplier {
 
         try {
             jdbcTemplate.execute(ddl);
-            log.info("Applied schema change DDL on replica (topic={}, ddl={})", topic, truncateForLog(ddl));
+            if (log.isInfoEnabled()) {
+                log.info("Applied schema change DDL on replica (topic={}, ddl={})", topic, truncateForLog(ddl));
+            }
         } catch (DataAccessException e) {
             if (isIdempotentDuplicate(e)) {
-                log.info(
-                        "Schema change DDL already applied; skipping duplicate (topic={}, ddl={})",
-                        topic,
-                        truncateForLog(ddl)
-                );
+                if (log.isInfoEnabled()) {
+                    log.info(
+                            "Schema change DDL already applied; skipping duplicate (topic={}, ddl={})",
+                            topic,
+                            truncateForLog(ddl)
+                    );
+                }
                 return;
             }
-            log.error(
-                    "Failed to apply schema change DDL on replica (topic={}, ddl={})",
-                    topic,
-                    truncateForLog(ddl),
-                    e
-            );
+            if (log.isErrorEnabled()) {
+                log.error(
+                        "Failed to apply schema change DDL on replica (topic={}, ddl={})",
+                        topic,
+                        truncateForLog(ddl),
+                        e
+                );
+            } else {
+                log.error("Failed to apply schema change DDL on replica (topic={})", topic, e);
+            }
             throw e;
         }
     }
