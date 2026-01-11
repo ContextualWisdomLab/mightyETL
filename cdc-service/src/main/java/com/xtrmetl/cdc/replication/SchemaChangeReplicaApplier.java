@@ -9,7 +9,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -130,7 +129,6 @@ public class SchemaChangeReplicaApplier {
         }
     }
 
-    @NonNull
     private String requireSingleStatement(String topic, String ddl) {
         String trimmed = ddl.trim();
         while (trimmed.endsWith(";")) {
@@ -173,8 +171,7 @@ public class SchemaChangeReplicaApplier {
      * <p>주의: 변환에는 PostgreSQL 9.6+ 문법(예: {@code ALTER TABLE ... ADD COLUMN IF NOT EXISTS})이 포함되므로,
      * 레플리카 DB는 PostgreSQL 9.6 이상이어야 한다.
      */
-    @NonNull
-    private String makeIdempotent(@NonNull String ddl) {
+    private String makeIdempotent(String ddl) {
         String rewritten = ddl.trim();
 
         rewritten = rewritten.replaceFirst(
