@@ -6,7 +6,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.lang.NonNull;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -22,14 +21,14 @@ public class ProcessedDataReplicaApplier {
 
     // created_at is set by the replica DB on insert (DEFAULT) and intentionally not updated on upserts.
     // This replication path currently tracks only the latest `data` value; it does not maintain an `updated_at`.
-    @NonNull
+    @org.springframework.lang.NonNull
     private static final String UPSERT_SQL = """
             INSERT INTO processed_data (id, data)
             VALUES (?, ?)
             ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data
             """.strip();
 
-    @NonNull
+    @org.springframework.lang.NonNull
     private static final String DELETE_SQL = "DELETE FROM processed_data WHERE id = ?";
 
     private final JdbcTemplate jdbcTemplate;
