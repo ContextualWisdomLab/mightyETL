@@ -29,9 +29,6 @@ management:
     health:
       probes:
         enabled: true
-  tracing:
-    sampling:
-      probability: 1.0
 
 eureka:
   client:
