@@ -12,7 +12,7 @@ It complements `PRD.md` (what/why) and `ARCHITECTURE.md` (how it fits together).
 
 ### 1.2 Out of Scope (for v1)
 
-- Web UI / admin console
+- Web UI / admin console (planned for v2; see `PRD.md` 10.1.1)
 - Multi-database support beyond PostgreSQL
 - Full Spring Boot 3.x migration work (tracked separately; see `docs/boot-support-strategy.md`)
 
@@ -113,3 +113,10 @@ CDC-specific (currently pinned in `cdc-service/pom.xml`):
 
 - Boot 3.x migration planning and prerequisites are tracked in `docs/boot-support-strategy.md`.
 - Dependency baselines and compatibility targets should be captured in a version matrix and validated via CI before Step 2/3 execution.
+
+## 11. Future Work: Admin Console (v2)
+
+- The UI should be deployed as a separate frontend (static hosting) or served via the gateway; keep services API-only.
+- All management APIs must be protected by JWT + `ADMIN` role.
+- Audit logging is required for state-changing actions (pipeline control, configuration changes, role changes).
+- Prefer integrating with existing observability backends (Actuator endpoints, Zipkin) instead of introducing bespoke log storage.
