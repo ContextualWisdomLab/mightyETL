@@ -124,8 +124,6 @@ public class SchemaChangeReplicaApplier {
                         truncateForLog(ddl),
                         e
                 );
-            } else {
-                log.error("Failed to apply schema change DDL on replica (topic={})", topic, e);
             }
             throw e;
         }
