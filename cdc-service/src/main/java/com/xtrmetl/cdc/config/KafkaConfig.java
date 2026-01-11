@@ -1,6 +1,9 @@
 package com.xtrmetl.cdc.config;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.kafka.common.TopicPartition;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.kafka.core.ConsumerFactory;
@@ -18,8 +21,15 @@ import org.springframework.util.backoff.FixedBackOff;
 @Configuration
 public class KafkaConfig {
 
+    private static final Logger log = LoggerFactory.getLogger(KafkaConfig.class);
+    private static final int MAX_CONCURRENCY = 32;
+
     @Bean
-    public DefaultErrorHandler kafkaListenerErrorHandler(KafkaTemplate<String, String> kafkaTemplate) {
+    public DefaultErrorHandler kafkaListenerErrorHandler(
+            KafkaTemplate<String, String> kafkaTemplate,
+            @Value("${xtrmetl.replica.kafka.retry-backoff-ms:1000}") long retryBackoffMs,
+            @Value("${xtrmetl.replica.kafka.retry-max-attempts:30}") long retryMaxAttempts
+    ) {
         @SuppressWarnings("unchecked")
         KafkaOperations<Object, Object> operations = (KafkaOperations<Object, Object>) (KafkaOperations<?, ?>) kafkaTemplate;
 
@@ -28,7 +38,10 @@ public class KafkaConfig {
                 (record, ex) -> new TopicPartition(record.topic() + ".DLT", record.partition())
         );
 
-        DefaultErrorHandler errorHandler = new DefaultErrorHandler(recoverer, new FixedBackOff(1000L, 3L));
+        DefaultErrorHandler errorHandler = new DefaultErrorHandler(
+                recoverer,
+                new FixedBackOff(retryBackoffMs, retryMaxAttempts)
+        );
         errorHandler.addNotRetryableExceptions(IllegalArgumentException.class, IllegalStateException.class);
         return errorHandler;
     }
@@ -36,10 +49,31 @@ public class KafkaConfig {
     @Bean
     public ConcurrentKafkaListenerContainerFactory<String, String> kafkaListenerContainerFactory(
             ConsumerFactory<String, String> consumerFactory,
-            DefaultErrorHandler kafkaListenerErrorHandler
+            DefaultErrorHandler kafkaListenerErrorHandler,
+            @Value("${xtrmetl.replica.kafka.concurrency:1}") int concurrency
     ) {
         ConcurrentKafkaListenerContainerFactory<String, String> factory = new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(consumerFactory);
+
+        int effectiveConcurrency = Math.max(1, concurrency);
+        if (concurrency < 1) {
+            log.warn("Invalid xtrmetl.replica.kafka.concurrency={} (must be >= 1); using {}", concurrency, effectiveConcurrency);
+        }
+        if (effectiveConcurrency > MAX_CONCURRENCY) {
+            log.warn(
+                    "xtrmetl.replica.kafka.concurrency={} is unusually high; capping to {} to avoid resource exhaustion",
+                    effectiveConcurrency,
+                    MAX_CONCURRENCY
+            );
+            effectiveConcurrency = MAX_CONCURRENCY;
+        }
+        if (effectiveConcurrency > 1) {
+            log.warn(
+                    "xtrmetl.replica.kafka.concurrency={} may increase out-of-order processing risk between DDL and data events across partitions; prefer concurrency=1 for DDL replication scenarios",
+                    effectiveConcurrency
+            );
+        }
+        factory.setConcurrency(effectiveConcurrency);
 
         // Commit offsets only after a record has been successfully applied to the replica DB.
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.RECORD);

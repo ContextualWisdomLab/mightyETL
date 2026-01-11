@@ -631,6 +631,30 @@ Options for high availability:
 2. Table partitioning: Different instances monitor different tables
 3. Leader election: Use ZooKeeper/Consul for leader election
 
+### 10.3 Replica Replication Ordering
+
+When `xtrmetl.replica.enabled=true`, the CDC service can also consume CDC topics and apply them to a replica DB.
+
+**Important**: Kafka ordering is guaranteed only within a single partition of a single topic. Schema-change events
+(`*.schema-changes`) and data events (e.g. `*.public.processed_data`) can arrive and be processed out-of-order.
+
+Mitigations in this codebase:
+
+- Single listener container (default `concurrency=1`) and `AckMode.RECORD` (commit only after replica apply succeeds)
+- Retry + dead-letter routing via `DefaultErrorHandler`/`.DLT` to tolerate transient schema/data race windows
+
+Tuning knobs (replica application, DDL handling, and CDC schema changes):
+
+- `xtrmetl.replica.kafka.retry-backoff-ms` (default: `1000`): backoff (ms) between retry attempts when replica apply fails
+- `xtrmetl.replica.kafka.retry-max-attempts` (default: `30`): maximum retry attempts before routing to the dead-letter topic (≈30s with defaults)
+- `xtrmetl.replica.kafka.concurrency` (default: `1`): number of concurrent listener threads for replica consumption
+- `xtrmetl.replica.ddl-enabled` (default: `false`): enable/disable applying DDL events (`*.schema-changes`) on the replica
+- `xtrmetl.replica.ddl-validation-mode` (default: `none`): DDL validation strategy; `none` (no validation/blocking), `whitelist`, or `blocklist` (alias: `blacklist`)
+- `xtrmetl.replica.ddl-allowed-prefixes`: comma-separated DDL prefixes allowed when `ddl-validation-mode=whitelist`
+- `xtrmetl.replica.ddl-blocked-prefixes` (effective only when `ddl-validation-mode=blocklist`; default blocklist includes `DROP TABLE`, `DROP SCHEMA`, `DROP DATABASE`, `TRUNCATE`): DDL prefixes blocked in blocklist mode
+- `CDC_INCLUDE_SCHEMA_CHANGES` (default: `true`): controls whether Debezium emits schema change events (`*.schema-changes`)
+- **PostgreSQL requirement**: schema-change DDL idempotency rewrites assume PostgreSQL `>= 9.6` (notably `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`)
+
 ---
 
 **Document Version**: 1.0  
