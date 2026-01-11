@@ -1,0 +1,13 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:base"],
+  "timezone": "Asia/Seoul",
+  "labels": ["dependencies", "renovate"],
+  "enabledManagers": ["docker-compose", "dockerfile"],
+  "packageRules": [
+    {
+      "matchManagers": ["docker-compose", "dockerfile"],
+      "groupName": "docker images"
+    }
+  ]
+}
