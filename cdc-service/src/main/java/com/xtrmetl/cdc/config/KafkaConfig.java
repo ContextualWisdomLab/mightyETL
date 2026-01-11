@@ -1,5 +1,7 @@
 package com.xtrmetl.cdc.config;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.kafka.common.TopicPartition;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
@@ -18,6 +20,9 @@ import org.springframework.util.backoff.FixedBackOff;
  */
 @Configuration
 public class KafkaConfig {
+
+    private static final Logger log = LoggerFactory.getLogger(KafkaConfig.class);
+    private static final int MAX_CONCURRENCY = 32;
 
     @Bean
     public DefaultErrorHandler kafkaListenerErrorHandler(
@@ -49,7 +54,20 @@ public class KafkaConfig {
     ) {
         ConcurrentKafkaListenerContainerFactory<String, String> factory = new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(consumerFactory);
-        factory.setConcurrency(Math.max(1, concurrency));
+
+        int effectiveConcurrency = Math.max(1, concurrency);
+        if (concurrency < 1) {
+            log.warn("Invalid xtrmetl.replica.kafka.concurrency={} (must be >= 1); using {}", concurrency, effectiveConcurrency);
+        }
+        if (effectiveConcurrency > MAX_CONCURRENCY) {
+            log.warn(
+                    "xtrmetl.replica.kafka.concurrency={} is unusually high; capping to {} to avoid resource exhaustion",
+                    effectiveConcurrency,
+                    MAX_CONCURRENCY
+            );
+            effectiveConcurrency = MAX_CONCURRENCY;
+        }
+        factory.setConcurrency(effectiveConcurrency);
 
         // Commit offsets only after a record has been successfully applied to the replica DB.
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.RECORD);
