@@ -105,7 +105,7 @@ The platform consists of five independent microservices:
 #### 3.2.2 Technology Stack
 
 - **Runtime**: Java 25
-- **Framework**: Spring Boot 3.2.12, Spring Cloud 2023.0.5
+- **Framework**: Spring Boot 3.5.9, Spring Cloud 2025.0.1
 - **Database**: PostgreSQL
 - **Messaging**: Apache Kafka
 - **Service Discovery**: Netflix Eureka

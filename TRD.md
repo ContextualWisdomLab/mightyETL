@@ -34,8 +34,8 @@ It complements `PRD.md` (what/why) and `ARCHITECTURE.md` (how it fits together).
 
 Pinned in `pom.xml` unless noted otherwise:
 
-- Spring Boot: `3.2.12`
-- Spring Cloud: `2023.0.5`
+- Spring Boot: `3.5.9`
+- Spring Cloud: `2025.0.1`
 - Compiler target: `maven-compiler-plugin` uses `release=${java.version}` (Java 25)
 
 CDC-specific (currently pinned in `cdc-service/pom.xml`):

@@ -440,8 +440,8 @@ docker build -t xtrmetl/eureka-server:latest ./eureka-server
 | Component | Technology | Version |
 | ----------- | ----------- | --------- |
 | Runtime | Java | 25 |
-| Framework | Spring Boot | 3.2.12 |
-| Cloud | Spring Cloud | 2023.0.5 |
+| Framework | Spring Boot | 3.5.9 |
+| Cloud | Spring Cloud | 2025.0.1 |
 | CDC Engine | Debezium | 3.4.0.Final |
 | Database | PostgreSQL | 12+ |
 | Messaging | Apache Kafka | Latest |

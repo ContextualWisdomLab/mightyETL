@@ -2,8 +2,8 @@
 
 ## Decision
 
-- Baseline is Spring Boot 3.2.x (3.2.12) with Java 25.
-- Spring Cloud baseline is 2023.x (2023.0.5).
+- Baseline is Spring Boot 3.5.x (3.5.9) with Java 25.
+- Spring Cloud baseline is 2025.0.x (2025.0.1).
 
 ## Rationale
 
@@ -15,7 +15,7 @@
 - Modules: cdc-service, etl-service, config-server, eureka-server, zuul-gateway
 - Expected changes:
   - Java 25 baseline and Jakarta namespace migration
-  - Spring Cloud BOM upgrade (`org.springframework.cloud:spring-cloud-dependencies:2023.0.2+` (Leyton), aligned with Boot 3.2.x)
+  - Spring Cloud BOM upgrade (`org.springframework.cloud:spring-cloud-dependencies:2025.0.x`, aligned with Boot 3.5.x)
   - Zuul replacement (Spring Cloud Gateway) with route definitions replacing Zuul filters
   - Spring Kafka async API: replace ListenableFuture usage with CompletableFuture
   - Test updates for API and package changes
@@ -58,10 +58,10 @@
 
 ### Compatibility Targets
 
-- Spring Boot 3.2.x with Spring Cloud `org.springframework.cloud:spring-cloud-dependencies:2023.0.2+` (Leyton)
-- Spring Kafka 3.1.x (CompletableFuture-based KafkaTemplate)
+- Spring Boot 3.5.x with Spring Cloud `org.springframework.cloud:spring-cloud-dependencies:2025.0.x`
+- Spring Kafka 3.3.x (CompletableFuture-based KafkaTemplate)
 - Debezium 3.x+ for embedded engine (Jakarta namespace compatible); alternatively run Debezium via Kafka Connect (separate process/JVM)
-- Spring Cloud Gateway 4.0.x (via Spring Cloud 2023.0.x)
+- Spring Cloud Gateway 4.3.x (via Spring Cloud 2025.0.x)
 - Note: patch versions and tested upper bounds are pinned during Step 2 and tracked in the Compatibility Matrix + CI output.
 
 ### Verification Gates
@@ -99,8 +99,8 @@
 
 | Profile | Java | Boot | Cloud | Notes |
 | --- | --- | --- | --- | --- |
-| Baseline (current) | 25 | 3.2.12 | 2023.0.5 | Baseline stack for ongoing development |
-| Candidate (target) | 25 | 3.2.x | 2023.x | Track newer patch versions within the same major/minor line |
+| Baseline (current) | 25 | 3.5.9 | 2025.0.1 | Baseline stack for ongoing development |
+| Candidate (target) | 25 | 3.5.x | 2025.0.x | Track newer patch versions within the same major/minor line |
 
 #### Weekly CI Compatibility Coverage
 
