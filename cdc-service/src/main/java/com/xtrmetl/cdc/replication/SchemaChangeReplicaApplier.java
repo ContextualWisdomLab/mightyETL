@@ -13,8 +13,10 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.Locale;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @ConditionalOnProperty(prefix = "xtrmetl.replica", name = "enabled", havingValue = "true")
@@ -33,6 +35,9 @@ public class SchemaChangeReplicaApplier {
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
     private final boolean ddlEnabled;
+    private final DdlValidationMode ddlValidationMode;
+    private final Set<String> ddlAllowedPrefixes;
+    private final Set<String> ddlBlockedPrefixes;
 
     /**
      * 레플리카에 대한 DDL 적용을 담당하는 SchemaChangeReplicaApplier 인스턴스를 초기화한다.
@@ -40,15 +45,24 @@ public class SchemaChangeReplicaApplier {
      * @param jdbcTemplate  레플리카 데이터베이스에 DDL을 실행하는 JdbcTemplate (빈 이름 "replicaJdbcTemplate" 사용)
      * @param objectMapper  Debezium 이벤트의 JSON 페이로드에서 DDL을 추출하기 위해 사용하는 ObjectMapper
      * @param ddlEnabled    레플리카에 DDL 적용을 활성화할지 여부; `true`이면 수신된 스키마 변경 DDL을 실행함
+     * @param ddlValidationMode DDL 적용 전 검증 모드 (none|whitelist|blacklist)
+     * @param ddlAllowedPrefixes whitelist 모드에서 허용할 DDL 접두어(Comma-separated)
+     * @param ddlBlockedPrefixes blacklist 모드에서 차단할 DDL 접두어(Comma-separated)
      */
     public SchemaChangeReplicaApplier(
             @Qualifier("replicaJdbcTemplate") JdbcTemplate jdbcTemplate,
             ObjectMapper objectMapper,
-            @Value("${xtrmetl.replica.ddl-enabled:true}") boolean ddlEnabled
+            @Value("${xtrmetl.replica.ddl-enabled:true}") boolean ddlEnabled,
+            @Value("${xtrmetl.replica.ddl-validation-mode:none}") String ddlValidationMode,
+            @Value("${xtrmetl.replica.ddl-allowed-prefixes:CREATE TABLE,ALTER TABLE,CREATE INDEX,DROP INDEX}") String ddlAllowedPrefixes,
+            @Value("${xtrmetl.replica.ddl-blocked-prefixes:DROP TABLE,DROP SCHEMA,DROP DATABASE,TRUNCATE}") String ddlBlockedPrefixes
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
         this.ddlEnabled = ddlEnabled;
+        this.ddlValidationMode = DdlValidationMode.from(ddlValidationMode);
+        this.ddlAllowedPrefixes = parseDdlPrefixes(ddlAllowedPrefixes);
+        this.ddlBlockedPrefixes = parseDdlPrefixes(ddlBlockedPrefixes);
     }
 
     /**
@@ -78,6 +92,7 @@ public class SchemaChangeReplicaApplier {
             return;
         }
         ddl = makeIdempotent(ddl);
+        validateDdl(topic, ddl);
 
         try {
             jdbcTemplate.execute(ddl);
@@ -152,5 +167,63 @@ public class SchemaChangeReplicaApplier {
             cursor = cursor.getCause();
         }
         return false;
+    }
+
+    private void validateDdl(String topic, String ddl) {
+        if (ddlValidationMode == DdlValidationMode.NONE) {
+            return;
+        }
+
+        String normalized = normalizeForValidation(ddl);
+
+        if (ddlValidationMode == DdlValidationMode.BLACKLIST) {
+            boolean blocked = ddlBlockedPrefixes.stream().anyMatch(normalized::startsWith);
+            if (blocked) {
+                log.warn("Blocked DDL by validation policy (topic={}): {}", topic, normalized);
+                throw new IllegalArgumentException("DDL blocked by validation policy");
+            }
+            return;
+        }
+
+        boolean allowed = ddlAllowedPrefixes.stream().anyMatch(normalized::startsWith);
+        if (!allowed) {
+            log.warn("Blocked DDL by validation policy (topic={}): {}", topic, normalized);
+            throw new IllegalArgumentException("DDL blocked by validation policy");
+        }
+    }
+
+    private static Set<String> parseDdlPrefixes(String csv) {
+        if (csv == null || csv.isBlank()) {
+            return Set.of();
+        }
+
+        return Arrays.stream(csv.split(","))
+                .map(String::trim)
+                .filter(value -> !value.isEmpty())
+                .map(SchemaChangeReplicaApplier::normalizeForValidation)
+                .collect(Collectors.toUnmodifiableSet());
+    }
+
+    private static String normalizeForValidation(String ddl) {
+        return ddl.trim().replaceAll("\\s+", " ").toUpperCase(Locale.ROOT);
+    }
+
+    private enum DdlValidationMode {
+        NONE,
+        WHITELIST,
+        BLACKLIST;
+
+        static DdlValidationMode from(String value) {
+            if (value == null || value.isBlank()) {
+                return NONE;
+            }
+            String normalized = value.trim().toUpperCase(Locale.ROOT);
+            for (DdlValidationMode mode : values()) {
+                if (mode.name().equals(normalized)) {
+                    return mode;
+                }
+            }
+            return NONE;
+        }
     }
 }

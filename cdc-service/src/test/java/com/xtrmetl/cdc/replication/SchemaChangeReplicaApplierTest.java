@@ -38,9 +38,20 @@ class SchemaChangeReplicaApplierTest {
         objectMapper = new ObjectMapper();
     }
 
+    private SchemaChangeReplicaApplier applier(boolean ddlEnabled) {
+        return new SchemaChangeReplicaApplier(
+                jdbcTemplate,
+                objectMapper,
+                ddlEnabled,
+                "none",
+                "",
+                ""
+        );
+    }
+
     @Test
     void ignoresWhenDdlReplicationIsDisabled() {
-        SchemaChangeReplicaApplier applier = new SchemaChangeReplicaApplier(jdbcTemplate, objectMapper, false);
+        SchemaChangeReplicaApplier applier = applier(false);
 
         applier.apply("xtrmetl-cdc.schema-changes", null, "{\"payload\":{\"ddl\":\"CREATE TABLE test(id int)\"}}");
 
@@ -49,7 +60,7 @@ class SchemaChangeReplicaApplierTest {
 
     @Test
     void ignoresNonSchemaChangeTopics() {
-        SchemaChangeReplicaApplier applier = new SchemaChangeReplicaApplier(jdbcTemplate, objectMapper, true);
+        SchemaChangeReplicaApplier applier = applier(true);
 
         applier.apply("xtrmetl-cdc.public.processed_data", null, "{\"payload\":{\"ddl\":\"CREATE TABLE test(id int)\"}}");
 
@@ -58,7 +69,7 @@ class SchemaChangeReplicaApplierTest {
 
     @Test
     void ignoresBlankValues() {
-        SchemaChangeReplicaApplier applier = new SchemaChangeReplicaApplier(jdbcTemplate, objectMapper, true);
+        SchemaChangeReplicaApplier applier = applier(true);
 
         applier.apply("xtrmetl-cdc.schema-changes", null, null);
         applier.apply("xtrmetl-cdc.schema-changes", null, "  ");
@@ -68,7 +79,7 @@ class SchemaChangeReplicaApplierTest {
 
     @Test
     void ignoresWhenDdlIsMissing() {
-        SchemaChangeReplicaApplier applier = new SchemaChangeReplicaApplier(jdbcTemplate, objectMapper, true);
+        SchemaChangeReplicaApplier applier = applier(true);
 
         applier.apply("xtrmetl-cdc.schema-changes", null, "{\"payload\":{}}");
 
@@ -77,7 +88,7 @@ class SchemaChangeReplicaApplierTest {
 
     @Test
     void executesDdlWhenPresent() {
-        SchemaChangeReplicaApplier applier = new SchemaChangeReplicaApplier(jdbcTemplate, objectMapper, true);
+        SchemaChangeReplicaApplier applier = applier(true);
 
         String ddl = "CREATE TABLE test(id int)";
         applier.apply("xtrmetl-cdc.schema-changes", null, "{\"payload\":{\"ddl\":\"" + ddl + "\"}}");
@@ -87,7 +98,7 @@ class SchemaChangeReplicaApplierTest {
 
     @Test
     void executesDdlFromRootWhenPayloadIsMissing() {
-        SchemaChangeReplicaApplier applier = new SchemaChangeReplicaApplier(jdbcTemplate, objectMapper, true);
+        SchemaChangeReplicaApplier applier = applier(true);
 
         String ddl = "CREATE TABLE test(id int)";
         applier.apply("xtrmetl-cdc.schema-changes", null, "{\"ddl\":\"" + ddl + "\"}");
@@ -96,8 +107,26 @@ class SchemaChangeReplicaApplierTest {
     }
 
     @Test
+    void blocksDdlWhenValidationModeIsBlacklist() {
+        SchemaChangeReplicaApplier applier = new SchemaChangeReplicaApplier(
+                jdbcTemplate,
+                objectMapper,
+                true,
+                "blacklist",
+                "",
+                "DROP TABLE,DROP SCHEMA,DROP DATABASE,TRUNCATE"
+        );
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> applier.apply("xtrmetl-cdc.schema-changes", null, "{\"payload\":{\"ddl\":\"DROP TABLE test\"}}")
+        );
+        verifyNoInteractions(jdbcTemplate);
+    }
+
+    @Test
     void ignoresDuplicateDdlErrors() {
-        SchemaChangeReplicaApplier applier = new SchemaChangeReplicaApplier(jdbcTemplate, objectMapper, true);
+        SchemaChangeReplicaApplier applier = applier(true);
         Logger logger = (Logger) LoggerFactory.getLogger(SchemaChangeReplicaApplier.class);
         ListAppender<ILoggingEvent> appender = new ListAppender<>();
         appender.start();
@@ -129,7 +158,7 @@ class SchemaChangeReplicaApplierTest {
 
     @Test
     void rethrowsAndLogsWhenJdbcExecutionFails() {
-        SchemaChangeReplicaApplier applier = new SchemaChangeReplicaApplier(jdbcTemplate, objectMapper, true);
+        SchemaChangeReplicaApplier applier = applier(true);
         Logger logger = (Logger) LoggerFactory.getLogger(SchemaChangeReplicaApplier.class);
         ListAppender<ILoggingEvent> appender = new ListAppender<>();
         appender.start();
