@@ -24,7 +24,6 @@ public class SchemaChangeReplicaApplier {
 
     private static final Logger log = LoggerFactory.getLogger(SchemaChangeReplicaApplier.class);
 
-    private static final String SCHEMA_CHANGES_SUFFIX = ".schema-changes";
     private static final int DDL_LOG_MAX_LENGTH = 500;
     private static final Set<String> IDEMPOTENT_DDL_SQL_STATES = Set.of(
             "42P06", // duplicate_schema
@@ -87,7 +86,7 @@ public class SchemaChangeReplicaApplier {
         if (!ddlEnabled) {
             return;
         }
-        if (topic == null || !topic.endsWith(SCHEMA_CHANGES_SUFFIX)) {
+        if (topic == null || !topic.endsWith(ReplicaTopics.SCHEMA_CHANGES_SUFFIX)) {
             return;
         }
         if (valueJson == null || valueJson.isBlank()) {

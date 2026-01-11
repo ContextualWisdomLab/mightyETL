@@ -9,8 +9,6 @@ import org.springframework.stereotype.Component;
 @ConditionalOnProperty(prefix = "xtrmetl.replica", name = "enabled", havingValue = "true")
 public class CdcReplicaConsumer {
 
-    private static final String SCHEMA_CHANGES_SUFFIX = ".schema-changes";
-
     private final ProcessedDataReplicaApplier processedDataReplicaApplier;
     private final SchemaChangeReplicaApplier schemaChangeReplicaApplier;
 
@@ -41,7 +39,7 @@ public class CdcReplicaConsumer {
     )
     public void onMessage(ConsumerRecord<String, String> record) {
         String topic = record.topic();
-        if (topic != null && topic.endsWith(SCHEMA_CHANGES_SUFFIX)) {
+        if (topic != null && topic.endsWith(ReplicaTopics.SCHEMA_CHANGES_SUFFIX)) {
             schemaChangeReplicaApplier.apply(topic, record.key(), record.value());
             return;
         }
