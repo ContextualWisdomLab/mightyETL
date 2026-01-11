@@ -9,6 +9,21 @@ spring:
   sleuth:
     sampler:
       probability: 1.0
+  cloud:
+    gateway:
+      routes:
+        - id: etl-service
+          uri: lb://etl-service
+          predicates:
+            - Path=/etl/**
+          filters:
+            - StripPrefix=1
+        - id: cdc-service
+          uri: lb://cdc-service
+          predicates:
+            - Path=/cdc/**
+          filters:
+            - StripPrefix=1
 
 management:
   endpoints:
@@ -19,15 +34,6 @@ management:
     health:
       probes:
         enabled: true
-
-zuul:
-  routes:
-    etl-service:
-      path: /etl/**
-      serviceId: etl-service
-    cdc-service:
-      path: /cdc/**
-      serviceId: cdc-service
 
 eureka:
   client:
