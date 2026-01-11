@@ -643,18 +643,16 @@ Mitigations in this codebase:
 - Single listener container (default `concurrency=1`) and `AckMode.RECORD` (commit only after replica apply succeeds)
 - Retry + dead-letter routing via `DefaultErrorHandler`/`.DLT` to tolerate transient schema/data race windows
 
-Tuning knobs:
+Tuning knobs (replica application, DDL handling, and CDC schema changes):
 
-- `xtrmetl.replica.kafka.retry-backoff-ms`
-- `xtrmetl.replica.kafka.retry-max-attempts`
-- `xtrmetl.replica.kafka.concurrency`
-
-DDL replication controls:
-
+- `xtrmetl.replica.kafka.retry-backoff-ms`: backoff (ms) between retry attempts when replica apply fails
+- `xtrmetl.replica.kafka.retry-max-attempts`: maximum retry attempts before routing to the dead-letter topic
+- `xtrmetl.replica.kafka.concurrency`: number of concurrent listener threads for replica consumption
 - `xtrmetl.replica.ddl-enabled` (default: `true`): enable/disable applying DDL events (`*.schema-changes`) on the replica
-- `xtrmetl.replica.ddl-validation-mode` (default: `none`): `none`, `whitelist`, or `blacklist`
-- `xtrmetl.replica.ddl-allowed-prefixes`: comma-separated prefixes used when `ddl-validation-mode=whitelist`
-- `xtrmetl.replica.ddl-blocked-prefixes` (default includes `DROP TABLE`, `DROP SCHEMA`, `DROP DATABASE`, `TRUNCATE`): prefixes used when `ddl-validation-mode=blacklist`
+- `xtrmetl.replica.ddl-validation-mode` (default: `none`): DDL validation strategy; `none`, `whitelist`, or `blacklist`
+- `xtrmetl.replica.ddl-allowed-prefixes`: comma-separated DDL prefixes allowed when `ddl-validation-mode=whitelist`
+- `xtrmetl.replica.ddl-blocked-prefixes` (default includes `DROP TABLE`, `DROP SCHEMA`, `DROP DATABASE`, `TRUNCATE`): DDL prefixes blocked when `ddl-validation-mode=blacklist`
+- `CDC_INCLUDE_SCHEMA_CHANGES` (default: `true`): controls whether Debezium emits schema change events (`*.schema-changes`)
 
 ---
 
