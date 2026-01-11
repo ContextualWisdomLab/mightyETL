@@ -12,6 +12,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.sql.SQLException;
+import java.util.Locale;
+import java.util.Set;
 
 @Service
 @ConditionalOnProperty(prefix = "xtrmetl.replica", name = "enabled", havingValue = "true")
@@ -20,6 +23,12 @@ public class SchemaChangeReplicaApplier {
     private static final Logger log = LoggerFactory.getLogger(SchemaChangeReplicaApplier.class);
 
     private static final String SCHEMA_CHANGES_SUFFIX = ".schema-changes";
+    private static final Set<String> IDEMPOTENT_DDL_SQL_STATES = Set.of(
+            "42P06", // duplicate_schema
+            "42P07", // duplicate_table
+            "42701", // duplicate_column
+            "42710"  // duplicate_object
+    );
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
@@ -68,11 +77,16 @@ public class SchemaChangeReplicaApplier {
         if (ddl == null || ddl.isBlank()) {
             return;
         }
+        ddl = makeIdempotent(ddl);
 
         try {
             jdbcTemplate.execute(ddl);
             log.info("Applied schema change DDL on replica (topic={})", topic);
         } catch (DataAccessException e) {
+            if (isIdempotentDuplicate(e)) {
+                log.info("Schema change DDL already applied; skipping duplicate (topic={})", topic);
+                return;
+            }
             log.error("Failed to apply schema change DDL on replica (topic={})", topic, e);
             throw e;
         }
@@ -96,5 +110,47 @@ public class SchemaChangeReplicaApplier {
             log.warn("Failed to parse Debezium schema change JSON; skipping DDL apply", e);
             return null;
         }
+    }
+
+    private String makeIdempotent(String ddl) {
+        if (ddl == null) {
+            return null;
+        }
+        String rewritten = ddl.trim();
+
+        rewritten = rewritten.replaceFirst(
+                "(?i)^CREATE\\s+TABLE\\s+(?!IF\\s+NOT\\s+EXISTS\\b)",
+                "CREATE TABLE IF NOT EXISTS "
+        );
+
+        String upper = rewritten.toUpperCase(Locale.ROOT);
+        if (upper.startsWith("ALTER TABLE")) {
+            rewritten = rewritten.replaceFirst(
+                    "(?i)\\bADD\\s+COLUMN\\s+(?!IF\\s+NOT\\s+EXISTS\\b)",
+                    "ADD COLUMN IF NOT EXISTS "
+            );
+        }
+
+        return rewritten;
+    }
+
+    private boolean isIdempotentDuplicate(DataAccessException exception) {
+        Throwable cursor = exception;
+        while (cursor != null) {
+            if (cursor instanceof SQLException) {
+                SQLException sqlException = (SQLException) cursor;
+                String sqlState = sqlException.getSQLState();
+                if (sqlState != null && IDEMPOTENT_DDL_SQL_STATES.contains(sqlState)) {
+                    return true;
+                }
+
+                String message = sqlException.getMessage();
+                if (message != null && message.toLowerCase(Locale.ROOT).contains("already exists")) {
+                    return true;
+                }
+            }
+            cursor = cursor.getCause();
+        }
+        return false;
     }
 }

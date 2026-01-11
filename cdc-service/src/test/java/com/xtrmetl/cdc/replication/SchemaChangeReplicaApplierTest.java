@@ -14,6 +14,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import java.sql.SQLException;
+
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -79,7 +82,7 @@ class SchemaChangeReplicaApplierTest {
         String ddl = "CREATE TABLE test(id int)";
         applier.apply("xtrmetl-cdc.schema-changes", null, "{\"payload\":{\"ddl\":\"" + ddl + "\"}}");
 
-        verify(jdbcTemplate).execute(eq(ddl));
+        verify(jdbcTemplate).execute(eq("CREATE TABLE IF NOT EXISTS test(id int)"));
     }
 
     @Test
@@ -89,7 +92,39 @@ class SchemaChangeReplicaApplierTest {
         String ddl = "CREATE TABLE test(id int)";
         applier.apply("xtrmetl-cdc.schema-changes", null, "{\"ddl\":\"" + ddl + "\"}");
 
-        verify(jdbcTemplate).execute(eq(ddl));
+        verify(jdbcTemplate).execute(eq("CREATE TABLE IF NOT EXISTS test(id int)"));
+    }
+
+    @Test
+    void ignoresDuplicateDdlErrors() {
+        SchemaChangeReplicaApplier applier = new SchemaChangeReplicaApplier(jdbcTemplate, objectMapper, true);
+        Logger logger = (Logger) LoggerFactory.getLogger(SchemaChangeReplicaApplier.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+
+        try {
+            String ddl = "CREATE TABLE test(id int)";
+            String rewritten = "CREATE TABLE IF NOT EXISTS test(id int)";
+            DataAccessException duplicate = new DataAccessException(
+                    "relation already exists",
+                    new SQLException("relation already exists", "42P07")
+            ) {};
+            doThrow(duplicate).when(jdbcTemplate).execute(eq(rewritten));
+
+            assertDoesNotThrow(() ->
+                    applier.apply("xtrmetl-cdc.schema-changes", null, "{\"payload\":{\"ddl\":\"" + ddl + "\"}}")
+            );
+
+            verify(jdbcTemplate).execute(eq(rewritten));
+            assertTrue(
+                    appender.list.stream()
+                            .anyMatch(event -> event.getLevel() == Level.INFO
+                                    && event.getFormattedMessage().contains("already applied"))
+            );
+        } finally {
+            logger.detachAppender(appender);
+        }
     }
 
     @Test
@@ -102,8 +137,9 @@ class SchemaChangeReplicaApplierTest {
 
         try {
             String ddl = "CREATE TABLE test(id int)";
+            String rewritten = "CREATE TABLE IF NOT EXISTS test(id int)";
             DataAccessException failure = new DataAccessException("boom") {};
-            doThrow(failure).when(jdbcTemplate).execute(eq(ddl));
+            doThrow(failure).when(jdbcTemplate).execute(eq(rewritten));
 
             DataAccessException thrown = assertThrows(
                     DataAccessException.class,
