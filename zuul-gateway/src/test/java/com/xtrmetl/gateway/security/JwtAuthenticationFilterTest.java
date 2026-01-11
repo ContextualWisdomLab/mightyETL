@@ -1,66 +1,76 @@
 package com.xtrmetl.gateway.security;
 
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
-import org.springframework.mock.web.MockHttpServletRequest;
-import org.springframework.mock.web.MockHttpServletResponse;
-import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.cloud.gateway.filter.GatewayFilterChain;
+import org.springframework.mock.http.server.reactive.MockServerHttpRequest;
+import org.springframework.mock.web.server.MockServerWebExchange;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.ReactiveSecurityContextHolder;
+import org.springframework.security.core.context.SecurityContext;
 
-import javax.servlet.FilterChain;
-import javax.servlet.ServletException;
-import java.io.IOException;
+import java.util.concurrent.atomic.AtomicReference;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 @SuppressWarnings("null")
 class JwtAuthenticationFilterTest {
 
-    @InjectMocks
-    private JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final JwtAuthenticationFilter jwtAuthenticationFilter = new JwtAuthenticationFilter();
 
-    @Mock
-    private FilterChain filterChain;
+    @Test
+    void addsAuthenticationToReactorContextWhenValidToken() {
+        MockServerWebExchange exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.get("/")
+                        .header("Authorization", "Bearer valid_token")
+                        .build()
+        );
 
-    private MockHttpServletRequest request;
-    private MockHttpServletResponse response;
+        AtomicReference<Authentication> authenticationRef = new AtomicReference<>();
+        GatewayFilterChain chain = ignored -> ReactiveSecurityContextHolder.getContext()
+                .map(SecurityContext::getAuthentication)
+                .doOnNext(authenticationRef::set)
+                .then();
 
-    @BeforeEach
-    void setUp() {
-        MockitoAnnotations.openMocks(this);
-        request = new MockHttpServletRequest();
-        response = new MockHttpServletResponse();
-        SecurityContextHolder.clearContext();
+        jwtAuthenticationFilter.filter(exchange, chain).block();
+
+        Authentication authentication = authenticationRef.get();
+        assertNotNull(authentication);
+        assertEquals("user", authentication.getPrincipal());
     }
 
     @Test
-    void testDoFilterInternalWithValidToken() throws ServletException, IOException {
-        request.addHeader("Authorization", "Bearer valid_token");
+    void doesNotAttachAuthenticationWhenTokenIsInvalid() {
+        MockServerWebExchange exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.get("/")
+                        .header("Authorization", "Bearer invalid_token")
+                        .build()
+        );
 
-        jwtAuthenticationFilter.doFilterInternal(request, response, filterChain);
+        AtomicReference<Authentication> authenticationRef = new AtomicReference<>();
+        GatewayFilterChain chain = ignored -> ReactiveSecurityContextHolder.getContext()
+                .map(SecurityContext::getAuthentication)
+                .doOnNext(authenticationRef::set)
+                .then();
 
-        assertNotNull(SecurityContextHolder.getContext().getAuthentication());
-        verify(filterChain, times(1)).doFilter(request, response);
+        jwtAuthenticationFilter.filter(exchange, chain).block();
+
+        assertNull(authenticationRef.get());
     }
 
     @Test
-    void testDoFilterInternalWithInvalidToken() throws ServletException, IOException {
-        request.addHeader("Authorization", "Bearer invalid_token");
+    void doesNotAttachAuthenticationWhenTokenIsMissing() {
+        MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest.get("/").build());
 
-        jwtAuthenticationFilter.doFilterInternal(request, response, filterChain);
+        AtomicReference<Authentication> authenticationRef = new AtomicReference<>();
+        GatewayFilterChain chain = ignored -> ReactiveSecurityContextHolder.getContext()
+                .map(SecurityContext::getAuthentication)
+                .doOnNext(authenticationRef::set)
+                .then();
 
-        assertNull(SecurityContextHolder.getContext().getAuthentication());
-        verify(filterChain, times(1)).doFilter(request, response);
-    }
+        jwtAuthenticationFilter.filter(exchange, chain).block();
 
-    @Test
-    void testDoFilterInternalWithNoToken() throws ServletException, IOException {
-        jwtAuthenticationFilter.doFilterInternal(request, response, filterChain);
-
-        assertNull(SecurityContextHolder.getContext().getAuthentication());
-        verify(filterChain, times(1)).doFilter(request, response);
+        assertNull(authenticationRef.get());
     }
 }

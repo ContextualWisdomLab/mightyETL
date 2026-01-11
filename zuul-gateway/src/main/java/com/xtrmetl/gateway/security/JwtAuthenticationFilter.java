@@ -1,47 +1,40 @@
 package com.xtrmetl.gateway.security;
 
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.web.filter.OncePerRequestFilter;
-import org.springframework.security.core.Authentication;
+import org.springframework.cloud.gateway.filter.GatewayFilterChain;
+import org.springframework.cloud.gateway.filter.GlobalFilter;
+import org.springframework.http.HttpHeaders;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import java.util.ArrayList;
-import javax.servlet.FilterChain;
-import javax.servlet.ServletException;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-import org.springframework.lang.NonNull;
-import java.io.IOException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.AuthorityUtils;
+import org.springframework.security.core.context.ReactiveSecurityContextHolder;
+import org.springframework.web.server.ServerWebExchange;
+import reactor.core.publisher.Mono;
 
-public class JwtAuthenticationFilter extends OncePerRequestFilter {
+/**
+ * A very small, gateway-level JWT-like authentication filter.
+ *
+ * <p>This module uses Spring Cloud Gateway (WebFlux), so this filter is implemented using the reactive APIs and
+ * propagates authentication through the Reactor context.
+ */
+public class JwtAuthenticationFilter implements GlobalFilter {
 
     /**
-     * HTTP 요청에서 JWT 유사 토큰을 추출·검증하여 유효한 경우 보안 컨텍스트에 인증 정보를 설정하고 필터 체인을 계속 진행한다.
-     *
-     * @throws ServletException 요청 필터링 처리 중 서블릿 관련 오류가 발생한 경우
-     * @throws IOException      요청 또는 응답 처리 중 입출력 오류가 발생한 경우
+     * Extracts a token from the {@code Authorization} header and, when valid, attaches an {@link Authentication}
+     * to the Reactor context before continuing the filter chain.
      */
     @Override
-    protected void doFilterInternal(@NonNull HttpServletRequest request,
-                                    @NonNull HttpServletResponse response,
-                                    @NonNull FilterChain filterChain)
-            throws ServletException, IOException {
-        
-        String token = extractToken(request);
-        
-        if (token != null && validateToken(token)) {
-            Authentication auth = createAuthentication(token);
-            SecurityContextHolder.getContext().setAuthentication(auth);
-        } else {
-            // Clear the security context if the token is invalid or not present
-            SecurityContextHolder.clearContext();
+    public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+        String token = extractToken(exchange);
+        if (token == null || !validateToken(token)) {
+            return chain.filter(exchange);
         }
-        
-        filterChain.doFilter(request, response);
+
+        Authentication authentication = createAuthentication(token);
+        return chain.filter(exchange).contextWrite(ReactiveSecurityContextHolder.withAuthentication(authentication));
     }
 
-    private String extractToken(HttpServletRequest request) {
-        // Extract token from Authorization header
-        String bearerToken = request.getHeader("Authorization");
+    private String extractToken(ServerWebExchange exchange) {
+        String bearerToken = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
         if (bearerToken != null && bearerToken.startsWith("Bearer ")) {
             return bearerToken.substring(7);
         }
@@ -55,8 +48,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     private Authentication createAuthentication(String token) {
-        // Create and return Authentication object based on the token
-        // This is a simplified version
-        return new UsernamePasswordAuthenticationToken("user", null, new ArrayList<>());
+        return new UsernamePasswordAuthenticationToken("user", token, AuthorityUtils.NO_AUTHORITIES);
     }
 }
