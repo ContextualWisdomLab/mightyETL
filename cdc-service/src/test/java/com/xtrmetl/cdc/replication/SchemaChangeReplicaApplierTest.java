@@ -252,7 +252,25 @@ class SchemaChangeReplicaApplierTest {
     }
 
     @Test
-    void blocksDdlWhenValidationModeIsBlacklist() {
+    void blocksDdlWhenValidationModeIsBlocklist() {
+        SchemaChangeReplicaApplier applier = new SchemaChangeReplicaApplier(
+                jdbcTemplate,
+                objectMapper,
+                true,
+                "blocklist",
+                "",
+                "DROP TABLE,DROP SCHEMA,DROP DATABASE,TRUNCATE"
+        );
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> applier.apply("xtrmetl-cdc.schema-changes", null, "{\"payload\":{\"ddl\":\"DROP TABLE test\"}}")
+        );
+        verifyNoInteractions(jdbcTemplate);
+    }
+
+    @Test
+    void acceptsLegacyBlacklistAsAliasForBlocklist() {
         SchemaChangeReplicaApplier applier = new SchemaChangeReplicaApplier(
                 jdbcTemplate,
                 objectMapper,
