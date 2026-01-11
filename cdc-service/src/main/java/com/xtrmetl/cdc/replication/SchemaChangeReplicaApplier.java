@@ -341,7 +341,7 @@ public class SchemaChangeReplicaApplier {
                     return mode;
                 }
             }
-            return NONE;
+            throw new IllegalArgumentException("Unsupported xtrmetl.replica.ddl-validation-mode: " + value);
         }
     }
 }

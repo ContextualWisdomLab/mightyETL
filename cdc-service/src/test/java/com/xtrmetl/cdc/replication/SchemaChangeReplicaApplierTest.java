@@ -302,6 +302,14 @@ class SchemaChangeReplicaApplierTest {
     }
 
     @Test
+    void rejectsUnknownValidationMode() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new SchemaChangeReplicaApplier(jdbcTemplate, objectMapper, true, "unsupported", "", "")
+        );
+    }
+
+    @Test
     void executesDestructiveDdlWhenValidationModeIsNone() {
         SchemaChangeReplicaApplier applier = applier(true);
 
