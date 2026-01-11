@@ -148,6 +148,23 @@ public class SchemaChangeReplicaApplier {
                 "CREATE TABLE IF NOT EXISTS "
         );
 
+        rewritten = rewritten.replaceFirst(
+                "(?i)^CREATE\\s+UNIQUE\\s+INDEX\\s+CONCURRENTLY\\s+(?!IF\\s+NOT\\s+EXISTS\\b)",
+                "CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS "
+        );
+        rewritten = rewritten.replaceFirst(
+                "(?i)^CREATE\\s+INDEX\\s+CONCURRENTLY\\s+(?!IF\\s+NOT\\s+EXISTS\\b)",
+                "CREATE INDEX CONCURRENTLY IF NOT EXISTS "
+        );
+        rewritten = rewritten.replaceFirst(
+                "(?i)^CREATE\\s+UNIQUE\\s+INDEX\\s+(?!CONCURRENTLY\\b)(?!IF\\s+NOT\\s+EXISTS\\b)",
+                "CREATE UNIQUE INDEX IF NOT EXISTS "
+        );
+        rewritten = rewritten.replaceFirst(
+                "(?i)^CREATE\\s+INDEX\\s+(?!CONCURRENTLY\\b)(?!IF\\s+NOT\\s+EXISTS\\b)",
+                "CREATE INDEX IF NOT EXISTS "
+        );
+
         String upper = rewritten.toUpperCase(Locale.ROOT);
         if (upper.startsWith("ALTER TABLE")) {
             rewritten = rewritten.replaceAll(
