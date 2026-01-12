@@ -13,6 +13,8 @@
 *.txt text eol=lf
 *.json text eol=lf
 *.properties text eol=lf
+*.sh text eol=lf
+*.ps1 text eol=lf
 
 # Explicit binaries.
 *.png binary
