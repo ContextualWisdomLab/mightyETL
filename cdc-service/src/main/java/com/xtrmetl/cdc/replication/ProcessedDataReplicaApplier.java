@@ -10,6 +10,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.util.Objects;
 
 @Service
 @ConditionalOnProperty(prefix = "xtrmetl.replica", name = "enabled", havingValue = "true")
@@ -75,7 +76,7 @@ public class ProcessedDataReplicaApplier {
         }
 
         String data = dataNode.isTextual() ? dataNode.asText() : dataNode.toString();
-        jdbcTemplate.update(UPSERT_SQL, id, data);
+        jdbcTemplate.update(Objects.requireNonNull(UPSERT_SQL), id, data);
     }
 
     private DebeziumEnvelope parseDebeziumEnvelope(String valueJson) {
