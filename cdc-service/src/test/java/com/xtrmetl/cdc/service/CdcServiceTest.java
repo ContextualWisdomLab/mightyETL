@@ -19,16 +19,19 @@ import static org.mockito.Mockito.*;
 
 class CdcServiceTest {
 
-    private final KafkaTemplate<String, String> kafkaTemplate = mock(KafkaTemplate.class);
-
-    @SuppressWarnings("unchecked")
-    private final DebeziumEngine<ChangeEvent<String, String>> debeziumEngine =
-            (DebeziumEngine<ChangeEvent<String, String>>) mock(DebeziumEngine.class);
+    private KafkaTemplate<String, String> kafkaTemplate;
+    private DebeziumEngine<ChangeEvent<String, String>> debeziumEngine;
 
     private CdcService cdcService;
 
     @BeforeEach
     void setUp() {
+        kafkaTemplate = mock(KafkaTemplate.class);
+        @SuppressWarnings("unchecked")
+        DebeziumEngine<ChangeEvent<String, String>> engine =
+                (DebeziumEngine<ChangeEvent<String, String>>) mock(DebeziumEngine.class);
+        debeziumEngine = engine;
+
         cdcService = new CdcService(kafkaTemplate, false);
         ReflectionTestUtils.setField(cdcService, "debeziumEngine", debeziumEngine);
     }
