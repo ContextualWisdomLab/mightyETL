@@ -15,6 +15,7 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -102,7 +103,7 @@ public class SchemaChangeReplicaApplier {
         validateDdl(topic, ddl);
 
         try {
-            jdbcTemplate.execute(ddl);
+            jdbcTemplate.execute(Objects.requireNonNull(ddl));
             if (log.isInfoEnabled()) {
                 log.info("Applied schema change DDL on replica (topic={}, ddl={})", topic, truncateForLog(ddl));
             }

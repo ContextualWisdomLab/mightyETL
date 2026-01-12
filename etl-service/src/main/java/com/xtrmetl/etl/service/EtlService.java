@@ -60,8 +60,8 @@ public class EtlService {
     private String extract(JsonNode record) {
         // Advanced extraction logic
         StringBuilder extracted = new StringBuilder();
-        record.fields().forEachRemaining(field -> 
-            extracted.append(field.getKey()).append(":").append(field.getValue().asText()).append(",")
+        record.properties().forEach(field ->
+                extracted.append(field.getKey()).append(":").append(field.getValue().asText()).append(",")
         );
         return extracted.toString();
     }
