@@ -26,7 +26,9 @@ class CdcServiceTest {
 
     @BeforeEach
     void setUp() {
-        kafkaTemplate = mock(KafkaTemplate.class);
+        @SuppressWarnings("unchecked")
+        KafkaTemplate<String, String> template = (KafkaTemplate<String, String>) mock(KafkaTemplate.class);
+        kafkaTemplate = template;
         @SuppressWarnings("unchecked")
         DebeziumEngine<ChangeEvent<String, String>> engine =
                 (DebeziumEngine<ChangeEvent<String, String>>) mock(DebeziumEngine.class);
