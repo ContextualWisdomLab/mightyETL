@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-@SuppressWarnings("null")
 class ValidationUtilsTest {
 
     @Test
@@ -56,4 +55,3 @@ class ValidationUtilsTest {
         assertThrows(IllegalStateException.class, () -> ValidationUtils.requireValidIdentifier("xtrmetl/db", "REPLICA_PGDATABASE"));
     }
 }
-

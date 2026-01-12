@@ -1,10 +1,12 @@
 package com.xtrmetl.cdc.util;
 
+import org.springframework.lang.Nullable;
+
 public final class ValidationUtils {
 
     private ValidationUtils() {}
 
-    public static String requireValidPort(String value, String key) {
+    public static String requireValidPort(@Nullable String value, String key) {
         if (value == null || value.isBlank()) {
             throw new IllegalStateException("Missing required port for " + key);
         }
@@ -23,7 +25,7 @@ public final class ValidationUtils {
         }
     }
 
-    public static String requireValidHost(String value, String key) {
+    public static String requireValidHost(@Nullable String value, String key) {
         if (value == null || value.isBlank()) {
             throw new IllegalStateException("Missing required host for " + key);
         }
@@ -34,7 +36,7 @@ public final class ValidationUtils {
         return trimmed;
     }
 
-    public static String requireValidIdentifier(String value, String key) {
+    public static String requireValidIdentifier(@Nullable String value, String key) {
         if (value == null || value.isBlank()) {
             throw new IllegalStateException("Missing required value for " + key);
         }
