@@ -4,9 +4,6 @@ import io.debezium.engine.ChangeEvent;
 import io.debezium.engine.DebeziumEngine;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mock;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -20,15 +17,13 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
-@SuppressWarnings("null")
-@ExtendWith(MockitoExtension.class)
 class CdcServiceTest {
 
-    @Mock
-    private KafkaTemplate<String, String> kafkaTemplate;
+    private final KafkaTemplate<String, String> kafkaTemplate = mock(KafkaTemplate.class);
 
-    @Mock
-    private DebeziumEngine<ChangeEvent<String, String>> debeziumEngine;
+    @SuppressWarnings("unchecked")
+    private final DebeziumEngine<ChangeEvent<String, String>> debeziumEngine =
+            (DebeziumEngine<ChangeEvent<String, String>>) mock(DebeziumEngine.class);
 
     private CdcService cdcService;
 

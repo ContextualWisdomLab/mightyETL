@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 
-@SuppressWarnings({"null", "unchecked"})
+@SuppressWarnings("unchecked")
 @ExtendWith(OutputCaptureExtension.class)
 class KafkaConfigTest {
 
