@@ -12,6 +12,7 @@
 *.md text working-tree-encoding=UTF-8 eol=lf
 *.txt text working-tree-encoding=UTF-8 eol=lf
 *.json text working-tree-encoding=UTF-8 eol=lf
+*.properties text working-tree-encoding=UTF-8 eol=lf
 
 # Explicit binaries.
 *.png binary
