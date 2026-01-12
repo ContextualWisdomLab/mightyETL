@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -41,7 +42,7 @@ public class ProcessedDataReplicaApplier {
         this.objectMapper = objectMapper;
     }
 
-    public void apply(String topic, String keyJson, String valueJson) {
+    public void apply(@Nullable String topic, @Nullable String keyJson, @Nullable String valueJson) {
         if (topic == null || !topic.endsWith("." + TABLE_NAME)) {
             return;
         }

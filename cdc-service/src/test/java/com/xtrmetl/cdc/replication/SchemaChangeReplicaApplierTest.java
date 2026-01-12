@@ -4,8 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.dao.DataAccessException;
@@ -19,16 +17,14 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
-@SuppressWarnings("null")
-@ExtendWith(MockitoExtension.class)
 @ExtendWith(OutputCaptureExtension.class)
 class SchemaChangeReplicaApplierTest {
 
-    @Mock
-    private JdbcTemplate jdbcTemplate;
+    private final JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
 
     private ObjectMapper objectMapper;
 

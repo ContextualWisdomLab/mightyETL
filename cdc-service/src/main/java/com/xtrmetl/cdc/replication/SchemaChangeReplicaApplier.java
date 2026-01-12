@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -83,7 +84,7 @@ public class SchemaChangeReplicaApplier {
      * @param valueJson 이벤트 값의 JSON 표현 (이 값에서 DDL을 추출하여 적용함)
      * @throws org.springframework.dao.DataAccessException 레플리카에 DDL 적용 중 JDBC 실행 오류가 발생한 경우
      */
-    public void apply(String topic, String keyJson, String valueJson) {
+    public void apply(@Nullable String topic, @Nullable String keyJson, @Nullable String valueJson) {
         if (!ddlEnabled) {
             return;
         }
