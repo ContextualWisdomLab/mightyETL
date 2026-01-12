@@ -67,7 +67,9 @@ class ReplicaJdbcTemplateConfigTest {
                 .run(context -> {
                     assertNull(context.getStartupFailure());
                     JdbcTemplate jdbcTemplate = context.getBean("replicaJdbcTemplate", JdbcTemplate.class);
-                    HikariDataSource hikari = assertInstanceOf(HikariDataSource.class, jdbcTemplate.getDataSource());
+                    DataSource dataSource = jdbcTemplate.getDataSource();
+                    assertNotNull(dataSource);
+                    HikariDataSource hikari = assertInstanceOf(HikariDataSource.class, dataSource);
                     assertEquals("jdbc:postgresql://replica-host:5432/xtrmetl", hikari.getJdbcUrl());
                 });
     }
