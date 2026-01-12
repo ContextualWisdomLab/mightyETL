@@ -1,0 +1,23 @@
+# Normalize text files and prevent invalid encodings from entering diffs.
+# This helps external tooling (e.g., autovalidate) parse PR diffs reliably.
+
+* text=auto eol=lf
+
+# Source code must be UTF-8.
+*.java text working-tree-encoding=UTF-8 eol=lf
+*.kt text working-tree-encoding=UTF-8 eol=lf
+*.xml text working-tree-encoding=UTF-8 eol=lf
+*.yml text working-tree-encoding=UTF-8 eol=lf
+*.yaml text working-tree-encoding=UTF-8 eol=lf
+*.md text working-tree-encoding=UTF-8 eol=lf
+*.txt text working-tree-encoding=UTF-8 eol=lf
+*.json text working-tree-encoding=UTF-8 eol=lf
+
+# Explicit binaries.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.jar binary
+*.zip binary
