@@ -4,15 +4,15 @@
 * text=auto eol=lf
 
 # Source code must be UTF-8.
-*.java text working-tree-encoding=UTF-8 eol=lf
-*.kt text working-tree-encoding=UTF-8 eol=lf
-*.xml text working-tree-encoding=UTF-8 eol=lf
-*.yml text working-tree-encoding=UTF-8 eol=lf
-*.yaml text working-tree-encoding=UTF-8 eol=lf
-*.md text working-tree-encoding=UTF-8 eol=lf
-*.txt text working-tree-encoding=UTF-8 eol=lf
-*.json text working-tree-encoding=UTF-8 eol=lf
-*.properties text working-tree-encoding=UTF-8 eol=lf
+*.java text eol=lf
+*.kt text eol=lf
+*.xml text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.json text eol=lf
+*.properties text eol=lf
 
 # Explicit binaries.
 *.png binary
