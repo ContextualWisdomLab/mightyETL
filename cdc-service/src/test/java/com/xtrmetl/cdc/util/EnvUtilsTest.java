@@ -9,7 +9,6 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-@SuppressWarnings("null")
 class EnvUtilsTest {
 
     @Test
@@ -21,7 +20,9 @@ class EnvUtilsTest {
         env.put("BLANK", "");
         assertEquals("default", EnvUtils.getEnv(env, "BLANK", "default"));
 
-        env.put("NULL", null);
+        @SuppressWarnings({"rawtypes", "unchecked"})
+        Map rawEnv = env;
+        rawEnv.put("NULL", null);
         assertEquals("default", EnvUtils.getEnv(env, "NULL", "default"));
     }
 

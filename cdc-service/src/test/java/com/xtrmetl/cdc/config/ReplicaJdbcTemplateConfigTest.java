@@ -14,7 +14,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@SuppressWarnings("null")
 class ReplicaJdbcTemplateConfigTest {
 
     private final ApplicationContextRunner contextRunner =
@@ -40,7 +39,6 @@ class ReplicaJdbcTemplateConfigTest {
                     JdbcTemplate jdbcTemplate = context.getBean("replicaJdbcTemplate", JdbcTemplate.class);
                     DataSource dataSource = jdbcTemplate.getDataSource();
                     assertNotNull(dataSource);
-
                     HikariDataSource hikari = assertInstanceOf(HikariDataSource.class, dataSource);
                     assertEquals("jdbc:postgresql://replica-host:15432/xtrmetl", hikari.getJdbcUrl());
                     assertEquals("xtrmetl_user", hikari.getUsername());
@@ -51,7 +49,9 @@ class ReplicaJdbcTemplateConfigTest {
                     hikariRef.set(hikari);
                 });
 
-        assertTrue(hikariRef.get().isClosed());
+        HikariDataSource hikari = hikariRef.get();
+        assertNotNull(hikari);
+        assertTrue(hikari.isClosed());
     }
 
     @Test
@@ -67,7 +67,9 @@ class ReplicaJdbcTemplateConfigTest {
                 .run(context -> {
                     assertNull(context.getStartupFailure());
                     JdbcTemplate jdbcTemplate = context.getBean("replicaJdbcTemplate", JdbcTemplate.class);
-                    HikariDataSource hikari = assertInstanceOf(HikariDataSource.class, jdbcTemplate.getDataSource());
+                    DataSource dataSource = jdbcTemplate.getDataSource();
+                    assertNotNull(dataSource);
+                    HikariDataSource hikari = assertInstanceOf(HikariDataSource.class, dataSource);
                     assertEquals("jdbc:postgresql://replica-host:5432/xtrmetl", hikari.getJdbcUrl());
                 });
     }

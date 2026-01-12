@@ -9,7 +9,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.lang.NonNull;
 
 import javax.sql.DataSource;
 
@@ -59,7 +58,7 @@ public class ReplicaJdbcTemplateConfig {
     }
 
     @Bean(name = "replicaJdbcTemplate")
-    public JdbcTemplate replicaJdbcTemplate(@Qualifier("replicaDataSource") @NonNull DataSource dataSource) {
+    public JdbcTemplate replicaJdbcTemplate(@Qualifier("replicaDataSource") DataSource dataSource) {
         return new JdbcTemplate(dataSource);
     }
 }
