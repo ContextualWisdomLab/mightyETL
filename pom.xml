@@ -22,7 +22,7 @@
         <spring-boot.version>3.5.9</spring-boot.version>
         <spring-cloud.version>2025.0.1</spring-cloud.version>
         <postgresql.version>42.7.8</postgresql.version>
-        <spring-kafka.version>3.3.11</spring-kafka.version>
+        <spring-kafka.version>4.0.1</spring-kafka.version>
         <junit-jupiter.version>5.12.2</junit-jupiter.version>
         <junit-platform.version>1.12.2</junit-platform.version>
         <mockito.version>5.21.0</mockito.version>
