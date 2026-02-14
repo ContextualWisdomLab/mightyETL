@@ -15,6 +15,7 @@ permissions:
 
 jobs:
   analyze:
+    if: ${{ github.event.repository.private == false }}
     name: Analyze (Java)
     runs-on: ubuntu-latest
 
@@ -41,3 +42,13 @@ jobs:
         uses: github/codeql-action/analyze@f5c2471be782132e47a6e6f9c725e56730d6e9a3 # v3.32.3
         with:
           category: "/language:java"
+
+  codeql-private-note:
+    if: ${{ github.event.repository.private == true }}
+    name: CodeQL private repo note
+    runs-on: ubuntu-latest
+    steps:
+      - name: Document unavailability on private repositories
+        run: |
+          echo "Code scanning is not enabled for this private repository in current plan/settings."
+          echo "Enable GitHub Advanced Security and Code Scanning to activate CodeQL upload."
