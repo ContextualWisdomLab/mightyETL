@@ -55,7 +55,8 @@ class DocumentationValidationTest {
     }
 
     private static String readUtf8File(Path path) throws IOException {
-        return new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
+        String raw = new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
+        return raw.replace("\r\n", "\n").replace("\r", "\n");
     }
 
     @Nested
