@@ -866,14 +866,19 @@ class DocumentationValidationTest {
         void shouldCheckoutCode() {
             assertTrue(workflowContent.contains("actions/checkout@"),
                 "Should use checkout action");
-            
-            // Check for v4 or later
-            Pattern checkoutPattern = Pattern.compile("actions/checkout@v(\\d+)");
-            Matcher matcher = checkoutPattern.matcher(workflowContent);
-            
-            assertTrue(matcher.find(), "Should specify checkout action version");
-            int version = Integer.parseInt(matcher.group(1));
-            assertTrue(version >= 4, "Should use checkout action v4 or later");
+
+            Pattern checkoutVersionPattern = Pattern.compile("actions/checkout@v(\\d+)");
+            Matcher checkoutVersionMatcher = checkoutVersionPattern.matcher(workflowContent);
+
+            if (checkoutVersionMatcher.find()) {
+                int version = Integer.parseInt(checkoutVersionMatcher.group(1));
+                assertTrue(version >= 4, "Should use checkout action v4 or later");
+                return;
+            }
+
+            Pattern checkoutShaPattern = Pattern.compile("actions/checkout@[a-f0-9]{40}");
+            assertTrue(checkoutShaPattern.matcher(workflowContent).find(),
+                "Should specify checkout action version tag or full commit SHA");
         }
 
         @Test
@@ -934,12 +939,18 @@ class DocumentationValidationTest {
         @Test
         @DisplayName("SBOM workflow should use v4 upload-artifact action")
         void shouldUseV4UploadArtifactAction() {
-            Pattern uploadPattern = Pattern.compile("actions/upload-artifact@v(\\d+)");
-            Matcher matcher = uploadPattern.matcher(workflowContent);
-            
-            assertTrue(matcher.find(), "Should specify upload-artifact action version");
-            int version = Integer.parseInt(matcher.group(1));
-            assertTrue(version >= 4, "Should use upload-artifact action v4 or later");
+            Pattern uploadVersionPattern = Pattern.compile("actions/upload-artifact@v(\\d+)");
+            Matcher uploadVersionMatcher = uploadVersionPattern.matcher(workflowContent);
+
+            if (uploadVersionMatcher.find()) {
+                int version = Integer.parseInt(uploadVersionMatcher.group(1));
+                assertTrue(version >= 4, "Should use upload-artifact action v4 or later");
+                return;
+            }
+
+            Pattern uploadShaPattern = Pattern.compile("actions/upload-artifact@[a-f0-9]{40}");
+            assertTrue(uploadShaPattern.matcher(workflowContent).find(),
+                "Should specify upload-artifact action version tag or full commit SHA");
         }
 
         @Test

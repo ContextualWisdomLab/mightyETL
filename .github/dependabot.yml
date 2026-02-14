@@ -1,23 +1,55 @@
-# To get started with Dependabot version updates, you'll need to specify which
-# package ecosystems to update and where the package manifests are located.
-# Please see the documentation for all configuration options:
-# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
-
 version: 2
 updates:
-  - package-ecosystem: "maven" # See documentation for possible values
-    directory: "/" # Location of package manifests
+  - package-ecosystem: "maven"
+    directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+      day: "monday"
+      time: "05:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 10
+    target-branch: "main"
     labels:
       - "dependencies"
       - "maven"
+      - "security"
+    groups:
+      maven-dependencies:
+        patterns:
+          - "*"
+
   - package-ecosystem: "docker"
-    directory: "/" # Location of Dockerfiles and docker-compose.yml
+    directory: "/"
     schedule:
       interval: "weekly"
+      day: "monday"
+      time: "05:30"
+      timezone: "UTC"
     open-pull-requests-limit: 5
+    target-branch: "main"
     labels:
       - "dependencies"
       - "docker"
+      - "security"
+    groups:
+      docker-images:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    target-branch: "main"
+    labels:
+      - "dependencies"
+      - "github-actions"
+      - "security"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
