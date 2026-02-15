@@ -37,3 +37,7 @@ package-lock.json
 *.tmp
 *.bak
 .~*
+
+# OpenCode (local CLI artifacts)
+registered_agents.json
+task_agent_mapping.json
