@@ -24,7 +24,7 @@ Dependabot, OpenSSF Scorecard, CodeQL, Dependency Review.
 - Create: `AGENTS.md`
 - Create: `CONTRIBUTING.md`
 - Modify: `SECURITY.md`
-- Modify: `ARCHITECTURE.md`
+- Modify: `ARCHITECTURE.md` (optional, only if metadata/path drift is found)
 
 **Steps:**
 
@@ -34,8 +34,8 @@ Dependabot, OpenSSF Scorecard, CodeQL, Dependency Review.
    expectations.
 3. Expand `SECURITY.md` into a real security policy with reporting SLA
    and response process.
-4. Refresh `ARCHITECTURE.md` metadata (last-updated/date owner) and
-   verify key paths/services are current.
+4. Verify `ARCHITECTURE.md` key paths/services are current and update
+   metadata only if drift is found.
 
 ## Task 2: GitHub project hygiene templates
 

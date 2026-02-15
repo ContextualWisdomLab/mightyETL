@@ -43,6 +43,7 @@ and maintainer availability.
 
 ## Dependency and security scanning references
 
+- Dependency update automation is managed with Dependabot only.
 - Dependabot configuration: `.github/dependabot.yml`
 - CI checks: `.github/workflows/ci.yml`
 - Dependency review on PRs: `.github/workflows/dependency-review.yml`

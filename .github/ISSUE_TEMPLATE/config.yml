@@ -1,11 +1,11 @@
 blank_issues_enabled: false
 contact_links:
   - name: Security vulnerability report
-    url: https://github.com/seonghobae/xtrmETL/security/policy
+    url: /security/policy
     about: Report vulnerabilities privately using the documented security process.
   - name: Contribution guide
-    url: https://github.com/seonghobae/xtrmETL/blob/main/CONTRIBUTING.md
+    url: /blob/main/CONTRIBUTING.md
     about: Read setup, branching, and PR expectations before opening issues.
   - name: Repository overview
-    url: https://github.com/seonghobae/xtrmETL/blob/main/README.md
+    url: /blob/main/README.md
     about: Check project context and service boundaries.

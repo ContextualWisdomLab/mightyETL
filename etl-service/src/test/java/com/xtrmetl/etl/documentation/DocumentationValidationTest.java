@@ -978,8 +978,12 @@ class DocumentationValidationTest {
         @Test
         @DisplayName("SBOM workflow should use batch mode Maven")
         void shouldUseBatchModeMaven() {
-            assertTrue(workflowContent.contains("mvn -B"),
-                "Should use Maven batch mode (-B flag)");
+            boolean usesBatchMode = workflowContent.contains("mvn -B")
+                || workflowContent.contains("./mvnw -B")
+                || workflowContent.contains(".\\\\mvnw.cmd -B");
+
+            assertTrue(usesBatchMode,
+                "Should use Maven batch mode (-B flag) with mvn or Maven Wrapper");
         }
 
         @Test

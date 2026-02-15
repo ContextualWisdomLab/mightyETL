@@ -31,6 +31,16 @@ jobs:
           publish_results: true
 
       - name: Upload to code scanning
+        if: ${{ github.event.repository.private == false }}
         uses: github/codeql-action/upload-sarif@f5c2471be782132e47a6e6f9c725e56730d6e9a3
         with:
           sarif_file: results.sarif
+
+  private_repo_note:
+    name: Private repository note
+    if: ${{ github.event.repository.private == true }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Note SARIF upload behavior
+        run: |
+          echo "::notice::Scorecard SARIF upload is skipped for private repositories."

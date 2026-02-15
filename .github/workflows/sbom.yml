@@ -31,7 +31,7 @@ jobs:
           cache: maven
 
       - name: Generate CycloneDX SBOM (aggregate)
-        run: mvn -B -DskipTests org.cyclonedx:cyclonedx-maven-plugin:2.9.1:makeAggregateBom -DoutputFormat=all -Dcyclonedx.skipAttach=true
+        run: ./mvnw -B -DskipTests org.cyclonedx:cyclonedx-maven-plugin:2.9.1:makeAggregateBom -DoutputFormat=all -Dcyclonedx.skipAttach=true
 
       - name: Upload SBOM artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
