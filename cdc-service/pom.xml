@@ -41,17 +41,17 @@
         <dependency>
             <groupId>io.debezium</groupId>
             <artifactId>debezium-api</artifactId>
-            <version>3.4.0.Final</version>
+            <version>3.4.1.Final</version>
         </dependency>
         <dependency>
             <groupId>io.debezium</groupId>
             <artifactId>debezium-embedded</artifactId>
-            <version>3.4.0.Final</version>
+            <version>3.4.1.Final</version>
         </dependency>
         <dependency>
             <groupId>io.debezium</groupId>
             <artifactId>debezium-connector-postgres</artifactId>
-            <version>3.4.0.Final</version>
+            <version>3.4.1.Final</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.kafka</groupId>
