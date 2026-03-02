@@ -19,13 +19,13 @@
 
     <properties>
         <java.version>25</java.version>
-        <spring-boot.version>3.5.9</spring-boot.version>
-        <spring-cloud.version>2025.0.1</spring-cloud.version>
-        <postgresql.version>42.7.8</postgresql.version>
-        <spring-kafka.version>3.3.11</spring-kafka.version>
-        <junit-jupiter.version>5.12.2</junit-jupiter.version>
-        <junit-platform.version>1.12.2</junit-platform.version>
-        <mockito.version>5.21.0</mockito.version>
+        <spring-boot.version>4.0.3</spring-boot.version>
+        <spring-cloud.version>2025.1.1</spring-cloud.version>
+        <postgresql.version>42.7.10</postgresql.version>
+        <spring-kafka.version>4.0.3</spring-kafka.version>
+        <junit-jupiter.version>6.0.3</junit-jupiter.version>
+        <junit-platform.version>6.0.3</junit-platform.version>
+        <mockito.version>5.22.0</mockito.version>
     </properties>
 
     <dependencyManagement>
@@ -110,7 +110,7 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-dependency-plugin</artifactId>
-                    <version>3.9.0</version>
+                    <version>3.10.0</version>
                 </plugin>
             </plugins>
         </pluginManagement>
@@ -118,7 +118,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.13.0</version>
+                <version>3.15.0</version>
                 <configuration>
                     <release>${java.version}</release>
                     <encoding>UTF-8</encoding>
@@ -132,7 +132,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.5.4</version>
+                <version>3.5.5</version>
             </plugin>
         </plugins>
     </build>
