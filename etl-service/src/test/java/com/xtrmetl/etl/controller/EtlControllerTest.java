@@ -68,5 +68,8 @@ class EtlControllerTest {
         List<Map<String, Object>> connectors = (List<Map<String, Object>>) body.get("connectors");
         assertEquals(3, connectors.size());
         assertTrue(connectors.stream().anyMatch(c -> "databricks".equals(c.get("id"))));
+        assertTrue(connectors.stream().allMatch(c -> c.containsKey("requiredConfigKeys")));
+        assertTrue(connectors.stream().allMatch(c -> c.containsKey("integration")));
+        assertTrue(connectors.stream().noneMatch(c -> Boolean.TRUE.equals(c.get("writable"))));
     }
 }
