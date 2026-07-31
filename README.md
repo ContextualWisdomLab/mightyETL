@@ -20,7 +20,7 @@ mightyETL provides enterprise-grade capabilities for:
 |:-----------|:-------|:------|
 | Product name **mightyETL** | **Docs / APIs / POM name** | Java packages & Maven `artifactId` still `xtrmetl` / `xtrmETL` — [rebrand matrix](docs/rebrand-name-matrix.md) |
 | Config prefix | **Dual-read** | Prefer `mightyetl.*`; legacy `xtrmetl.*` still binds |
-| CDC capture | **PostgreSQL → Kafka** (Debezium embedded) | Ops: `GET /api/cdc/status`, slot lag, `cdcEngine` health |
+| CDC capture | **PostgreSQL → Kafka** (Debezium embedded) | Ops: `GET /api/cdc/status`, slot lag, `cdcEngine` health — [ops-and-reliability](docs/cdc/ops-and-reliability.md) |
 | CDC replica apply | **Optional** Postgres JDBC | Tables with `(id, data)` shape (`xtrmetl.replica.tables`) |
 | Any-to-any CDC | **Scaffold** | Source/target SPI + factory; MySQL/SQL Server **not live** |
 | ETL load | **PostgreSQL** via `POST /api/etl/process` | |

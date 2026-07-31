@@ -90,4 +90,8 @@ curl -X POST http://localhost:8001/api/cdc/stop
 
 ## Tests
 
-Unit tests under `cdc-service/src/test/java/com/xtrmetl/cdc/**` cover controller, service lifecycle mocks, replica appliers, and Kafka error handler config. No Testcontainers integration suite in-repo yet.
+Unit tests under `cdc-service/src/test/java/com/xtrmetl/cdc/**` cover controller, service lifecycle mocks, replica appliers, Kafka error handler config, and **ops-doc alignment** (`ops/CdcOpsDocsAlignmentTest` — asserts this file names the same paths/health component the shipped `CdcController` / `CdcEngineHealthIndicator` expose). No Testcontainers integration suite in-repo yet.
+
+## Sale-ready honesty
+
+Primary path is **PostgreSQL → Kafka** only. Warehouse BI connectors and multi-source any-to-any CDC remain scaffolds (see README support matrix and `docs/connectors/`). Operators should treat unlisted capabilities as **not production-supported**.
