@@ -24,7 +24,7 @@ mightyETL provides enterprise-grade capabilities for:
 | CDC replica apply | **Optional** Postgres JDBC | Tables with `(id, data)` shape (`xtrmetl.replica.tables`) |
 | Any-to-any CDC | **Scaffold** | Source/target SPI + factory; MySQL/SQL Server **not live** |
 | ETL load | **PostgreSQL** via `POST /api/etl/process` | |
-| Databricks / Snowflake / Qlik | **Scaffold** | `GET /api/etl/connectors`; `write()` refused until implemented |
+| Databricks / Snowflake / Qlik | **Scaffold** (not production) | SPI + YAML binding + required-key validation + catalog; `write()` always refused — [docs/connectors/](docs/connectors/) |
 | Progress tracker | [docs/mightyETL-product-upgrade-progress.md](docs/mightyETL-product-upgrade-progress.md) | |
 
 Do **not** market multi-cloud warehouse CDC or BI loaders as production-ready until the matrix rows above say Supported.

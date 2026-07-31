@@ -23,13 +23,30 @@ class TargetConnectorDispatcherTest {
     }
 
     @Test
-    void refusesWriteWhenScaffoldEnabled() {
+    void refusesWriteWhenScaffoldEnabledWithCompleteConfig() {
+        ConnectorProperties props = new ConnectorProperties();
+        props.getDatabricks().setEnabled(true);
+        props.getDatabricks().setHost("h");
+        props.getDatabricks().setHttpPath("/sql");
+        props.getDatabricks().setToken("t");
+        props.getDatabricks().setCatalog("c");
+        props.getDatabricks().setSchema("s");
+        props.getDatabricks().setTable("tbl");
+        TargetConnectorDispatcher dispatcher =
+                new TargetConnectorDispatcher(new TargetConnectorRegistry(), props);
+
+        assertThrows(UnsupportedOperationException.class,
+                () -> dispatcher.dispatch("databricks", List.of()));
+    }
+
+    @Test
+    void failsValidationWhenScaffoldEnabledButConfigIncomplete() {
         ConnectorProperties props = new ConnectorProperties();
         props.getDatabricks().setEnabled(true);
         TargetConnectorDispatcher dispatcher =
                 new TargetConnectorDispatcher(new TargetConnectorRegistry(), props);
 
-        assertThrows(UnsupportedOperationException.class,
+        assertThrows(IllegalArgumentException.class,
                 () -> dispatcher.dispatch("databricks", List.of()));
     }
 

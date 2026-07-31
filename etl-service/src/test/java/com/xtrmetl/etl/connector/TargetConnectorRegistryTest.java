@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -22,7 +23,8 @@ class TargetConnectorRegistryTest {
 
         for (TargetConnector connector : registry.all()) {
             assertEquals(ConnectorStatus.SCAFFOLD, connector.status());
-            connector.validate(Map.of());
+            assertFalse(connector.requiredConfigKeys().isEmpty());
+            assertThrows(IllegalArgumentException.class, () -> connector.validate(Map.of()));
             assertThrows(UnsupportedOperationException.class,
                     () -> connector.write(List.of()));
         }

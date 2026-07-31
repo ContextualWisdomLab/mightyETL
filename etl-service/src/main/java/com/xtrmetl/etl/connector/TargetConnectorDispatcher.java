@@ -32,10 +32,11 @@ public class TargetConnectorDispatcher {
         for (TargetConnector connector : registry.all()) {
             boolean enabled = properties.isEnabled(connector.id());
             log.info(
-                    "Target connector id={} status={} enabled={} (scaffold write path not production-ready)",
+                    "Target connector id={} status={} enabled={} requiredKeys={} (scaffold write path not production-ready)",
                     connector.id(),
                     connector.status(),
-                    enabled
+                    enabled,
+                    connector.requiredConfigKeys()
             );
             if (enabled && connector.status() == ConnectorStatus.SCAFFOLD) {
                 log.warn(
@@ -49,6 +50,8 @@ public class TargetConnectorDispatcher {
 
     /**
      * Attempt a batch write. Scaffold + enabled still throws until implemented.
+     * When enabled, config is validated first so missing keys fail fast with
+     * {@link IllegalArgumentException} before the scaffold write refusal.
      */
     public void dispatch(String connectorId, List<ChangeRecord> batch) {
         TargetConnector connector = registry.find(connectorId)
@@ -59,10 +62,11 @@ public class TargetConnectorDispatcher {
                             + connectorId.replace("-", ".") + ".enabled=true only after implementation."
             );
         }
+        // Validate bound YAML/env surface even for scaffolds (integration hook).
+        connector.validate(properties.configMap(connectorId));
         if (connector.status() == ConnectorStatus.SCAFFOLD) {
             throw new UnsupportedOperationException(
-                    "Connector '" + connectorId + "' is a scaffold only; refusing write. "
-                            + "See docs/connectors/"
+                    connector.writeRefusalReason()
             );
         }
         connector.write(batch);
@@ -77,6 +81,10 @@ public class TargetConnectorDispatcher {
             row.put("status", connector.status().name());
             row.put("enabled", properties.isEnabled(connector.id()));
             row.put("writable", connector.status() == ConnectorStatus.SUPPORTED && properties.isEnabled(connector.id()));
+            row.put("requiredConfigKeys", connector.requiredConfigKeys());
+            row.put("optionalConfigKeys", connector.optionalConfigKeys());
+            row.put("writeRefusalReason", connector.writeRefusalReason());
+            row.put("integration", connector.describeIntegration());
             rows.add(row);
         }
         return rows;

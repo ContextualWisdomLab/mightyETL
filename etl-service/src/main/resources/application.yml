@@ -16,19 +16,37 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
 
 # Dual-read: mightyetl.connectors.* preferred (aliased to xtrmetl.connectors.*).
-# Target connector scaffolds (all disabled). Primary load path: PostgreSQL via EtlService.
-# Catalog: GET /api/etl/connectors — see docs/connectors/
+# Warehouse/BI targets: SPI + config binding + validation + catalog; write() still SCAFFOLD.
+# Primary load path: PostgreSQL via EtlService. Catalog: GET /api/etl/connectors
 xtrmetl:
   connectors:
     databricks:
       enabled: ${DATABRICKS_CONNECTOR_ENABLED:false}
-      # host, http-path, token, catalog, schema, table — unused until implemented
+      host: ${DATABRICKS_HOST:}
+      http-path: ${DATABRICKS_HTTP_PATH:}
+      token: ${DATABRICKS_TOKEN:}
+      catalog: ${DATABRICKS_CATALOG:}
+      schema: ${DATABRICKS_SCHEMA:}
+      table: ${DATABRICKS_TABLE:}
+      write-mode: ${DATABRICKS_WRITE_MODE:append}
     snowflake:
       enabled: ${SNOWFLAKE_CONNECTOR_ENABLED:false}
-      # account, warehouse, database, schema, user — unused until implemented
+      account: ${SNOWFLAKE_ACCOUNT:}
+      warehouse: ${SNOWFLAKE_WAREHOUSE:}
+      database: ${SNOWFLAKE_DATABASE:}
+      schema: ${SNOWFLAKE_SCHEMA:}
+      user: ${SNOWFLAKE_USER:}
+      password: ${SNOWFLAKE_PASSWORD:}
+      private-key: ${SNOWFLAKE_PRIVATE_KEY:}
+      role: ${SNOWFLAKE_ROLE:}
+      table: ${SNOWFLAKE_TABLE:}
+      merge-keys: ${SNOWFLAKE_MERGE_KEYS:}
     qlik-sense:
       enabled: ${QLIK_CONNECTOR_ENABLED:false}
-      # tenant-url, api-key, app-id — unused until implemented
+      tenant-url: ${QLIK_TENANT_URL:}
+      api-key: ${QLIK_API_KEY:}
+      app-id: ${QLIK_APP_ID:}
+      mode: ${QLIK_MODE:reload-only}
 
 management:
   tracing:
