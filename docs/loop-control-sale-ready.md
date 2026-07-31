@@ -33,7 +33,7 @@
 | PR | Title | Action | Reason |
 |:---|:------|:-------|:-------|
 | _(none open at start)_ | — | n/a | `gh pr list --state open` empty |
-| _(this work)_ | sale-ready ops alignment + control | **merged** when landed | disposition of goal deltas |
+| 100 | sale-ready ops alignment + control | **merged** (admin) | disposition of goal deltas |
 
 ## Environment
 
