@@ -1,9 +1,11 @@
-# xtrmETL System Architecture
+# mightyETL System Architecture
 
 ## System Architecture Overview
 
-This document provides a comprehensive view of the xtrmETL platform architecture,
+This document provides a comprehensive view of the mightyETL platform architecture,
 component interactions, and data flow.
+
+> Product name: **mightyETL** (formerly xtrmETL). Runtime packages remain `com.xtrmetl.*` for compatibility — see [docs/rebrand-name-matrix.md](docs/rebrand-name-matrix.md).
 
 ## 1. High-Level Architecture
 

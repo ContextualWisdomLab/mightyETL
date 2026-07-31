@@ -1,6 +1,6 @@
-# Contributing to xtrmETL
+# Contributing to mightyETL
 
-Thanks for contributing to xtrmETL. This guide describes the expected
+Thanks for contributing to mightyETL (formerly xtrmETL). This guide describes the expected
 local setup, branching, verification, and pull request flow.
 
 ## Development setup

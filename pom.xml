@@ -8,6 +8,8 @@
     <artifactId>xtrmETL</artifactId>
     <version>1.0-SNAPSHOT</version>
     <packaging>pom</packaging>
+    <name>mightyETL</name>
+    <description>mightyETL enterprise CDC/ETL platform (Maven coordinates remain com.xtrmetl:xtrmETL for compatibility)</description>
 
     <modules>
         <module>etl-service</module>

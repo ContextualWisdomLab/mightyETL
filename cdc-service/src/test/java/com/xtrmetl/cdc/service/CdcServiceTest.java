@@ -8,6 +8,7 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.io.IOException;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 
@@ -41,6 +42,28 @@ class CdcServiceTest {
     @Test
     void testStart() {
         assertDoesNotThrow(() -> cdcService.start());
+    }
+
+    @Test
+    void getStatusReportsNotRunningAndMightyEtlProduct() {
+        Map<String, Object> status = cdcService.getStatus();
+
+        assertEquals("mightyETL", status.get("product"));
+        assertEquals(false, status.get("running"));
+        assertEquals(false, status.get("autoStart"));
+        assertEquals("postgres-debezium", status.get("sourceType"));
+        assertEquals(false, status.get("anyToAny"));
+        assertTrue(status.containsKey("topicPrefix"));
+        assertTrue(status.containsKey("tableIncludeList"));
+    }
+
+    @Test
+    void isRunningReflectsEngineTask() {
+        assertFalse(cdcService.isRunning());
+        cdcService.start();
+        assertTrue(cdcService.isRunning());
+        cdcService.shutdown();
+        assertFalse(cdcService.isRunning());
     }
 
     @Test

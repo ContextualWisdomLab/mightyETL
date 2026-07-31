@@ -15,6 +15,21 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
 
+# Dual-read: mightyetl.connectors.* preferred (aliased to xtrmetl.connectors.*).
+# Target connector scaffolds (all disabled). Primary load path: PostgreSQL via EtlService.
+# Catalog: GET /api/etl/connectors — see docs/connectors/
+xtrmetl:
+  connectors:
+    databricks:
+      enabled: ${DATABRICKS_CONNECTOR_ENABLED:false}
+      # host, http-path, token, catalog, schema, table — unused until implemented
+    snowflake:
+      enabled: ${SNOWFLAKE_CONNECTOR_ENABLED:false}
+      # account, warehouse, database, schema, user — unused until implemented
+    qlik-sense:
+      enabled: ${QLIK_CONNECTOR_ENABLED:false}
+      # tenant-url, api-key, app-id — unused until implemented
+
 management:
   tracing:
     sampling:

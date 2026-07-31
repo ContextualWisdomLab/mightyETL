@@ -1,6 +1,6 @@
 # Technical Requirements Document (TRD)
 
-This document defines the technical requirements, constraints, and operational expectations for xtrmETL.
+This document defines the technical requirements, constraints, and operational expectations for mightyETL (formerly xtrmETL).
 It complements `PRD.md` (what/why) and `ARCHITECTURE.md` (how it fits together).
 
 ## 1. Scope

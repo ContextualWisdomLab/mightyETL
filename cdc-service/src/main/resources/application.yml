@@ -18,13 +18,27 @@ spring:
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       auto-offset-reset: earliest
 
+# Dual-read: mightyetl.* (preferred) aliases onto xtrmetl.* via EnvironmentPostProcessor.
+# Product name: mightyETL. Capture path: PostgreSQL Debezium → Kafka.
+# Ops: GET /api/cdc/status, GET /api/cdc/sources — see docs/cdc/ops-and-reliability.md
 xtrmetl:
   cdc:
     autostart: ${CDC_AUTOSTART:true}
+    # Fixed source type until multi-source factory lands (docs/cdc/any-to-any-cdc.md)
+    source-type: postgres-debezium
+    # Map Debezium events to CanonicalChangeRecord for counters only (Kafka payload stays raw)
+    canonical-map-enabled: ${CDC_CANONICAL_MAP_ENABLED:false}
+    # Multi-source declaration (status/reporting only). Live engine still runs one Postgres path.
+    sources:
+      - id: pg-main
+        type: postgres-debezium
+        enabled: true
   replica:
     enabled: ${REPLICA_ENABLED:false}
     group-id: ${REPLICA_GROUP_ID:xtrmetl-cdc-replica}
     topic-pattern: ${REPLICA_TOPIC_PATTERN:xtrmetl-cdc\..*}
+    # Comma-separated tables with (id, data) shape; default processed_data
+    tables: ${REPLICA_TABLES:processed_data}
     ddl-enabled: ${REPLICA_DDL_ENABLED:false}
     ddl-validation-mode: ${REPLICA_DDL_VALIDATION_MODE:none}
     ddl-allowed-prefixes: ${REPLICA_DDL_ALLOWED_PREFIXES:CREATE TABLE,ALTER TABLE,CREATE INDEX}

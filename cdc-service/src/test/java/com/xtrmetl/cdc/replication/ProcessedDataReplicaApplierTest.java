@@ -21,7 +21,33 @@ class ProcessedDataReplicaApplierTest {
 
     @BeforeEach
     void setUp() {
-        applier = new ProcessedDataReplicaApplier(jdbcTemplate, new ObjectMapper());
+        applier = new ProcessedDataReplicaApplier(
+                jdbcTemplate,
+                new ObjectMapper(),
+                java.util.Set.of("processed_data")
+        );
+    }
+
+    @Test
+    void appliesConfiguredExtraTableWithSameRowShape() {
+        ProcessedDataReplicaApplier multi = new ProcessedDataReplicaApplier(
+                jdbcTemplate,
+                new ObjectMapper(),
+                java.util.Set.of("processed_data", "audit_data")
+        );
+        String topic = "xtrmetl-cdc.public.audit_data";
+        String keyJson = "{\"payload\":{\"id\":9}}";
+        String valueJson = "{\"payload\":{\"op\":\"c\",\"after\":{\"id\":9,\"data\":\"x\"}}}";
+
+        multi.apply(topic, keyJson, valueJson);
+
+        verify(jdbcTemplate).update(startsWith("INSERT INTO audit_data"), eq(9L), eq("x"));
+    }
+
+    @Test
+    void parseTablesRejectsUnsafeIdentifiers() {
+        assertThrows(IllegalArgumentException.class,
+                () -> ProcessedDataReplicaApplier.parseTables("processed_data;drop"));
     }
 
     @Test

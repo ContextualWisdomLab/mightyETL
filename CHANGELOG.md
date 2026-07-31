@@ -7,7 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Product branding: user-facing docs and suggested image tags use **mightyETL** (formerly xtrmETL).
+  - Legacy Java packages (`com.xtrmetl.*`), Maven `artifactId` `xtrmETL`, and some env/topic defaults remain for compatibility.
+  - See `docs/rebrand-name-matrix.md`.
+
 ### Added
+
+- Connector scaffolds (contracts + docs only): Qlik Sense, Databricks, Snowflake under `docs/connectors/` and `etl-service` SPI stubs.
+- Any-to-any CDC design notes and source SPI scaffold: `docs/cdc/any-to-any-cdc.md`, `cdc-service` SPI stubs.
+- CDC operations notes: `docs/cdc/ops-and-reliability.md`.
+- Product upgrade progress tracker: `docs/mightyETL-product-upgrade-progress.md`.
+- CDC status/sources API: `GET /api/cdc/status`, `GET /api/cdc/sources` (no secrets).
+- `DebeziumChangeRecordMapper` + `CanonicalChangeRecord` (mapper unit-tested; not on live publish path).
+- CDC target SPI registry (`kafka`, `jdbc-replica`) for any-to-any routing scaffold.
+- `etl-service` `xtrmetl.connectors.*` disabled config keys for Databricks/Snowflake/Qlik.
+- Dual-read config aliases: `mightyetl.*` preferred → `xtrmetl.*` (`MightyEtlConfigAliasEnvironmentPostProcessor`).
+- Configurable replica tables (`xtrmetl.replica.tables`) for `(id,data)`-shaped tables.
+- Optional CDC canonical-map counters (`xtrmetl.cdc.canonical-map-enabled`).
+- ETL connector catalog API `GET /api/etl/connectors` + scaffold enable guard.
+- CDC replication slot lag probe on `GET /api/cdc/status` (`ReplicationSlotProbe`).
+- CDC multi-source config list + `CdcSourceFactory` (declarative; single live engine).
+- `GET /api/cdc/targets` for target SPI discovery.
+- Actuator `cdcEngine` health indicator (engine running + slot details).
+- SPI lifecycle: `PostgresDebeziumCdcSource.start/stop` delegates to `CdcService`.
+- Scaffold CDC sources: `mysql-debezium`, `sqlserver-debezium` (discovery only).
+- Root POM `<name>mightyETL</name>` (artifactId remains `xtrmETL`).
+- README honest “Supported today” matrix; compose file product-name header.
+
+### Added (historical)
 
 - Comprehensive documentation suite (2026-01-08)
   - `README.md`: Quick start guide and project overview

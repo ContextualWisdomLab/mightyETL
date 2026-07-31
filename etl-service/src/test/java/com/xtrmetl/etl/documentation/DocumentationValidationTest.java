@@ -79,7 +79,7 @@ class DocumentationValidationTest {
             assertFalse(readmeContent.trim().isEmpty(), "README should not be empty");
             
             // Check for essential sections
-            assertTrue(readmeContent.contains("# xtrmETL"), "Should have main title");
+            assertTrue(readmeContent.contains("# mightyETL"), "Should have main title");
             assertTrue(readmeContent.contains("## Quick Start") || readmeContent.contains("## 🚀 Quick Start"),
                 "Should have Quick Start section");
             assertTrue(readmeContent.contains("## Architecture") || readmeContent.contains("## 🏗️ Architecture"),

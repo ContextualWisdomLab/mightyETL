@@ -1,15 +1,33 @@
-# xtrmETL - Enterprise ETL and CDC Platform
+# mightyETL - Enterprise ETL and CDC Platform
 
 A microservices-based platform for real-time Change Data Capture (CDC) and Extract-Transform-Load (ETL) operations.
 
+> **Formerly xtrmETL.** Product branding is **mightyETL**. Java packages (`com.xtrmetl.*`), Maven coordinates, and some runtime defaults still use the legacy `xtrmetl` identifier for binary compatibility; see [docs/rebrand-name-matrix.md](docs/rebrand-name-matrix.md).
+
 ## 🎯 Overview
 
-xtrmETL provides enterprise-grade capabilities for:
+mightyETL provides enterprise-grade capabilities for:
 
-- **Real-time Change Data Capture**: Monitor PostgreSQL databases and capture all data changes
+- **Real-time Change Data Capture**: Monitor PostgreSQL databases and capture all data changes (Postgres → Kafka today; multi-source roadmap in [docs/cdc/any-to-any-cdc.md](docs/cdc/any-to-any-cdc.md))
 - **Data Transformation**: Apply business rules and transform data at scale
 - **Event Streaming**: Publish changes to Kafka for downstream processing
+- **Warehouse / BI targets (scaffold)**: Databricks, Snowflake, and Qlik Sense connector contracts — see [docs/connectors/](docs/connectors/)
 - **Secure Access**: JWT-based authentication with role-based access control
+
+## ✅ Supported today (honest)
+
+| Capability | Status | Notes |
+|:-----------|:-------|:------|
+| Product name **mightyETL** | **Docs / APIs / POM name** | Java packages & Maven `artifactId` still `xtrmetl` / `xtrmETL` — [rebrand matrix](docs/rebrand-name-matrix.md) |
+| Config prefix | **Dual-read** | Prefer `mightyetl.*`; legacy `xtrmetl.*` still binds |
+| CDC capture | **PostgreSQL → Kafka** (Debezium embedded) | Ops: `GET /api/cdc/status`, slot lag, `cdcEngine` health |
+| CDC replica apply | **Optional** Postgres JDBC | Tables with `(id, data)` shape (`xtrmetl.replica.tables`) |
+| Any-to-any CDC | **Scaffold** | Source/target SPI + factory; MySQL/SQL Server **not live** |
+| ETL load | **PostgreSQL** via `POST /api/etl/process` | |
+| Databricks / Snowflake / Qlik | **Scaffold** | `GET /api/etl/connectors`; `write()` refused until implemented |
+| Progress tracker | [docs/mightyETL-product-upgrade-progress.md](docs/mightyETL-product-upgrade-progress.md) | |
+
+Do **not** market multi-cloud warehouse CDC or BI loaders as production-ready until the matrix rows above say Supported.
 
 ## 🏗️ Architecture
 
@@ -429,10 +447,10 @@ Build Docker images:
 
 ```bash
 # Build each service
-docker build -t xtrmetl/etl-service:latest ./etl-service
-docker build -t xtrmetl/cdc-service:latest ./cdc-service
-docker build -t xtrmetl/zuul-gateway:latest ./zuul-gateway
-docker build -t xtrmetl/eureka-server:latest ./eureka-server
+docker build -t mightyetl/etl-service:latest ./etl-service
+docker build -t mightyetl/cdc-service:latest ./cdc-service
+docker build -t mightyetl/zuul-gateway:latest ./zuul-gateway
+docker build -t mightyetl/eureka-server:latest ./eureka-server
 ```
 
 ## 📋 Technology Stack
@@ -478,12 +496,13 @@ Automatic detection of service instances in the network, eliminating hardcoded s
 ### Project Structure
 
 ```text
-xtrmETL/
+mightyETL/
 ├── pom.xml                    # Parent POM
 ├── README.md                  # This file
 ├── PRD.md                     # Product Requirements Document
-├── etl-service/              # ETL processing service
-├── cdc-service/              # CDC monitoring service
+├── docs/                      # Architecture, connectors, CDC roadmap
+├── etl-service/              # ETL processing service (+ target connector SPI)
+├── cdc-service/              # CDC monitoring service (+ source SPI scaffold)
 ├── zuul-gateway/             # API Gateway
 ├── eureka-server/            # Service discovery
 ├── config-server/            # Configuration management
@@ -544,7 +563,8 @@ For issues, questions, or contributions:
 
 ### Planned (v2.0)
 
-- 🔲 Multi-database CDC support (MySQL, Oracle)
+- 🔲 Multi-database / any-to-any CDC (source SPI; see `docs/cdc/any-to-any-cdc.md`)
+- 🔲 Databricks / Snowflake / Qlik Sense loaders (target SPI; see `docs/connectors/`)
 - 🔲 Web UI for configuration
 - 🔲 Custom transformation functions
 - 🔲 Data quality validation
@@ -555,7 +575,11 @@ For issues, questions, or contributions:
 ## 📚 Additional Documentation
 
 - **[PRD.md](PRD.md)** - Complete Product Requirements Document
-- **[xtrmETL-common-initial-design-notes.txt](xtrmETL-common-initial-design-notes.txt)** - Original design notes (Korean)
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - System architecture
+- **[docs/connectors/](docs/connectors/)** - Target connector scaffolds (Qlik, Databricks, Snowflake)
+- **[docs/cdc/any-to-any-cdc.md](docs/cdc/any-to-any-cdc.md)** - Any-to-any CDC design and limitations
+- **[docs/rebrand-name-matrix.md](docs/rebrand-name-matrix.md)** - mightyETL vs legacy xtrmETL identifiers
+- **[xtrmETL-common-initial-design-notes.txt](xtrmETL-common-initial-design-notes.txt)** - Historical design notes (Korean; legacy name)
 
 ---
 

@@ -18,6 +18,19 @@ public class XtrmetlProperties {
 
     public static class Cdc {
         private boolean autostart = true;
+        /**
+         * When true, map each Debezium event to {@code CanonicalChangeRecord} for validation
+         * counters (live Kafka payload remains raw Debezium JSON).
+         */
+        private boolean canonicalMapEnabled = false;
+        /**
+         * Declared multi-source list for any-to-any roadmap. Live engine still runs a single
+         * Postgres Debezium path in {@code CdcService}; extra enabled sources are reported
+         * but not started.
+         */
+        private java.util.List<Source> sources = new java.util.ArrayList<>(java.util.List.of(
+                defaultPostgresSource()
+        ));
 
         public boolean isAutostart() {
             return autostart;
@@ -26,12 +39,71 @@ public class XtrmetlProperties {
         public void setAutostart(boolean autostart) {
             this.autostart = autostart;
         }
+
+        public boolean isCanonicalMapEnabled() {
+            return canonicalMapEnabled;
+        }
+
+        public void setCanonicalMapEnabled(boolean canonicalMapEnabled) {
+            this.canonicalMapEnabled = canonicalMapEnabled;
+        }
+
+        public java.util.List<Source> getSources() {
+            return sources;
+        }
+
+        public void setSources(java.util.List<Source> sources) {
+            this.sources = sources != null ? sources : new java.util.ArrayList<>();
+        }
+
+        private static Source defaultPostgresSource() {
+            Source source = new Source();
+            source.setId("pg-main");
+            source.setType("postgres-debezium");
+            source.setEnabled(true);
+            return source;
+        }
+    }
+
+    public static class Source {
+        private String id = "pg-main";
+        private String type = "postgres-debezium";
+        private boolean enabled = true;
+
+        public String getId() {
+            return id;
+        }
+
+        public void setId(String id) {
+            this.id = id;
+        }
+
+        public String getType() {
+            return type;
+        }
+
+        public void setType(String type) {
+            this.type = type;
+        }
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
     }
 
     public static class Replica {
         private boolean enabled = false;
         private String groupId = "xtrmetl-cdc-replica";
         private String topicPattern = "xtrmetl-cdc\\..*";
+        /**
+         * Comma-separated table names eligible for JDBC replica apply.
+         * Tables must use the {@code (id BIGINT PK, data TEXT)} shape used by {@code processed_data}.
+         */
+        private String tables = "processed_data";
         private boolean ddlEnabled = false;
         private String ddlValidationMode = "none";
         private String ddlAllowedPrefixes = "CREATE TABLE,ALTER TABLE,CREATE INDEX";
@@ -60,6 +132,14 @@ public class XtrmetlProperties {
 
         public void setTopicPattern(String topicPattern) {
             this.topicPattern = topicPattern;
+        }
+
+        public String getTables() {
+            return tables;
+        }
+
+        public void setTables(String tables) {
+            this.tables = tables;
         }
 
         public boolean isDdlEnabled() {

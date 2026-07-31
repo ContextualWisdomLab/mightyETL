@@ -1,5 +1,7 @@
 package com.xtrmetl.cdc.service;
 
+import com.xtrmetl.cdc.spi.DebeziumChangeRecordMapper;
+import com.xtrmetl.cdc.spi.PostgresDebeziumCdcSource;
 import com.xtrmetl.cdc.util.EnvUtils;
 import com.xtrmetl.cdc.util.ValidationUtils;
 import io.debezium.config.Configuration;
@@ -13,15 +15,19 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 @Service
 public class CdcService implements DisposableBean {
@@ -31,16 +37,32 @@ public class CdcService implements DisposableBean {
     private ExecutorService executor;
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final boolean autoStart;
+    private final boolean canonicalMapEnabled;
+    @Nullable
+    private final DebeziumChangeRecordMapper changeRecordMapper;
+    private final AtomicLong canonicalMapSuccess = new AtomicLong();
+    private final AtomicLong canonicalMapFailure = new AtomicLong();
 
     private DebeziumEngine<ChangeEvent<String, String>> debeziumEngine;
     private Future<?> engineTask;
 
     public CdcService(
             KafkaTemplate<String, String> kafkaTemplate,
-            @Value("${xtrmetl.cdc.autostart:true}") boolean autoStart
+            @Value("${xtrmetl.cdc.autostart:true}") boolean autoStart,
+            @Value("${xtrmetl.cdc.canonical-map-enabled:false}") boolean canonicalMapEnabled,
+            @Nullable DebeziumChangeRecordMapper changeRecordMapper
     ) {
         this.kafkaTemplate = kafkaTemplate;
         this.autoStart = autoStart;
+        this.canonicalMapEnabled = canonicalMapEnabled;
+        this.changeRecordMapper = changeRecordMapper;
+    }
+
+    /**
+     * Test helper / backward-compatible constructor.
+     */
+    public CdcService(KafkaTemplate<String, String> kafkaTemplate, boolean autoStart) {
+        this(kafkaTemplate, autoStart, false, null);
     }
 
     /**
@@ -124,6 +146,43 @@ public class CdcService implements DisposableBean {
     }
 
     /**
+     * Whether the Debezium engine task is currently running.
+     */
+    public synchronized boolean isRunning() {
+        return engineTask != null && !engineTask.isDone();
+    }
+
+    public boolean isAutoStart() {
+        return autoStart;
+    }
+
+    /**
+     * Operator-facing status (no secrets). Safe for health dashboards and support.
+     */
+    public synchronized Map<String, Object> getStatus() {
+        Map<String, Object> status = new LinkedHashMap<>();
+        status.put("product", "mightyETL");
+        status.put("running", isRunning());
+        status.put("autoStart", autoStart);
+        status.put("sourceType", "postgres-debezium");
+        status.put("sourceId", "postgres-debezium");
+        status.put("connectorName", EnvUtils.getEnv("CDC_CONNECTOR_NAME", "xtrmetl-postgres-connector"));
+        status.put("topicPrefix", EnvUtils.getEnv("CDC_TOPIC_PREFIX", "xtrmetl-cdc"));
+        status.put("schemaIncludeList", EnvUtils.getEnv("CDC_SCHEMA_INCLUDE_LIST", "public"));
+        status.put("tableIncludeList", EnvUtils.getEnv("CDC_TABLE_INCLUDE_LIST", "public.processed_data"));
+        status.put("slotName", EnvUtils.getEnv("CDC_SLOT_NAME", "xtrmetl_slot"));
+        status.put("publicationName", EnvUtils.getEnv("CDC_PUBLICATION_NAME", "xtrmetl_publication"));
+        status.put("includeSchemaChanges", EnvUtils.getEnv("CDC_INCLUDE_SCHEMA_CHANGES", "true"));
+        status.put("anyToAny", false);
+        status.put("canonicalMapEnabled", canonicalMapEnabled);
+        status.put("canonicalMapSuccess", canonicalMapSuccess.get());
+        status.put("canonicalMapFailure", canonicalMapFailure.get());
+        status.put("configPrefixes", "mightyetl.* (preferred) or xtrmetl.* (legacy); dual-read via EnvironmentPostProcessor");
+        status.put("notes", "Capture is PostgreSQL→Kafka only; see docs/cdc/any-to-any-cdc.md");
+        return status;
+    }
+
+    /**
      * Cleans up the Debezium engine and executor during application shutdown.
      *
      * 애플리케이션 종료 시 Debezium 엔진 및 내부 실행기를 정리한다.
@@ -191,10 +250,36 @@ public class CdcService implements DisposableBean {
         String key = changeEvent.key();
         String value = changeEvent.value();
 
+        maybeMapCanonical(topic, key, value);
+
+        // Live path: raw Debezium JSON (not canonical) for consumer compatibility.
         if (key != null) {
             kafkaTemplate.send(topic, key, value);
         } else {
             kafkaTemplate.send(topic, value);
+        }
+    }
+
+    /**
+     * Optional validation path for any-to-any scaffolding. Fail-open: never blocks Kafka publish.
+     */
+    private void maybeMapCanonical(String topic, String key, String value) {
+        if (!canonicalMapEnabled || changeRecordMapper == null) {
+            return;
+        }
+        try {
+            boolean ok = changeRecordMapper
+                    .map(PostgresDebeziumCdcSource.ID, topic, key, value)
+                    .isPresent();
+            if (ok) {
+                canonicalMapSuccess.incrementAndGet();
+            } else {
+                canonicalMapFailure.incrementAndGet();
+                log.debug("Canonical map produced empty result for topic={}", topic);
+            }
+        } catch (RuntimeException e) {
+            canonicalMapFailure.incrementAndGet();
+            log.debug("Canonical map failed for topic={}: {}", topic, e.toString());
         }
     }
 
