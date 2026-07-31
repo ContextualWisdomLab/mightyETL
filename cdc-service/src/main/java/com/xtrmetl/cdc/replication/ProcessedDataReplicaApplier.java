@@ -2,6 +2,7 @@ package com.xtrmetl.cdc.replication;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xtrmetl.cdc.config.XtrmetlProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -11,39 +12,60 @@ import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.Objects;
+import java.util.Set;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
+/**
+ * Applies CDC events for configured tables that share the {@code processed_data} row shape
+ * ({@code id}, {@code data}). Table names are validated as SQL identifiers only.
+ */
 @Service
 @ConditionalOnProperty(prefix = "xtrmetl.replica", name = "enabled", havingValue = "true")
 public class ProcessedDataReplicaApplier {
 
     private static final Logger log = LoggerFactory.getLogger(ProcessedDataReplicaApplier.class);
 
-    private static final String TABLE_NAME = "processed_data";
-
-    // created_at is set by the replica DB on insert (DEFAULT) and intentionally not updated on upserts.
-    // This replication path currently tracks only the latest `data` value; it does not maintain an `updated_at`.
-    private static final String UPSERT_SQL = """
-            INSERT INTO processed_data (id, data)
-            VALUES (?, ?)
-            ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data
-            """.strip();
-
-    private static final String DELETE_SQL = "DELETE FROM processed_data WHERE id = ?";
+    private static final Pattern SAFE_TABLE = Pattern.compile("^[A-Za-z_][A-Za-z0-9_]*$");
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
+    private final Set<String> allowedTables;
 
     public ProcessedDataReplicaApplier(
             @Qualifier("replicaJdbcTemplate") JdbcTemplate jdbcTemplate,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            XtrmetlProperties properties
+    ) {
+        this(jdbcTemplate, objectMapper, parseTables(properties.getReplica().getTables()));
+    }
+
+    /**
+     * Test-friendly constructor.
+     */
+    ProcessedDataReplicaApplier(
+            JdbcTemplate jdbcTemplate,
+            ObjectMapper objectMapper,
+            Set<String> allowedTables
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
+        this.allowedTables = Set.copyOf(allowedTables);
+        if (this.allowedTables.isEmpty()) {
+            throw new IllegalArgumentException("xtrmetl.replica.tables must list at least one table");
+        }
     }
 
     public void apply(@Nullable String topic, @Nullable String keyJson, @Nullable String valueJson) {
-        if (topic == null || !topic.endsWith("." + TABLE_NAME)) {
+        if (topic == null) {
+            return;
+        }
+
+        String table = tableFromTopic(topic);
+        if (table == null || !allowedTables.contains(table)) {
             return;
         }
 
@@ -60,24 +82,69 @@ public class ProcessedDataReplicaApplier {
 
         String op = envelope.op();
         if ("d".equals(op)) {
-            jdbcTemplate.update(DELETE_SQL, id);
+            jdbcTemplate.update(deleteSql(table), id);
             return;
         }
 
         JsonNode after = envelope.after();
         if (after == null || after.isNull() || !after.has("data")) {
-            log.error("Replica apply failed: missing processed_data.data field (topic={}, id={})", topic, id);
-            throw new IllegalStateException("Missing processed_data.data field in CDC event for id=" + id);
+            log.error("Replica apply failed: missing {}.data field (topic={}, id={})", table, topic, id);
+            throw new IllegalStateException("Missing " + table + ".data field in CDC event for id=" + id);
         }
 
         JsonNode dataNode = after.get("data");
         if (dataNode.isNull()) {
-            log.error("Replica apply failed: processed_data.data is null (topic={}, id={})", topic, id);
-            throw new IllegalStateException("processed_data.data is null in CDC event for id=" + id);
+            log.error("Replica apply failed: {}.data is null (topic={}, id={})", table, topic, id);
+            throw new IllegalStateException(table + ".data is null in CDC event for id=" + id);
         }
 
         String data = dataNode.isTextual() ? dataNode.asText() : dataNode.toString();
-        jdbcTemplate.update(Objects.requireNonNull(UPSERT_SQL), id, data);
+        // created_at is set by the replica DB on insert (DEFAULT) and intentionally not updated on upserts.
+        jdbcTemplate.update(Objects.requireNonNull(upsertSql(table)), id, data);
+    }
+
+    Set<String> allowedTables() {
+        return allowedTables;
+    }
+
+    static Set<String> parseTables(String tablesConfig) {
+        if (tablesConfig == null || tablesConfig.isBlank()) {
+            return Set.of("processed_data");
+        }
+        Set<String> tables = Arrays.stream(tablesConfig.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .map(s -> {
+                    if (!SAFE_TABLE.matcher(s).matches()) {
+                        throw new IllegalArgumentException(
+                                "Invalid replica table name '" + s + "': must match " + SAFE_TABLE.pattern()
+                        );
+                    }
+                    return s;
+                })
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        return tables.isEmpty() ? Set.of("processed_data") : tables;
+    }
+
+    private static String tableFromTopic(String topic) {
+        int lastDot = topic.lastIndexOf('.');
+        if (lastDot < 0 || lastDot == topic.length() - 1) {
+            return null;
+        }
+        return topic.substring(lastDot + 1);
+    }
+
+    private static String upsertSql(String table) {
+        // table already validated against SAFE_TABLE
+        return """
+                INSERT INTO %s (id, data)
+                VALUES (?, ?)
+                ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data
+                """.formatted(table).strip();
+    }
+
+    private static String deleteSql(String table) {
+        return "DELETE FROM " + table + " WHERE id = ?";
     }
 
     private DebeziumEnvelope parseDebeziumEnvelope(String valueJson) {

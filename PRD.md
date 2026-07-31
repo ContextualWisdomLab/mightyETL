@@ -4,7 +4,7 @@
 
 ### 1.1 Product Overview
 
-xtrmETL is a microservices-based enterprise data integration platform
+mightyETL (formerly xtrmETL) is a microservices-based enterprise data integration platform
 that provides real-time Change Data Capture (CDC) and
 Extract-Transform-Load (ETL) capabilities. The platform enables
 organizations to capture database changes in real-time and process data

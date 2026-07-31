@@ -1,10 +1,10 @@
-# xtrmETL 프로젝트 분석 요약
+# mightyETL 프로젝트 분석 요약
 
 ## 프로젝트 목적 역추적 결과
 
 ### 프로젝트 개요
 
-**xtrmETL**은 실시간 Change Data Capture(CDC)와 Extract-Transform-Load(ETL) 기능을 제공하는 마이크로서비스 기반 엔터프라이즈 데이터 통합 플랫폼입니다.
+**mightyETL**(구 xtrmETL)은 실시간 Change Data Capture(CDC)와 Extract-Transform-Load(ETL) 기능을 제공하는 마이크로서비스 기반 엔터프라이즈 데이터 통합 플랫폼입니다.
 
 ### 핵심 목표
 
@@ -203,7 +203,7 @@ cd zuul-gateway && mvn spring-boot:run
 
 ## 결론
 
-xtrmETL은 **실시간 데이터베이스 변경 캡처(CDC)**와 **데이터 변환(ETL)** 기능을 제공하는 마이크로서비스 플랫폼입니다.
+mightyETL은 **실시간 데이터베이스 변경 캡처(CDC)**와 **데이터 변환(ETL)** 기능을 제공하는 마이크로서비스 플랫폼입니다.
 
 **핵심 가치**:
 

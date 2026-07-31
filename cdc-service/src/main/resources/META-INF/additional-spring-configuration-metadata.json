@@ -3,19 +3,34 @@
     {
       "name": "xtrmetl",
       "type": "com.xtrmetl.cdc.config.XtrmetlProperties",
-      "description": "xtrmETL application-specific properties."
+      "description": "mightyETL application-specific properties (config prefix remains xtrmetl for compatibility)."
     }
   ],
   "properties": [
     {
       "name": "xtrmetl.cdc.autostart",
       "type": "java.lang.Boolean",
-      "description": "Whether to automatically start CDC on application startup."
+      "description": "Whether to automatically start CDC on application startup. Aliased from mightyetl.cdc.autostart when set."
+    },
+    {
+      "name": "xtrmetl.cdc.canonical-map-enabled",
+      "type": "java.lang.Boolean",
+      "description": "When true, map Debezium events to CanonicalChangeRecord for status counters; Kafka payload stays raw."
     },
     {
       "name": "xtrmetl.replica.enabled",
       "type": "java.lang.Boolean",
       "description": "Whether to enable replica apply pipeline."
+    },
+    {
+      "name": "xtrmetl.replica.tables",
+      "type": "java.lang.String",
+      "description": "Comma-separated replica tables with (id, data) shape. Default: processed_data."
+    },
+    {
+      "name": "mightyetl.cdc.autostart",
+      "type": "java.lang.Boolean",
+      "description": "Preferred mightyETL prefix; mirrored onto xtrmetl.cdc.autostart."
     },
     {
       "name": "xtrmetl.replica.group-id",

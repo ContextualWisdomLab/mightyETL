@@ -1,3 +1,5 @@
+# mightyETL local stack (product name). Dev DB user/db defaults remain "xtrmetl" for
+# compatibility; override via .env (POSTGRES_*) — see docs/rebrand-name-matrix.md.
 services:
   postgres:
     image: postgres:16-alpine
@@ -11,6 +13,7 @@ services:
       - max_wal_senders=4
     environment:
       # NOTE: Defaults are for local development only. Override via .env / secrets for production.
+      # Legacy default name "xtrmetl" kept intentionally (not product rebrand of data volumes).
       POSTGRES_DB: ${POSTGRES_DB:-xtrmetl}
       POSTGRES_USER: ${POSTGRES_USER:-xtrmetl}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-xtrmetl}
