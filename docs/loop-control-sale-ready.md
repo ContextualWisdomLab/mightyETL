@@ -25,8 +25,9 @@
 | L1-inventory | Inventory PRs + residual sale-ready gaps | single-pass main agent | control record written | **completed** |
 | L2-verify-core | Green tests + claims + ops alignment | single-pass main agent | criterion 3 holds | **completed** |
 | L3-dispose | Land intentional deltas via PR | single-pass main agent | open PRs = 0 after merge | **completed** |
+| L4-watch | 1-min sale-ready hold fire | every 1m / `019fb83d962c` | open_prs=0 + tests=pass + claims=ok + ops=ok | **stop+delete** (bar holds this fire) |
 
-**scheduler_list at goal end:** empty — no goal-owned recurring tasks created (single-pass Loops only).
+**scheduler at this fire:** `019fb83d962c` deleted after re-verify (no orphan goal-owned tasks left).
 
 ## PR dispositions (this goal)
 
@@ -37,9 +38,15 @@
 
 ## Environment
 
-- Host OpenJDK 21 cannot compile `release 25`; tests run with Temurin 25.0.4.
-- Command: `./mvnw -B -pl cdc-service,etl-service -am test` → BUILD SUCCESS.
+- Host OpenJDK 21 cannot compile `release 25`; tests run with Temurin 25 (Docker `eclipse-temurin:25-jdk` + host `./mvnw`).
+- Command: `./mvnw -B -pl cdc-service,etl-service -am test` → BUILD SUCCESS (cdc 99 + etl suite, Failures: 0).
+
+## Fire log (L4-watch)
+
+| When | open_prs | tests | claims | ops | Action |
+|:-----|:---------|:------|:-------|:----|:-------|
+| 2026-07-31 (this fire) | 0 | pass (JDK 25 docker) | ok (scaffold matrix) | ok (`CdcOpsDocsAlignmentTest` + ops doc) | No code fix needed; finalize control; `scheduler_delete 019fb83d962c` |
 
 ## Final status
 
-Criteria 1–4 hold. Open PRs = 0. No orphan scheduler tasks. Sale-ready core (honest claims, runnable primary test suite, ops doc aligned and gated by test) is the satisficing interpretation of “$20B confidence” — not market valuation proof.
+Criteria (a)–(g) hold. Open PRs = 0. Tests pass on Temurin 25. Claims honest (scaffold language). Ops doc aligned to `CdcController` / `cdcEngine`. Loop-control finalized; schedule `019fb83d962c` deleted. Sale-ready core (honest claims, runnable primary test suite, ops evidence) is the satisficing “$20B confidence” bar — not market valuation proof.
