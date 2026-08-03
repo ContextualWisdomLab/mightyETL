@@ -21,6 +21,7 @@ RUN mvn -B -DskipTests -pl "${SERVICE}" -am package \
 FROM eclipse-temurin:25-jre
 
 WORKDIR /app
-COPY --from=build /out/app.jar /app/app.jar
+COPY --from=build --chown=65532:65532 /out/app.jar /app/app.jar
 
+USER 65532:65532
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]
