@@ -21,6 +21,9 @@ public class MightyEtlConfigAliasEnvironmentPostProcessor implements Environment
     public static final String PROPERTY_SOURCE_NAME = "mightyetl-xtrmetl-aliases";
 
     static final List<String> RELATIVE_KEYS = List.of(
+            "etl.max-batch-records",
+            "etl.max-concurrency",
+            "etl.queue-capacity",
             "connectors.databricks.enabled",
             "connectors.snowflake.enabled",
             "connectors.qlik-sense.enabled"
@@ -34,6 +37,12 @@ public class MightyEtlConfigAliasEnvironmentPostProcessor implements Environment
         }
     }
 
+    /**
+     * Builds one-way aliases with the modern product prefix taking precedence.
+     *
+     * @param environment current Spring environment
+     * @return properties to prepend to the environment, or an empty map when no known keys exist
+     */
     static Map<String, Object> buildAliases(org.springframework.core.env.Environment environment) {
         Map<String, Object> aliases = new LinkedHashMap<>();
         for (String relative : RELATIVE_KEYS) {
