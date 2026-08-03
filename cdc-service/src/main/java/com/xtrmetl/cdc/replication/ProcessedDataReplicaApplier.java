@@ -29,7 +29,6 @@ import java.util.stream.Collectors;
 public class ProcessedDataReplicaApplier {
 
     private static final Logger log = LoggerFactory.getLogger(ProcessedDataReplicaApplier.class);
-
     private static final Pattern SAFE_TABLE = Pattern.compile("^[A-Za-z_][A-Za-z0-9_]*$");
 
     private final JdbcTemplate jdbcTemplate;
@@ -45,9 +44,6 @@ public class ProcessedDataReplicaApplier {
         this(jdbcTemplate, objectMapper, parseTables(properties.getReplica().getTables()));
     }
 
-    /**
-     * Test-friendly constructor.
-     */
     ProcessedDataReplicaApplier(
             JdbcTemplate jdbcTemplate,
             ObjectMapper objectMapper,
@@ -61,7 +57,6 @@ public class ProcessedDataReplicaApplier {
         if (this.allowedTables.isEmpty()) {
             throw new IllegalArgumentException("xtrmetl.replica.tables must list at least one table");
         }
-
         Map<String, TableSql> compiledSql = new LinkedHashMap<>();
         for (String table : this.allowedTables) {
             compiledSql.put(table, new TableSql(upsertSql(table), deleteSql(table)));
@@ -73,46 +68,36 @@ public class ProcessedDataReplicaApplier {
         if (topic == null) {
             return;
         }
-
-        TableSql tableSql = sqlByTable.get(tableFromTopic(topic));
+        String table = tableFromTopic(topic);
+        if (table == null) {
+            return;
+        }
+        TableSql tableSql = sqlByTable.get(table);
         if (tableSql == null) {
             return;
         }
-
         DebeziumEnvelope envelope = parseDebeziumEnvelope(valueJson);
         if (envelope == null) {
             return;
         }
-
         Long id = extractId(keyJson, envelope.after());
         if (id == null) {
             log.debug("Skipping replica apply: missing id (topic={})", topic);
             return;
         }
-
-        String op = envelope.op();
-        if ("d".equals(op)) {
-            // JDBC cannot bind identifiers. This SQL was precompiled from the constructor-validated
-            // table allow-list; the public topic input can only select an existing map entry.
+        if ("d".equals(envelope.op())) {
             jdbcTemplate.update(tableSql.deleteSql(), id); // nosemgrep: java.spring.security.audit.spring-sqli.spring-sqli
             return;
         }
-
         JsonNode after = envelope.after();
         if (after == null || after.isNull() || !after.has("data")) {
-            log.error("Replica apply failed: missing data field (topic={}, id={})", topic, id);
             throw new IllegalStateException("Missing data field in CDC event for id=" + id);
         }
-
         JsonNode dataNode = after.get("data");
         if (dataNode.isNull()) {
-            log.error("Replica apply failed: data is null (topic={}, id={})", topic, id);
             throw new IllegalStateException("data is null in CDC event for id=" + id);
         }
-
         String data = dataNode.isTextual() ? dataNode.asText() : dataNode.toString();
-        // created_at is set by the replica DB on insert (DEFAULT) and intentionally not updated on upserts.
-        // The statement is precompiled from validated configuration; id/data remain JDBC-bound values.
         jdbcTemplate.update(tableSql.upsertSql(), id, data); // nosemgrep: java.spring.security.audit.spring-sqli.spring-sqli
     }
 
@@ -134,9 +119,7 @@ public class ProcessedDataReplicaApplier {
 
     private static String requireSafeTable(String table) {
         if (table == null || !SAFE_TABLE.matcher(table).matches()) {
-            throw new IllegalArgumentException(
-                    "Invalid replica table name '" + table + "': must match " + SAFE_TABLE.pattern()
-            );
+            throw new IllegalArgumentException("Invalid replica table name '" + table + "': must match " + SAFE_TABLE.pattern());
         }
         return table;
     }
@@ -165,21 +148,17 @@ public class ProcessedDataReplicaApplier {
         if (valueJson == null || valueJson.isBlank()) {
             return null;
         }
-
         try {
             JsonNode root = objectMapper.readTree(valueJson);
             JsonNode payload = root.get("payload");
             if (payload == null || payload.isNull()) {
                 return null;
             }
-
             String op = payload.path("op").asText(null);
             JsonNode after = payload.get("after");
-
             if (op == null) {
                 op = after == null || after.isNull() ? "d" : "u";
             }
-
             return new DebeziumEnvelope(op, after);
         } catch (IOException e) {
             log.warn("Failed to parse Debezium value JSON; skipping replica apply", e);
@@ -189,24 +168,18 @@ public class ProcessedDataReplicaApplier {
 
     private Long extractId(String keyJson, JsonNode after) {
         Long idFromKey = extractIdFromKey(keyJson);
-        if (idFromKey != null) {
-            return idFromKey;
-        }
-
-        return extractLong(after, "id");
+        return idFromKey != null ? idFromKey : extractLong(after, "id");
     }
 
     private Long extractIdFromKey(String keyJson) {
         if (keyJson == null || keyJson.isBlank()) {
             return null;
         }
-
         try {
             JsonNode root = objectMapper.readTree(keyJson);
             JsonNode payload = root.has("payload") ? root.get("payload") : root;
             return extractLong(payload, "id");
         } catch (IOException e) {
-            log.debug("Failed to parse Debezium key JSON; falling back to value payload", e);
             return null;
         }
     }
@@ -215,16 +188,13 @@ public class ProcessedDataReplicaApplier {
         if (object == null || object.isNull()) {
             return null;
         }
-
         JsonNode value = object.get(fieldName);
         if (value == null || value.isNull()) {
             return null;
         }
-
         if (value.isNumber()) {
             return value.longValue();
         }
-
         if (value.isTextual()) {
             try {
                 return Long.parseLong(value.asText());
@@ -232,11 +202,9 @@ public class ProcessedDataReplicaApplier {
                 return null;
             }
         }
-
         return null;
     }
 
     private record TableSql(String upsertSql, String deleteSql) {}
-
     private record DebeziumEnvelope(String op, JsonNode after) {}
 }
