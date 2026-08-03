@@ -36,6 +36,15 @@ class HourlyPrDispositionWorkflowTest {
     }
 
     @Test
+    void requiresLatestDecisiveReviewState() {
+        assertTrue(workflow.contains(
+                "map(select(.state == \"APPROVED\" or .state == \"CHANGES_REQUESTED\"))"
+        ));
+        assertTrue(workflow.contains("map(max_by(.submitted_at // \"\"))"));
+        assertTrue(workflow.contains("latest decisive review state includes requested changes"));
+    }
+
+    @Test
     void requiresResolvedCurrentReviewThreads() {
         assertTrue(workflow.contains("reviewThreads(first: 100, after: $endCursor)"));
         assertTrue(workflow.contains(".isResolved == false and .isOutdated == false"));
