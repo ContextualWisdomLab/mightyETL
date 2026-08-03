@@ -8,6 +8,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -127,28 +129,40 @@ class TargetConnectorDispatcherTest {
         registry.register(connector);
         TargetConnectorDispatcher dispatcher =
                 new TargetConnectorDispatcher(registry, enabledDatabricksProperties());
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch secondDispatchEntered = new CountDownLatch(1);
 
-        CompletableFuture<Void> firstDispatch = CompletableFuture.runAsync(
-                () -> dispatcher.dispatch("databricks", List.of())
-        );
-        assertTrue(connector.firstWriteStarted.await(5, TimeUnit.SECONDS));
-
-        CompletableFuture<Void> secondDispatch = CompletableFuture.runAsync(
-                () -> dispatcher.dispatch("databricks", List.of())
-        );
         try {
-            assertThrows(TimeoutException.class,
-                    () -> connector.secondWriteStartedFuture().get(100, TimeUnit.MILLISECONDS));
+            CompletableFuture<Void> firstDispatch = CompletableFuture.runAsync(
+                    () -> dispatcher.dispatch("databricks", List.of()),
+                    executor
+            );
+            assertTrue(connector.firstWriteStarted.await(5, TimeUnit.SECONDS));
+
+            CompletableFuture<Void> secondDispatch = CompletableFuture.runAsync(() -> {
+                secondDispatchEntered.countDown();
+                dispatcher.dispatch("databricks", List.of());
+            }, executor);
+            assertTrue(secondDispatchEntered.await(5, TimeUnit.SECONDS));
+
+            try {
+                assertThrows(TimeoutException.class,
+                        () -> connector.secondWriteStartedFuture(executor)
+                                .get(250, TimeUnit.MILLISECONDS));
+            } finally {
+                connector.releaseFirstWrite.countDown();
+            }
+
+            firstDispatch.get(5, TimeUnit.SECONDS);
+            secondDispatch.get(5, TimeUnit.SECONDS);
+
+            assertEquals(1, connector.maxConcurrentWrites.get());
+            assertEquals(2, connector.writeCalls.get());
+            dispatcher.closeOpenedConnectors();
         } finally {
             connector.releaseFirstWrite.countDown();
+            executor.shutdownNow();
         }
-
-        firstDispatch.get(5, TimeUnit.SECONDS);
-        secondDispatch.get(5, TimeUnit.SECONDS);
-
-        assertEquals(1, connector.maxConcurrentWrites.get());
-        assertEquals(2, connector.writeCalls.get());
-        dispatcher.closeOpenedConnectors();
     }
 
     @Test
@@ -158,30 +172,38 @@ class TargetConnectorDispatcherTest {
         registry.register(connector);
         TargetConnectorDispatcher dispatcher =
                 new TargetConnectorDispatcher(registry, enabledDatabricksProperties());
+        ExecutorService executor = Executors.newFixedThreadPool(2);
 
-        CompletableFuture<Void> dispatchFuture = CompletableFuture.runAsync(
-                () -> dispatcher.dispatch("databricks", List.of())
-        );
-        assertTrue(connector.writeStarted.await(5, TimeUnit.SECONDS));
-
-        CompletableFuture<Void> closeFuture = CompletableFuture.runAsync(
-                dispatcher::closeOpenedConnectors
-        );
         try {
-            assertThrows(TimeoutException.class,
-                    () -> closeFuture.get(100, TimeUnit.MILLISECONDS));
+            CompletableFuture<Void> dispatchFuture = CompletableFuture.runAsync(
+                    () -> dispatcher.dispatch("databricks", List.of()),
+                    executor
+            );
+            assertTrue(connector.writeStarted.await(5, TimeUnit.SECONDS));
+
+            CompletableFuture<Void> closeFuture = CompletableFuture.runAsync(
+                    dispatcher::closeOpenedConnectors,
+                    executor
+            );
+            try {
+                assertThrows(TimeoutException.class,
+                        () -> closeFuture.get(250, TimeUnit.MILLISECONDS));
+            } finally {
+                connector.releaseWrite.countDown();
+            }
+
+            dispatchFuture.get(5, TimeUnit.SECONDS);
+            closeFuture.get(5, TimeUnit.SECONDS);
+
+            List<String> completedLifecycle = List.of("open", "write-start", "write-end", "close");
+            assertEquals(completedLifecycle, connector.events());
+            assertThrows(IllegalStateException.class,
+                    () -> dispatcher.dispatch("databricks", List.of()));
+            assertEquals(completedLifecycle, connector.events());
         } finally {
             connector.releaseWrite.countDown();
+            executor.shutdownNow();
         }
-
-        dispatchFuture.get(5, TimeUnit.SECONDS);
-        closeFuture.get(5, TimeUnit.SECONDS);
-
-        List<String> completedLifecycle = List.of("open", "write-start", "write-end", "close");
-        assertEquals(completedLifecycle, connector.events());
-        assertThrows(IllegalStateException.class,
-                () -> dispatcher.dispatch("databricks", List.of()));
-        assertEquals(completedLifecycle, connector.events());
     }
 
     private static Map<String, Object> databricksCatalogRow(TargetConnectorDispatcher dispatcher) {
@@ -304,7 +326,7 @@ class TargetConnectorDispatcherTest {
             }
         }
 
-        private CompletableFuture<Void> secondWriteStartedFuture() {
+        private CompletableFuture<Void> secondWriteStartedFuture(ExecutorService executor) {
             return CompletableFuture.runAsync(() -> {
                 try {
                     if (!secondWriteStarted.await(5, TimeUnit.SECONDS)) {
@@ -314,7 +336,7 @@ class TargetConnectorDispatcherTest {
                     Thread.currentThread().interrupt();
                     throw new IllegalStateException("test wait interrupted", exception);
                 }
-            });
+            }, executor);
         }
     }
 
