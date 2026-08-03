@@ -1,11 +1,15 @@
 package com.xtrmetl.etl.connector;
 
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
 /**
  * Normalized change event for target connectors (canonical CDC/ETL record).
+ *
+ * <p>Row maps are shallow-snapshotted at construction time so callers cannot mutate a
+ * record after it has entered a connector pipeline. Null database values remain supported.</p>
  */
 public final class ChangeRecord {
 
@@ -33,9 +37,9 @@ public final class ChangeRecord {
         this.schema = schema;
         this.table = table;
         this.tsEpochMs = tsEpochMs;
-        this.before = before == null ? Map.of() : Collections.unmodifiableMap(before);
-        this.after = after == null ? Map.of() : Collections.unmodifiableMap(after);
-        this.pk = pk == null ? Map.of() : Collections.unmodifiableMap(pk);
+        this.before = snapshot(before);
+        this.after = snapshot(after);
+        this.pk = snapshot(pk);
     }
 
     public String getSourceId() {
@@ -91,5 +95,12 @@ public final class ChangeRecord {
     @Override
     public int hashCode() {
         return Objects.hash(sourceId, op, schema, table, tsEpochMs, before, after, pk);
+    }
+
+    private static Map<String, Object> snapshot(Map<String, Object> source) {
+        if (source == null || source.isEmpty()) {
+            return Map.of();
+        }
+        return Collections.unmodifiableMap(new LinkedHashMap<>(source));
     }
 }
