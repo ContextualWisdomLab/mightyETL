@@ -40,7 +40,9 @@ class EtlBatchDocsAlignmentTest {
         assertTrue(normalizedRunbook.contains("numeric json identifier types are rejected"));
         assertTrue(runbook.contains("no more than 256 Unicode code points"));
         assertTrue(runbook.contains("Nested arrays and objects are retained as compact JSON"));
-        assertTrue(runbook.contains("control characters"));
+        assertTrue(runbook.contains("Unicode line-separator"));
+        assertTrue(runbook.contains("no duplicate object-field names"));
+        assertTrue(runbook.contains("Duplicate field names are rejected"));
     }
 
     @Test
