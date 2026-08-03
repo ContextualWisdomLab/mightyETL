@@ -15,10 +15,13 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
 
-# Dual-read: mightyetl.connectors.* preferred (aliased to xtrmetl.connectors.*).
-# Warehouse/BI targets: SPI + config binding + validation + catalog; write() still SCAFFOLD.
+# Dual-read: mightyetl.* preferred (aliased to xtrmetl.* for known keys).
 # Primary load path: PostgreSQL via EtlService. Catalog: GET /api/etl/connectors
 xtrmetl:
+  etl:
+    max-payload-bytes: ${ETL_MAX_PAYLOAD_BYTES:1048576}
+    max-batch-records: ${ETL_MAX_BATCH_RECORDS:1000}
+  # Warehouse/BI targets: SPI + config binding + validation + catalog; writes remain SCAFFOLD.
   connectors:
     databricks:
       enabled: ${DATABRICKS_CONNECTOR_ENABLED:false}
