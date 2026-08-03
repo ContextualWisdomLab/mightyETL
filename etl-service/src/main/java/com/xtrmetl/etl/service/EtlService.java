@@ -2,6 +2,8 @@ package com.xtrmetl.etl.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.dao.DataAccessException;
+import org.springframework.dao.TransientDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.lang.Nullable;
 import org.springframework.retry.annotation.Backoff;
@@ -17,6 +19,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 /**
  * Validates, transforms, and loads one bounded ETL request batch.
@@ -60,11 +63,18 @@ public class EtlService {
     /**
      * Processes one JSON-array request as a prevalidated transaction-scoped batch.
      *
+     * <p>Only transient Spring data-access failures are retried. Invalid client input and
+     * deterministic constraint violations fail immediately instead of repeating the same work.</p>
+     *
      * @param data UTF-8 JSON array payload
      * @return one {@code Processed: <id>} line per record, in input order
      * @throws RuntimeException when parsing, admission, transformation, or loading fails
      */
-    @Retryable(maxAttempts = 3, backoff = @Backoff(delay = 1000))
+    @Retryable(
+            retryFor = TransientDataAccessException.class,
+            maxAttempts = 3,
+            backoff = @Backoff(delay = 1000)
+    )
     @Transactional
     public String processData(String data) {
         try {
@@ -80,8 +90,9 @@ public class EtlService {
 
             return preparedRecords.stream()
                     .map(record -> "Processed: " + record.id())
-                    .reduce((left, right) -> left + "\n" + right)
-                    .orElse("");
+                    .collect(Collectors.joining("\n"));
+        } catch (DataAccessException exception) {
+            throw exception;
         } catch (Exception exception) {
             throw new RuntimeException(
                     "Error processing data: " + exception.getMessage(),
@@ -151,7 +162,7 @@ public class EtlService {
         return transformed.toString();
     }
 
-    private String transformValue(String key, JsonNode valueNode) {
+    private String transformValue(String key, @Nullable JsonNode valueNode) {
         String value = valueNode == null || valueNode.isNull()
                 ? "null"
                 : valueNode.asText();
@@ -166,8 +177,10 @@ public class EtlService {
     private String formatAmount(String value) {
         try {
             BigDecimal amount = new BigDecimal(value.trim());
+            int scale = amount.scale();
             if (amount.precision() > MAX_AMOUNT_PRECISION
-                    || Math.abs(amount.scale()) > MAX_AMOUNT_ABSOLUTE_SCALE) {
+                    || scale < -MAX_AMOUNT_ABSOLUTE_SCALE
+                    || scale > MAX_AMOUNT_ABSOLUTE_SCALE) {
                 return "0.00";
             }
             return amount.setScale(2, RoundingMode.HALF_UP).toPlainString();
