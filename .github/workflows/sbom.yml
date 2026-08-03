@@ -3,7 +3,7 @@ name: SBOM (CycloneDX)
 on:
   pull_request:
   push:
-    branches: [develop, main]
+    branches: [main]
   workflow_dispatch:
     inputs:
       use_self_hosted:
