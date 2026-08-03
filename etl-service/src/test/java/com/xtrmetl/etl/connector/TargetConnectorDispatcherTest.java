@@ -3,8 +3,13 @@ package com.xtrmetl.etl.connector;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -116,6 +121,36 @@ class TargetConnectorDispatcherTest {
         assertTrue(connector.events.isEmpty());
     }
 
+    @Test
+    void shutdownWaitsForInFlightWriteAndRejectsLaterDispatches() throws Exception {
+        BlockingConnector connector = new BlockingConnector();
+        TargetConnectorRegistry registry = new TargetConnectorRegistry();
+        registry.register(connector);
+        TargetConnectorDispatcher dispatcher =
+                new TargetConnectorDispatcher(registry, enabledDatabricksProperties());
+
+        CompletableFuture<Void> dispatchFuture = CompletableFuture.runAsync(
+                () -> dispatcher.dispatch("databricks", List.of())
+        );
+        assertTrue(connector.writeStarted.await(5, TimeUnit.SECONDS));
+
+        CompletableFuture<Void> closeFuture = CompletableFuture.runAsync(
+                dispatcher::closeOpenedConnectors
+        );
+        assertThrows(TimeoutException.class,
+                () -> closeFuture.get(100, TimeUnit.MILLISECONDS));
+
+        connector.releaseWrite.countDown();
+        dispatchFuture.get(5, TimeUnit.SECONDS);
+        closeFuture.get(5, TimeUnit.SECONDS);
+
+        List<String> completedLifecycle = List.of("open", "write-start", "write-end", "close");
+        assertEquals(completedLifecycle, connector.events());
+        assertThrows(IllegalStateException.class,
+                () -> dispatcher.dispatch("databricks", List.of()));
+        assertEquals(completedLifecycle, connector.events());
+    }
+
     private static ConnectorProperties enabledDatabricksProperties() {
         ConnectorProperties props = new ConnectorProperties();
         props.getDatabricks().setEnabled(true);
@@ -176,6 +211,63 @@ class TargetConnectorDispatcherTest {
         @Override
         public void close() {
             events.add("close");
+        }
+    }
+
+    private static final class BlockingConnector implements TargetConnector {
+        private final List<String> events = Collections.synchronizedList(new ArrayList<>());
+        private final CountDownLatch writeStarted = new CountDownLatch(1);
+        private final CountDownLatch releaseWrite = new CountDownLatch(1);
+
+        @Override
+        public String id() {
+            return "databricks";
+        }
+
+        @Override
+        public String displayName() {
+            return "Blocking connector";
+        }
+
+        @Override
+        public ConnectorStatus status() {
+            return ConnectorStatus.SUPPORTED;
+        }
+
+        @Override
+        public void validate(Map<String, String> config) {
+            // The fake intentionally has no external configuration contract.
+        }
+
+        @Override
+        public void open(Map<String, String> config) {
+            events.add("open");
+        }
+
+        @Override
+        public void write(List<ChangeRecord> batch) {
+            events.add("write-start");
+            writeStarted.countDown();
+            try {
+                if (!releaseWrite.await(5, TimeUnit.SECONDS)) {
+                    throw new IllegalStateException("test write release timed out");
+                }
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("test write interrupted", exception);
+            }
+            events.add("write-end");
+        }
+
+        @Override
+        public void close() {
+            events.add("close");
+        }
+
+        private List<String> events() {
+            synchronized (events) {
+                return List.copyOf(events);
+            }
         }
     }
 }
