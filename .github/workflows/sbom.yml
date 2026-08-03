@@ -3,7 +3,7 @@ name: SBOM (CycloneDX)
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [develop, main]
   workflow_dispatch:
     inputs:
       use_self_hosted:
@@ -11,6 +11,10 @@ on:
         type: boolean
         required: false
         default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
