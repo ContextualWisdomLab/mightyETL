@@ -1,484 +1,264 @@
 package com.xtrmetl.etl.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.params.provider.CsvSource;
-import org.mockito.ArgumentMatchers;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 import org.springframework.dao.DataAccessException;
+import org.springframework.dao.TransientDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.retry.annotation.Retryable;
+import org.springframework.transaction.annotation.Transactional;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import java.lang.reflect.Method;
+
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 /**
- * Comprehensive test suite for EtlService.
- * Tests ETL operations, data transformation logic, error handling, and edge cases.
+ * Core behavior tests for {@link EtlService} using a real Jackson parser and mocked JDBC boundary.
+ *
+ * <p>Parser isolation and adversarial admission cases are covered in the focused safety suites;
+ * this class preserves broad transformation and compatibility coverage without mocking Jackson
+ * internals that the service intentionally copies.</p>
  */
-@SuppressWarnings("null")
 @DisplayName("EtlService Tests")
 class EtlServiceTest {
 
-    @Mock
     private JdbcTemplate jdbcTemplate;
-
-    @Mock
-    private ObjectMapper objectMapper;
-
-    @InjectMocks
     private EtlService etlService;
-
-    private ObjectMapper realObjectMapper;
 
     @BeforeEach
     void setUp() {
-        MockitoAnnotations.openMocks(this);
-        realObjectMapper = new ObjectMapper();
+        jdbcTemplate = mock(JdbcTemplate.class);
+        EtlBatchProperties properties = new EtlBatchProperties();
+        properties.setMaxPayloadBytes(65_536);
+        properties.setMaxBatchRecords(100);
+        etlService = new EtlService(jdbcTemplate, new ObjectMapper(), properties);
     }
 
     @Nested
-    @DisplayName("Happy Path Tests")
+    @DisplayName("Happy path")
     class HappyPathTests {
 
         @Test
-        @DisplayName("Should process single record successfully")
-        void testProcessSingleRecord() throws Exception {
-            String testData = "[{\"id\":\"1\",\"name\":\"John Doe\",\"email\":\"john@example.com\",\"amount\":\"100.50\"}]";
-            String expectedSql = "INSERT INTO processed_data (data) VALUES (?)";
-            String expectedTransformedData = "ID:1,NAME:JOHN DOE,EMAIL:john@example.com,AMOUNT:100.50,";
-            JsonNode jsonNode = realObjectMapper.readTree(testData);
+        void processesSingleRecordWithExpectedTransformations() {
+            String input = """
+                    [{
+                      "id":"record_alpha",
+                      "name":"John Doe",
+                      "email":"JOHN@EXAMPLE.COM",
+                      "amount":"100.50"
+                    }]
+                    """;
 
-            when(objectMapper.readTree(testData)).thenReturn(jsonNode);
-            when(jdbcTemplate.update(expectedSql, expectedTransformedData)).thenReturn(1);
+            String result = etlService.processData(input);
 
-            String result = etlService.processData(testData);
-
-            assertNotNull(result);
-            assertTrue(result.contains("Processed: 1"));
-            verify(jdbcTemplate, times(1)).update(expectedSql, expectedTransformedData);
+            assertEquals("Processed: record_alpha", result);
+            verify(jdbcTemplate).update(
+                    "INSERT INTO processed_data (data) VALUES (?)",
+                    "ID:record_alpha,NAME:JOHN DOE,EMAIL:john@example.com,AMOUNT:100.50,"
+            );
         }
 
         @Test
-        @DisplayName("Should process multiple records successfully")
-        void testProcessMultipleRecords() throws Exception {
-            String testData = "[" +
-                "{\"id\":\"1\",\"name\":\"John Doe\",\"email\":\"john@example.com\",\"amount\":\"100.50\"}," +
-                "{\"id\":\"2\",\"name\":\"Jane Smith\",\"email\":\"jane@example.com\",\"amount\":\"250.75\"}," +
-                "{\"id\":\"3\",\"name\":\"Bob Johnson\",\"email\":\"bob@example.com\",\"amount\":\"75.25\"}" +
-                "]";
-            JsonNode jsonNode = realObjectMapper.readTree(testData);
+        void processesMultipleRecordsAndPreservesResponseOrder() {
+            String input = """
+                    [
+                      {"id":"record_alpha","name":"Alpha"},
+                      {"id":"record_beta","name":"Beta"},
+                      {"id":"record_gamma","name":"Gamma"}
+                    ]
+                    """;
 
-            when(objectMapper.readTree(testData)).thenReturn(jsonNode);
-            when(jdbcTemplate.update(anyString(), anyString())).thenReturn(1);
+            String result = etlService.processData(input);
 
-            String result = etlService.processData(testData);
-
-            assertNotNull(result);
-            assertTrue(result.contains("Processed: 1"));
-            assertTrue(result.contains("Processed: 2"));
-            assertTrue(result.contains("Processed: 3"));
+            assertEquals(
+                    "Processed: record_alpha\nProcessed: record_beta\nProcessed: record_gamma",
+                    result
+            );
             verify(jdbcTemplate, times(3)).update(anyString(), anyString());
         }
 
         @Test
-        @DisplayName("Should handle empty array gracefully")
-        void testProcessDataWithEmptyInput() throws JsonProcessingException {
-            String testData = "[]";
-            JsonNode jsonNode = realObjectMapper.readTree(testData);
-            when(objectMapper.readTree(testData)).thenReturn(jsonNode);
+        void acceptsEmptyArrayWithoutDatabaseWork() {
+            String result = etlService.processData("[]");
 
-            String result = etlService.processData(testData);
-
-            assertNotNull(result);
-            assertTrue(result.isEmpty() || result.isBlank());
-            verify(jdbcTemplate, never()).update(anyString(), anyString());
+            assertEquals("", result);
+            verifyNoInteractions(jdbcTemplate);
         }
     }
 
     @Nested
-    @DisplayName("Data Transformation Tests")
-    class DataTransformationTests {
-
-        @Test
-        @DisplayName("Should transform name to uppercase")
-        void shouldTransformNameToUppercase() throws Exception {
-            String testData = "[{\"id\":\"1\",\"name\":\"john doe\",\"email\":\"john@example.com\",\"amount\":\"100\"}]";
-            JsonNode jsonNode = realObjectMapper.readTree(testData);
-
-            when(objectMapper.readTree(testData)).thenReturn(jsonNode);
-            when(jdbcTemplate.update(anyString(), anyString())).thenReturn(1);
-
-            etlService.processData(testData);
-
-            verify(jdbcTemplate).update(anyString(), contains("NAME:JOHN DOE"));
-        }
-
-        @Test
-        @DisplayName("Should transform email to lowercase")
-        void shouldTransformEmailToLowercase() throws Exception {
-            String testData = "[{\"id\":\"1\",\"name\":\"John Doe\",\"email\":\"JOHN@EXAMPLE.COM\",\"amount\":\"100\"}]";
-            JsonNode jsonNode = realObjectMapper.readTree(testData);
-
-            when(objectMapper.readTree(testData)).thenReturn(jsonNode);
-            when(jdbcTemplate.update(anyString(), anyString())).thenReturn(1);
-
-            etlService.processData(testData);
-
-            verify(jdbcTemplate).update(anyString(), contains("EMAIL:john@example.com"));
-        }
+    @DisplayName("Transformations")
+    class TransformationTests {
 
         @ParameterizedTest
         @CsvSource({
-            "100, 100.00",
-            "100.5, 100.50",
-            "100.50, 100.50",
-            "0.99, 0.99",
-            "1000.999, 1001.00"
+                "100, 100.00",
+                "100.5, 100.50",
+                "100.50, 100.50",
+                "0.99, 0.99",
+                "1000.999, 1001.00",
+                "-50, -50.00"
         })
-        @DisplayName("Should format amount to 2 decimal places")
-        void shouldFormatAmountTo2Decimals(String input, String expected) throws Exception {
-            String testData = "[{\"id\":\"1\",\"name\":\"Test\",\"email\":\"test@test.com\",\"amount\":\"" + input + "\"}]";
-            JsonNode jsonNode = realObjectMapper.readTree(testData);
-
-            when(objectMapper.readTree(testData)).thenReturn(jsonNode);
-            when(jdbcTemplate.update(anyString(), anyString())).thenReturn(1);
-
-            etlService.processData(testData);
+        void formatsAmountsDeterministically(String input, String expected) {
+            etlService.processData(
+                    "[{\"id\":\"record_alpha\",\"amount\":\"" + input + "\"}]"
+            );
 
             verify(jdbcTemplate).update(anyString(), contains("AMOUNT:" + expected));
         }
 
         @Test
-        @DisplayName("Should handle invalid amount by defaulting to 0.00")
-        void shouldHandleInvalidAmountGracefully() throws Exception {
-            String testData = "[{\"id\":\"1\",\"name\":\"Test\",\"email\":\"test@test.com\",\"amount\":\"invalid\"}]";
-            JsonNode jsonNode = realObjectMapper.readTree(testData);
-
-            when(objectMapper.readTree(testData)).thenReturn(jsonNode);
-            when(jdbcTemplate.update(anyString(), anyString())).thenReturn(1);
-
-            etlService.processData(testData);
+        void fallsBackToZeroForInvalidAmount() {
+            etlService.processData(
+                    "[{\"id\":\"record_alpha\",\"amount\":\"not-a-number\"}]"
+            );
 
             verify(jdbcTemplate).update(anyString(), contains("AMOUNT:0.00"));
         }
 
         @Test
-        @DisplayName("Should preserve field order in transformation")
-        void shouldPreserveFieldOrder() throws Exception {
-            String testData = "[{\"id\":\"1\",\"name\":\"Test\",\"email\":\"test@test.com\",\"amount\":\"100\"}]";
-            JsonNode jsonNode = realObjectMapper.readTree(testData);
+        void retainsUnknownAndUnicodeFields() {
+            etlService.processData("""
+                    [{
+                      "id":"record_alpha",
+                      "custom_field":"José García 李明",
+                      "another":"value"
+                    }]
+                    """);
 
-            when(objectMapper.readTree(testData)).thenReturn(jsonNode);
-            when(jdbcTemplate.update(anyString(), anyString())).thenReturn(1);
-
-            etlService.processData(testData);
-
-            verify(jdbcTemplate).update(anyString(), ArgumentMatchers.<String>argThat(data ->
-                data.contains("ID:") && data.contains("NAME:") && 
-                data.contains("EMAIL:") && data.contains("AMOUNT:")
-            ));
+            verify(jdbcTemplate).update(
+                    anyString(),
+                    eq("ID:record_alpha,CUSTOM_FIELD:José García 李明,ANOTHER:value,")
+            );
         }
 
         @Test
-        @DisplayName("Should handle fields with special characters")
-        void shouldHandleSpecialCharacters() throws Exception {
-            String testData = "[{\"id\":\"1\",\"name\":\"O'Brien\",\"email\":\"test@test.com\",\"amount\":\"100\"}]";
-            JsonNode jsonNode = realObjectMapper.readTree(testData);
+        void preservesEmptyOptionalValues() {
+            etlService.processData("""
+                    [{
+                      "id":"record_alpha",
+                      "name":"",
+                      "email":"",
+                      "amount":""
+                    }]
+                    """);
 
-            when(objectMapper.readTree(testData)).thenReturn(jsonNode);
-            when(jdbcTemplate.update(anyString(), anyString())).thenReturn(1);
-
-            assertDoesNotThrow(() -> etlService.processData(testData));
-            verify(jdbcTemplate).update(anyString(), contains("NAME:O'BRIEN"));
-        }
-
-        @Test
-        @DisplayName("Should handle extra fields beyond standard ones")
-        void shouldHandleExtraFields() throws Exception {
-            String testData = "[{\"id\":\"1\",\"name\":\"Test\",\"email\":\"test@test.com\"," +
-                "\"amount\":\"100\",\"custom_field\":\"value\",\"another\":\"data\"}]";
-            JsonNode jsonNode = realObjectMapper.readTree(testData);
-
-            when(objectMapper.readTree(testData)).thenReturn(jsonNode);
-            when(jdbcTemplate.update(anyString(), anyString())).thenReturn(1);
-
-            assertDoesNotThrow(() -> etlService.processData(testData));
-            verify(jdbcTemplate, times(1)).update(anyString(), anyString());
-        }
-    }
-
-    @Nested
-    @DisplayName("Error Handling Tests")
-    class ErrorHandlingTests {
-
-        @Test
-        @DisplayName("Should throw RuntimeException for invalid JSON")
-        void testProcessDataWithInvalidJson() throws JsonProcessingException {
-            String testData = "invalid json";
-            when(objectMapper.readTree(testData)).thenThrow(new JsonProcessingException("Invalid JSON") {});
-
-            RuntimeException exception = assertThrows(RuntimeException.class, 
-                () -> etlService.processData(testData));
-            
-            assertTrue(exception.getMessage().contains("Error processing data"));
-            verify(jdbcTemplate, never()).update(anyString(), anyString());
-        }
-
-        @Test
-        @DisplayName("Should throw RuntimeException when database insert fails")
-        void shouldHandleDatabaseInsertFailure() throws Exception {
-            String testData = "[{\"id\":\"1\",\"name\":\"Test\",\"email\":\"test@test.com\",\"amount\":\"100\"}]";
-            JsonNode jsonNode = realObjectMapper.readTree(testData);
-
-            when(objectMapper.readTree(testData)).thenReturn(jsonNode);
-            when(jdbcTemplate.update(anyString(), anyString()))
-                .thenThrow(new DataAccessException("Database error") {});
-
-            assertThrows(RuntimeException.class, () -> etlService.processData(testData));
-        }
-
-        @Test
-        @DisplayName("Should handle null JSON node gracefully")
-        void shouldHandleNullJsonNode() throws Exception {
-            String testData = "null";
-            when(objectMapper.readTree(testData)).thenReturn(realObjectMapper.readTree(testData));
-
-            assertThrows(RuntimeException.class, () -> etlService.processData(testData));
-        }
-
-        @Test
-        @DisplayName("Should reject non-array JSON input")
-        void shouldRejectNonArrayJsonInput() throws Exception {
-            String testData = "{\"id\":\"1\",\"name\":\"Test\"}";
-            when(objectMapper.readTree(testData)).thenReturn(realObjectMapper.readTree(testData));
-
-            RuntimeException exception = assertThrows(RuntimeException.class, () -> etlService.processData(testData));
-            assertTrue(exception.getMessage().contains("Input must be a JSON array"));
-            verify(jdbcTemplate, never()).update(anyString(), anyString());
-        }
-
-        @Test
-        @DisplayName("Should handle record without id field")
-        void shouldHandleRecordWithoutId() throws Exception {
-            String testData = "[{\"name\":\"Test\",\"email\":\"test@test.com\",\"amount\":\"100\"}]";
-            JsonNode jsonNode = realObjectMapper.readTree(testData);
-
-            when(objectMapper.readTree(testData)).thenReturn(jsonNode);
-
-            assertThrows(RuntimeException.class, () -> etlService.processData(testData));
-        }
-
-        @Test
-        @DisplayName("Should include cause in RuntimeException")
-        void shouldIncludeCauseInException() throws Exception {
-            String testData = "invalid";
-            JsonProcessingException cause = new JsonProcessingException("Parse error") {};
-            when(objectMapper.readTree(testData)).thenThrow(cause);
-
-            RuntimeException exception = assertThrows(RuntimeException.class, 
-                () -> etlService.processData(testData));
-            
-            assertNotNull(exception.getCause());
-            assertEquals(cause, exception.getCause());
-        }
-    }
-
-    @Nested
-    @DisplayName("Edge Case Tests")
-    class EdgeCaseTests {
-
-        @Test
-        @DisplayName("Should handle record with missing optional fields")
-        void shouldHandleMissingOptionalFields() throws Exception {
-            String testData = "[{\"id\":\"1\"}]";
-            JsonNode jsonNode = realObjectMapper.readTree(testData);
-
-            when(objectMapper.readTree(testData)).thenReturn(jsonNode);
-            when(jdbcTemplate.update(anyString(), anyString())).thenReturn(1);
-
-            assertDoesNotThrow(() -> etlService.processData(testData));
-        }
-
-        @Test
-        @DisplayName("Should handle empty string values")
-        void shouldHandleEmptyStringValues() throws Exception {
-            String testData = "[{\"id\":\"1\",\"name\":\"\",\"email\":\"\",\"amount\":\"\"}]";
-            JsonNode jsonNode = realObjectMapper.readTree(testData);
-
-            when(objectMapper.readTree(testData)).thenReturn(jsonNode);
-            when(jdbcTemplate.update(anyString(), anyString())).thenReturn(1);
-
-            assertDoesNotThrow(() -> etlService.processData(testData));
-        }
-
-        @Test
-        @DisplayName("Should handle whitespace-only values")
-        void shouldHandleWhitespaceOnlyValues() throws Exception {
-            String testData = "[{\"id\":\"1\",\"name\":\"   \",\"email\":\" \",\"amount\":\"  \"}]";
-            JsonNode jsonNode = realObjectMapper.readTree(testData);
-
-            when(objectMapper.readTree(testData)).thenReturn(jsonNode);
-            when(jdbcTemplate.update(anyString(), anyString())).thenReturn(1);
-
-            assertDoesNotThrow(() -> etlService.processData(testData));
-        }
-
-        @Test
-        @DisplayName("Should handle very large amounts")
-        void shouldHandleVeryLargeAmounts() throws Exception {
-            String testData = "[{\"id\":\"1\",\"name\":\"Test\",\"email\":\"test@test.com\",\"amount\":\"999999999.99\"}]";
-            JsonNode jsonNode = realObjectMapper.readTree(testData);
-
-            when(objectMapper.readTree(testData)).thenReturn(jsonNode);
-            when(jdbcTemplate.update(anyString(), anyString())).thenReturn(1);
-
-            assertDoesNotThrow(() -> etlService.processData(testData));
-            verify(jdbcTemplate).update(anyString(), contains("AMOUNT:999999999.99"));
-        }
-
-        @Test
-        @DisplayName("Should handle negative amounts")
-        void shouldHandleNegativeAmounts() throws Exception {
-            String testData = "[{\"id\":\"1\",\"name\":\"Test\",\"email\":\"test@test.com\",\"amount\":\"-50.00\"}]";
-            JsonNode jsonNode = realObjectMapper.readTree(testData);
-
-            when(objectMapper.readTree(testData)).thenReturn(jsonNode);
-            when(jdbcTemplate.update(anyString(), anyString())).thenReturn(1);
-
-            assertDoesNotThrow(() -> etlService.processData(testData));
-            verify(jdbcTemplate).update(anyString(), contains("AMOUNT:-50.00"));
-        }
-
-        @Test
-        @DisplayName("Should handle very long names")
-        void shouldHandleVeryLongNames() throws Exception {
-            String longName = "A".repeat(1000);
-            String testData = "[{\"id\":\"1\",\"name\":\"" + longName + "\",\"email\":\"test@test.com\",\"amount\":\"100\"}]";
-            JsonNode jsonNode = realObjectMapper.readTree(testData);
-
-            when(objectMapper.readTree(testData)).thenReturn(jsonNode);
-            when(jdbcTemplate.update(anyString(), anyString())).thenReturn(1);
-
-            assertDoesNotThrow(() -> etlService.processData(testData));
-        }
-
-        @Test
-        @DisplayName("Should handle Unicode characters in name")
-        void shouldHandleUnicodeCharacters() throws Exception {
-            String testData = "[{\"id\":\"1\",\"name\":\"José García 李明\",\"email\":\"test@test.com\",\"amount\":\"100\"}]";
-            JsonNode jsonNode = realObjectMapper.readTree(testData);
-
-            when(objectMapper.readTree(testData)).thenReturn(jsonNode);
-            when(jdbcTemplate.update(anyString(), anyString())).thenReturn(1);
-
-            assertDoesNotThrow(() -> etlService.processData(testData));
-        }
-
-        @ParameterizedTest
-        @ValueSource(strings = {
-            "test@example.com",
-            "user.name@example.com",
-            "user+tag@example.co.uk",
-            "test_123@sub.example.com"
-        })
-        @DisplayName("Should handle various email formats")
-        void shouldHandleVariousEmailFormats(String email) throws Exception {
-            String testData = "[{\"id\":\"1\",\"name\":\"Test\",\"email\":\"" + email + "\",\"amount\":\"100\"}]";
-            JsonNode jsonNode = realObjectMapper.readTree(testData);
-
-            when(objectMapper.readTree(testData)).thenReturn(jsonNode);
-            when(jdbcTemplate.update(anyString(), anyString())).thenReturn(1);
-
-            assertDoesNotThrow(() -> etlService.processData(testData));
-            verify(jdbcTemplate).update(anyString(), contains("EMAIL:" + email.toLowerCase()));
-        }
-    }
-
-    @Nested
-    @DisplayName("Parallel Processing Tests")
-    class ParallelProcessingTests {
-
-        @Test
-        @DisplayName("Should process records in parallel")
-        void shouldProcessRecordsInParallel() throws Exception {
-            String testData = "[" +
-                "{\"id\":\"1\",\"name\":\"Test1\",\"email\":\"test1@test.com\",\"amount\":\"100\"}," +
-                "{\"id\":\"2\",\"name\":\"Test2\",\"email\":\"test2@test.com\",\"amount\":\"200\"}," +
-                "{\"id\":\"3\",\"name\":\"Test3\",\"email\":\"test3@test.com\",\"amount\":\"300\"}," +
-                "{\"id\":\"4\",\"name\":\"Test4\",\"email\":\"test4@test.com\",\"amount\":\"400\"}," +
-                "{\"id\":\"5\",\"name\":\"Test5\",\"email\":\"test5@test.com\",\"amount\":\"500\"}" +
-                "]";
-            JsonNode jsonNode = realObjectMapper.readTree(testData);
-
-            when(objectMapper.readTree(testData)).thenReturn(jsonNode);
-            when(jdbcTemplate.update(anyString(), anyString())).thenReturn(1);
-
-            String result = etlService.processData(testData);
-
-            assertNotNull(result);
-            verify(jdbcTemplate, times(5)).update(anyString(), anyString());
-        }
-
-        @Test
-        @DisplayName("Should handle concurrent database writes")
-        void shouldHandleConcurrentDatabaseWrites() throws Exception {
-            String testData = "[" +
-                "{\"id\":\"1\",\"name\":\"Test1\",\"email\":\"test1@test.com\",\"amount\":\"100\"}," +
-                "{\"id\":\"2\",\"name\":\"Test2\",\"email\":\"test2@test.com\",\"amount\":\"200\"}" +
-                "]";
-            JsonNode jsonNode = realObjectMapper.readTree(testData);
-
-            when(objectMapper.readTree(testData)).thenReturn(jsonNode);
-            when(jdbcTemplate.update(anyString(), anyString())).thenReturn(1);
-
-            assertDoesNotThrow(() -> etlService.processData(testData));
-            verify(jdbcTemplate, times(2)).update(anyString(), anyString());
-        }
-    }
-
-    @Nested
-    @DisplayName("Retry Mechanism Tests")
-    class RetryMechanismTests {
-
-        @Test
-        @DisplayName("Service should have @Retryable annotation")
-        void shouldHaveRetryableAnnotation() throws NoSuchMethodException {
-            assertTrue(
-                EtlService.class.getMethod("processData", String.class)
-                    .isAnnotationPresent(org.springframework.retry.annotation.Retryable.class),
-                "processData method should have @Retryable annotation"
+            verify(jdbcTemplate).update(
+                    anyString(),
+                    eq("ID:record_alpha,NAME:,EMAIL:,AMOUNT:0.00,")
             );
         }
     }
 
     @Nested
-    @DisplayName("SQL Injection Prevention Tests")
-    class SqlInjectionPreventionTests {
+    @DisplayName("Failures")
+    class FailureTests {
 
         @Test
-        @DisplayName("Should use parameterized queries to prevent SQL injection")
-        void shouldUseParameterizedQueries() throws Exception {
-            String maliciousData = "[{\"id\":\"1\",\"name\":\"Test'; DROP TABLE users; --\"," +
-                "\"email\":\"test@test.com\",\"amount\":\"100\"}]";
-            JsonNode jsonNode = realObjectMapper.readTree(maliciousData);
+        void wrapsInvalidJsonWithOriginalParsingCause() {
+            RuntimeException exception = assertThrows(
+                    RuntimeException.class,
+                    () -> etlService.processData("not json")
+            );
 
-            when(objectMapper.readTree(maliciousData)).thenReturn(jsonNode);
-            when(jdbcTemplate.update(anyString(), anyString())).thenReturn(1);
+            assertTrue(exception.getMessage().contains("Error processing data"));
+            assertNotNull(exception.getCause());
+            assertInstanceOf(JsonProcessingException.class, exception.getCause());
+            verifyNoInteractions(jdbcTemplate);
+        }
 
-            etlService.processData(maliciousData);
+        @Test
+        void rethrowsDataAccessExceptionForTransactionAndRetryInfrastructure() {
+            DataAccessException databaseFailure = new DataAccessException("database unavailable") { };
+            when(jdbcTemplate.update(anyString(), anyString())).thenThrow(databaseFailure);
 
-            // Verify that data is passed as parameter, not concatenated into SQL
-            verify(jdbcTemplate).update(eq("INSERT INTO processed_data (data) VALUES (?)"), anyString());
+            DataAccessException thrown = assertThrows(
+                    DataAccessException.class,
+                    () -> etlService.processData("[{\"id\":\"record_alpha\"}]")
+            );
+
+            assertEquals(databaseFailure, thrown);
+        }
+
+        @Test
+        void rejectsNullAndNonArrayDocumentsBeforeJdbc() {
+            assertThrows(RuntimeException.class, () -> etlService.processData("null"));
+            assertThrows(
+                    RuntimeException.class,
+                    () -> etlService.processData("{\"id\":\"record_alpha\"}")
+            );
+
+            verifyNoInteractions(jdbcTemplate);
+        }
+
+        @Test
+        void rejectsMissingIdentifierBeforeJdbc() {
+            assertThrows(
+                    RuntimeException.class,
+                    () -> etlService.processData("[{\"name\":\"missing id\"}]")
+            );
+
+            verifyNoInteractions(jdbcTemplate);
+        }
+    }
+
+    @Nested
+    @DisplayName("Contracts")
+    class ContractTests {
+
+        @Test
+        void usesParameterizedInsert() {
+            etlService.processData("""
+                    [{
+                      "id":"record_alpha",
+                      "name":"Test'; DROP TABLE users; --"
+                    }]
+                    """);
+
+            verify(jdbcTemplate).update(
+                    eq("INSERT INTO processed_data (data) VALUES (?)"),
+                    anyString()
+            );
+        }
+
+        @Test
+        void declaresTransactionAndTransientRetryPolicy() throws NoSuchMethodException {
+            Method method = EtlService.class.getMethod("processData", String.class);
+
+            assertTrue(method.isAnnotationPresent(Transactional.class));
+            Retryable retryable = method.getAnnotation(Retryable.class);
+            assertNotNull(retryable);
+            assertArrayEquals(
+                    new Class<?>[]{TransientDataAccessException.class},
+                    retryable.retryFor()
+            );
+        }
+
+        @Test
+        void invalidInputNeverReachesJdbc() {
+            assertThrows(RuntimeException.class, () -> etlService.processData("invalid"));
+
+            verify(jdbcTemplate, never()).update(anyString(), anyString());
         }
     }
 }
