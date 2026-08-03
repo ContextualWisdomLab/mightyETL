@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -13,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Verifies ETL worker bounds, naming, validation, and caller-runs backpressure.
+ * Verifies ETL worker bounds, naming, validation, shutdown, and caller-runs backpressure.
  */
 class EtlExecutorConfigurationTest {
 
@@ -25,6 +26,15 @@ class EtlExecutorConfigurationTest {
         assertTrue(properties.getMaxConcurrency() >= 1);
         assertTrue(properties.getMaxConcurrency() <= 8);
         assertEquals(1024, properties.getQueueCapacity());
+    }
+
+    @Test
+    void propertiesExposeExplicitValues() {
+        EtlProcessingProperties properties = properties(3, 17, 250);
+
+        assertEquals(3, properties.getMaxConcurrency());
+        assertEquals(17, properties.getQueueCapacity());
+        assertEquals(250, properties.getMaxBatchRecords());
     }
 
     @Test
@@ -72,25 +82,53 @@ class EtlExecutorConfigurationTest {
     }
 
     @Test
-    void rejectsNonPositiveBatchLimit() {
-        EtlProcessingProperties properties = properties(1, 1, 0);
+    void rejectsSubmissionAfterShutdown() {
+        ExecutorService executor = new EtlExecutorConfiguration().etlExecutor(
+                properties(1, 1, 100)
+        );
+        executor.shutdown();
 
-        assertThrows(IllegalArgumentException.class,
-                () -> new EtlExecutorConfiguration().etlExecutor(properties));
+        assertThrows(RejectedExecutionException.class,
+                () -> executor.execute(() -> { }));
+    }
+
+    @Test
+    void rejectsNullProperties() {
+        assertThrows(NullPointerException.class,
+                () -> new EtlExecutorConfiguration().etlExecutor(null));
+    }
+
+    @Test
+    void rejectsNonPositiveBatchLimit() {
+        assertInvalid(properties(1, 1, 0));
+    }
+
+    @Test
+    void rejectsExcessiveBatchLimit() {
+        assertInvalid(properties(1, 1, 100_001));
     }
 
     @Test
     void rejectsNonPositiveConcurrency() {
-        EtlProcessingProperties properties = properties(0, 1, 100);
+        assertInvalid(properties(0, 1, 100));
+    }
 
-        assertThrows(IllegalArgumentException.class,
-                () -> new EtlExecutorConfiguration().etlExecutor(properties));
+    @Test
+    void rejectsExcessiveConcurrency() {
+        assertInvalid(properties(65, 1, 100));
     }
 
     @Test
     void rejectsNonPositiveQueueCapacity() {
-        EtlProcessingProperties properties = properties(1, 0, 100);
+        assertInvalid(properties(1, 0, 100));
+    }
 
+    @Test
+    void rejectsExcessiveQueueCapacity() {
+        assertInvalid(properties(1, 100_001, 100));
+    }
+
+    private static void assertInvalid(EtlProcessingProperties properties) {
         assertThrows(IllegalArgumentException.class,
                 () -> new EtlExecutorConfiguration().etlExecutor(properties));
     }
