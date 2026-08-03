@@ -126,7 +126,8 @@ public class TargetConnectorDispatcher {
                 row.put("displayName", connector.displayName());
                 row.put("status", connector.status().name());
                 row.put("enabled", properties.isEnabled(connector.id()));
-                row.put("writable", connector.status() == ConnectorStatus.SUPPORTED
+                row.put("writable", !closed
+                        && connector.status() == ConnectorStatus.SUPPORTED
                         && properties.isEnabled(connector.id()));
                 row.put("opened", openedConnectors.get(connector.id()) == connector);
                 row.put("requiredConfigKeys", connector.requiredConfigKeys());
