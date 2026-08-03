@@ -11,6 +11,7 @@ import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ProcessedDataReplicaApplierTest {
@@ -70,6 +71,18 @@ class ProcessedDataReplicaApplierTest {
 
         applier.apply(topic, keyJson, valueJson);
 
+        verifyNoInteractions(jdbcTemplate);
+    }
+
+    @Test
+    void ignoresTopicWithoutDelimiter() {
+        assertDoesNotThrow(() -> applier.apply("processed_data", null, null));
+        verifyNoInteractions(jdbcTemplate);
+    }
+
+    @Test
+    void ignoresTopicWithEmptySuffix() {
+        assertDoesNotThrow(() -> applier.apply("xtrmetl-cdc.public.", null, null));
         verifyNoInteractions(jdbcTemplate);
     }
 
