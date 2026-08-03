@@ -73,21 +73,16 @@ class TargetConnectorDispatcherTest {
         dispatcher.dispatch("databricks", List.of());
 
         assertEquals(List.of("open", "write", "write"), connector.events);
-        assertTrue(Boolean.TRUE.equals(dispatcher.catalog().stream()
-                .filter(row -> "databricks".equals(row.get("id")))
-                .findFirst()
-                .orElseThrow()
-                .get("opened")));
+        assertTrue(Boolean.TRUE.equals(databricksCatalogRow(dispatcher).get("opened")));
+        assertTrue(Boolean.TRUE.equals(databricksCatalogRow(dispatcher).get("writable")));
 
         dispatcher.closeOpenedConnectors();
         dispatcher.closeOpenedConnectors();
 
         assertEquals(List.of("open", "write", "write", "close"), connector.events);
-        assertFalse(Boolean.TRUE.equals(dispatcher.catalog().stream()
-                .filter(row -> "databricks".equals(row.get("id")))
-                .findFirst()
-                .orElseThrow()
-                .get("opened")));
+        Map<String, Object> closedRow = databricksCatalogRow(dispatcher);
+        assertFalse(Boolean.TRUE.equals(closedRow.get("opened")));
+        assertFalse(Boolean.TRUE.equals(closedRow.get("writable")));
     }
 
     @Test
@@ -149,6 +144,13 @@ class TargetConnectorDispatcherTest {
         assertThrows(IllegalStateException.class,
                 () -> dispatcher.dispatch("databricks", List.of()));
         assertEquals(completedLifecycle, connector.events());
+    }
+
+    private static Map<String, Object> databricksCatalogRow(TargetConnectorDispatcher dispatcher) {
+        return dispatcher.catalog().stream()
+                .filter(row -> "databricks".equals(row.get("id")))
+                .findFirst()
+                .orElseThrow();
     }
 
     private static ConnectorProperties enabledDatabricksProperties() {
