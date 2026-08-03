@@ -14,7 +14,6 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -67,6 +66,22 @@ class EtlServiceBatchSafetyTest {
         );
 
         assertTrue(exception.getMessage().contains("record"));
+        verifyNoInteractions(jdbcTemplate);
+    }
+
+    @Test
+    void rejectsDuplicateJsonFieldsBeforeJdbc() {
+        EtlService service = service();
+        String payload = """
+                [{
+                  "id":"record_alpha",
+                  "name":"first",
+                  "name":"second"
+                }]
+                """;
+
+        assertThrows(RuntimeException.class, () -> service.processData(payload));
+
         verifyNoInteractions(jdbcTemplate);
     }
 
@@ -127,6 +142,16 @@ class EtlServiceBatchSafetyTest {
 
         assertThrows(RuntimeException.class,
                 () -> service.processData("[{\"id\":\"record_alpha\\nforged_line\"}]"));
+
+        verifyNoInteractions(jdbcTemplate);
+    }
+
+    @Test
+    void rejectsIdentifiersContainingUnicodeLineSeparatorsBeforeJdbc() {
+        EtlService service = service();
+
+        assertThrows(RuntimeException.class,
+                () -> service.processData("[{\"id\":\"record_alpha\\u2028forged_line\"}]"));
 
         verifyNoInteractions(jdbcTemplate);
     }
