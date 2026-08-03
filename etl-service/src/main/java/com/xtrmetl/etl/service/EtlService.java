@@ -16,10 +16,12 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -165,7 +167,7 @@ public class EtlService {
             throw invalidIdentifier(index);
         }
 
-        String transformedData = transformRecord(record);
+        String transformedData = transformRecord(record, index);
         return new ProcessedRecord(id, transformedData);
     }
 
@@ -185,10 +187,17 @@ public class EtlService {
         );
     }
 
-    private String transformRecord(JsonNode record) {
+    private String transformRecord(JsonNode record, int index) {
         StringBuilder transformed = new StringBuilder();
+        Set<String> normalizedKeys = new HashSet<>();
         for (Map.Entry<String, JsonNode> field : record.properties()) {
             String key = field.getKey().toUpperCase(Locale.ROOT);
+            if (!normalizedKeys.add(key)) {
+                throw new IllegalArgumentException(
+                        "Record at index " + index
+                                + " contains field names that collide after case normalization"
+                );
+            }
             String value = transformValue(key, field.getValue());
             transformed.append(key).append(":").append(value).append(",");
         }
