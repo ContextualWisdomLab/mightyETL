@@ -15,10 +15,17 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
 
-# Dual-read: mightyetl.connectors.* preferred (aliased to xtrmetl.connectors.*).
+# Dual-read: mightyetl.* preferred (aliased to xtrmetl.*).
+# ETL admission control rejects oversized batches before work is scheduled.
+# max-concurrency intentionally uses its CPU-adaptive Java default when unset; override it with
+# mightyetl.etl.max-concurrency, xtrmetl.etl.max-concurrency, or ETL_MAX_CONCURRENCY.
+# Short environment aliases: ETL_MAX_BATCH_RECORDS, ETL_MAX_CONCURRENCY, ETL_QUEUE_CAPACITY.
 # Warehouse/BI targets: SPI + config binding + validation + catalog; write() still SCAFFOLD.
 # Primary load path: PostgreSQL via EtlService. Catalog: GET /api/etl/connectors
 xtrmetl:
+  etl:
+    max-batch-records: ${ETL_MAX_BATCH_RECORDS:1000}
+    queue-capacity: ${ETL_QUEUE_CAPACITY:1024}
   connectors:
     databricks:
       enabled: ${DATABRICKS_CONNECTOR_ENABLED:false}
