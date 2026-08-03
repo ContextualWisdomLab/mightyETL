@@ -38,6 +38,9 @@ class EtlBatchDocsAlignmentTest {
         assertTrue(runbook.contains("rolls back earlier writes"));
         assertTrue(runbook.contains("not a substitute for edge enforcement"));
         assertTrue(normalizedRunbook.contains("numeric json identifier types are rejected"));
+        assertTrue(runbook.contains("no more than 256 Unicode code points"));
+        assertTrue(runbook.contains("Nested arrays and objects are retained as compact JSON"));
+        assertTrue(runbook.contains("control characters"));
     }
 
     @Test
