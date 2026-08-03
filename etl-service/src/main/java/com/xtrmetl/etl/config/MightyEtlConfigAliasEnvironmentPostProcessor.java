@@ -29,6 +29,12 @@ public class MightyEtlConfigAliasEnvironmentPostProcessor implements Environment
             "connectors.qlik-sense.enabled"
     );
 
+    private static final Map<String, String> SHORT_ENVIRONMENT_ALIASES = Map.of(
+            "ETL_MAX_BATCH_RECORDS", "etl.max-batch-records",
+            "ETL_MAX_CONCURRENCY", "etl.max-concurrency",
+            "ETL_QUEUE_CAPACITY", "etl.queue-capacity"
+    );
+
     @Override
     public void postProcessEnvironment(ConfigurableEnvironment environment, SpringApplication application) {
         Map<String, Object> aliases = buildAliases(environment);
@@ -38,7 +44,8 @@ public class MightyEtlConfigAliasEnvironmentPostProcessor implements Environment
     }
 
     /**
-     * Builds one-way aliases with the modern product prefix taking precedence.
+     * Builds aliases with the modern product prefix taking precedence over compatibility and
+     * short-form environment names.
      *
      * @param environment current Spring environment
      * @return properties to prepend to the environment, or an empty map when no known keys exist
@@ -55,6 +62,21 @@ public class MightyEtlConfigAliasEnvironmentPostProcessor implements Environment
                 aliases.put(legacyKey, modernVal);
             } else if (legacyVal != null) {
                 aliases.put(modernKey, legacyVal);
+            }
+        }
+
+        for (Map.Entry<String, String> entry : SHORT_ENVIRONMENT_ALIASES.entrySet()) {
+            String modernKey = "mightyetl." + entry.getValue();
+            String legacyKey = "xtrmetl." + entry.getValue();
+            if (environment.getProperty(modernKey) != null
+                    || environment.getProperty(legacyKey) != null) {
+                continue;
+            }
+
+            String value = environment.getProperty(entry.getKey());
+            if (value != null) {
+                aliases.put(modernKey, value);
+                aliases.put(legacyKey, value);
             }
         }
         return aliases;
