@@ -1,0 +1,164 @@
+name: Hourly PR disposition
+
+on:
+  schedule:
+    - cron: "11 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: hourly-pr-disposition
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+  statuses: read
+
+jobs:
+  merge-eligible-pull-requests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPOSITORY: ${{ github.repository }}
+      BASE_BRANCH: develop
+      TRUSTED_AUTHOR: seonghobae
+    steps:
+      - name: Inspect and merge eligible pull requests
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          repo="${REPOSITORY}"
+          echo "## Hourly PR disposition" >> "${GITHUB_STEP_SUMMARY}"
+          echo "Repository: ${repo}; base: ${BASE_BRANCH}" >> "${GITHUB_STEP_SUMMARY}"
+
+          gh api --paginate "/repos/${repo}/pulls?state=open&base=${BASE_BRANCH}&per_page=100" \
+            | jq -c '.[]' \
+            | while IFS= read -r pr; do
+                number=$(jq -r '.number' <<<"${pr}")
+                title=$(jq -r '.title' <<<"${pr}")
+                author=$(jq -r '.user.login' <<<"${pr}")
+                draft=$(jq -r '.draft' <<<"${pr}")
+                head_sha=$(jq -r '.head.sha' <<<"${pr}")
+                head_repo=$(jq -r '.head.repo.full_name // ""' <<<"${pr}")
+
+                skip() {
+                  echo "- PR #${number}: skipped — $1" >> "${GITHUB_STEP_SUMMARY}"
+                }
+
+                if [[ "${draft}" == "true" ]]; then
+                  skip "draft"
+                  continue
+                fi
+                if [[ "${author}" != "${TRUSTED_AUTHOR}" ]]; then
+                  skip "author ${author} is not trusted for unattended merge"
+                  continue
+                fi
+                if [[ "${head_repo}" != "${repo}" ]]; then
+                  skip "head branch is outside this repository"
+                  continue
+                fi
+
+                labels=$(gh api --paginate "/repos/${repo}/issues/${number}/labels?per_page=100" | jq -s 'add | map(.name)')
+                if jq -e 'any(. == "do-not-merge" or . == "manual-merge" or . == "security-review" or . == "breaking-change")' \
+                    >/dev/null <<<"${labels}"; then
+                  skip "manual-review label present"
+                  continue
+                fi
+
+                files=$(gh api --paginate "/repos/${repo}/pulls/${number}/files?per_page=100" | jq -s 'add | map(.filename)')
+                if jq -e 'any(startswith(".github/workflows/"))' >/dev/null <<<"${files}" \
+                    && ! jq -e 'any(. == "automerge-workflow")' >/dev/null <<<"${labels}"; then
+                  skip "workflow change requires automerge-workflow label"
+                  continue
+                fi
+
+                reviews=$(gh api --paginate "/repos/${repo}/pulls/${number}/reviews?per_page=100")
+                blocking_reviews=$(jq -s '
+                  add
+                  | sort_by(.submitted_at // "")
+                  | group_by(.user.login)
+                  | map(last)
+                  | map(select(.state == "CHANGES_REQUESTED"))
+                  | length
+                ' <<<"${reviews}")
+                if [[ "${blocking_reviews}" -gt 0 ]]; then
+                  skip "latest review state includes requested changes"
+                  continue
+                fi
+
+                checks=$(gh api --paginate -H "Accept: application/vnd.github+json" \
+                  "/repos/${repo}/commits/${head_sha}/check-runs?per_page=100")
+                check_summary=$(jq -s '
+                  [.[].check_runs[]] as $runs
+                  | {
+                      total: ($runs | length),
+                      pending: ($runs | map(select(.status != "completed")) | length),
+                      failed: ($runs | map(select(
+                        .status == "completed"
+                        and (.conclusion != "success" and .conclusion != "neutral" and .conclusion != "skipped")
+                      )) | length),
+                      names: ($runs | map(.name) | unique)
+                    }
+                ' <<<"${checks}")
+                check_total=$(jq -r '.total' <<<"${check_summary}")
+                check_pending=$(jq -r '.pending' <<<"${check_summary}")
+                check_failed=$(jq -r '.failed' <<<"${check_summary}")
+                if [[ "${check_total}" -eq 0 || "${check_pending}" -gt 0 || "${check_failed}" -gt 0 ]]; then
+                  skip "checks are absent, pending, or unsuccessful"
+                  continue
+                fi
+
+                required_checks='[
+                  "test (ubuntu-latest)",
+                  "test (macos-latest)",
+                  "test (windows-latest)",
+                  "dependency-review",
+                  "sbom",
+                  "Semgrep (multi-language SAST)",
+                  "trivy-fs",
+                  "osv-scan",
+                  "scorecard"
+                ]'
+                missing_checks=$(jq --argjson required "${required_checks}" '
+                  ($required - .names) | length
+                ' <<<"${check_summary}")
+                if [[ "${missing_checks}" -gt 0 ]]; then
+                  skip "not every required check has reported"
+                  continue
+                fi
+
+                combined_status=$(gh api "/repos/${repo}/commits/${head_sha}/status")
+                status_total=$(jq -r '.total_count' <<<"${combined_status}")
+                status_state=$(jq -r '.state' <<<"${combined_status}")
+                if [[ "${status_total}" -gt 0 && "${status_state}" != "success" ]]; then
+                  skip "commit status contexts are not successful"
+                  continue
+                fi
+
+                current=$(gh api "/repos/${repo}/pulls/${number}")
+                mergeable=$(jq -r '.mergeable' <<<"${current}")
+                mergeable_state=$(jq -r '.mergeable_state' <<<"${current}")
+                if [[ "${mergeable}" == "null" ]]; then
+                  sleep 2
+                  current=$(gh api "/repos/${repo}/pulls/${number}")
+                  mergeable=$(jq -r '.mergeable' <<<"${current}")
+                  mergeable_state=$(jq -r '.mergeable_state' <<<"${current}")
+                fi
+                if [[ "${mergeable}" != "true" || "${mergeable_state}" != "clean" ]]; then
+                  skip "mergeability state is ${mergeable_state}"
+                  continue
+                fi
+
+                result=$(gh api -X PUT "/repos/${repo}/pulls/${number}/merge" \
+                  -f sha="${head_sha}" \
+                  -f merge_method="squash")
+                if [[ "$(jq -r '.merged' <<<"${result}")" == "true" ]]; then
+                  echo "- PR #${number}: merged — ${title}" >> "${GITHUB_STEP_SUMMARY}"
+                else
+                  message=$(jq -r '.message // "merge rejected"' <<<"${result}")
+                  skip "GitHub rejected merge: ${message}"
+                fi
+              done
