@@ -10,12 +10,16 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/**
+ * Exercises fail-closed connector dispatch and deterministic resource lifecycle behavior.
+ */
 class TargetConnectorDispatcherTest {
 
     @Test
@@ -117,6 +121,37 @@ class TargetConnectorDispatcherTest {
     }
 
     @Test
+    void serializesWritesToTheSameConnector() throws Exception {
+        SerializingProbeConnector connector = new SerializingProbeConnector();
+        TargetConnectorRegistry registry = new TargetConnectorRegistry();
+        registry.register(connector);
+        TargetConnectorDispatcher dispatcher =
+                new TargetConnectorDispatcher(registry, enabledDatabricksProperties());
+
+        CompletableFuture<Void> firstDispatch = CompletableFuture.runAsync(
+                () -> dispatcher.dispatch("databricks", List.of())
+        );
+        assertTrue(connector.firstWriteStarted.await(5, TimeUnit.SECONDS));
+
+        CompletableFuture<Void> secondDispatch = CompletableFuture.runAsync(
+                () -> dispatcher.dispatch("databricks", List.of())
+        );
+        try {
+            assertThrows(TimeoutException.class,
+                    () -> connector.secondWriteStartedFuture().get(100, TimeUnit.MILLISECONDS));
+        } finally {
+            connector.releaseFirstWrite.countDown();
+        }
+
+        firstDispatch.get(5, TimeUnit.SECONDS);
+        secondDispatch.get(5, TimeUnit.SECONDS);
+
+        assertEquals(1, connector.maxConcurrentWrites.get());
+        assertEquals(2, connector.writeCalls.get());
+        dispatcher.closeOpenedConnectors();
+    }
+
+    @Test
     void shutdownWaitsForInFlightWriteAndRejectsLaterDispatches() throws Exception {
         BlockingConnector connector = new BlockingConnector();
         TargetConnectorRegistry registry = new TargetConnectorRegistry();
@@ -132,10 +167,13 @@ class TargetConnectorDispatcherTest {
         CompletableFuture<Void> closeFuture = CompletableFuture.runAsync(
                 dispatcher::closeOpenedConnectors
         );
-        assertThrows(TimeoutException.class,
-                () -> closeFuture.get(100, TimeUnit.MILLISECONDS));
+        try {
+            assertThrows(TimeoutException.class,
+                    () -> closeFuture.get(100, TimeUnit.MILLISECONDS));
+        } finally {
+            connector.releaseWrite.countDown();
+        }
 
-        connector.releaseWrite.countDown();
         dispatchFuture.get(5, TimeUnit.SECONDS);
         closeFuture.get(5, TimeUnit.SECONDS);
 
@@ -213,6 +251,70 @@ class TargetConnectorDispatcherTest {
         @Override
         public void close() {
             events.add("close");
+        }
+    }
+
+    private static final class SerializingProbeConnector implements TargetConnector {
+        private final AtomicInteger writeCalls = new AtomicInteger();
+        private final AtomicInteger concurrentWrites = new AtomicInteger();
+        private final AtomicInteger maxConcurrentWrites = new AtomicInteger();
+        private final CountDownLatch firstWriteStarted = new CountDownLatch(1);
+        private final CountDownLatch secondWriteStarted = new CountDownLatch(1);
+        private final CountDownLatch releaseFirstWrite = new CountDownLatch(1);
+
+        @Override
+        public String id() {
+            return "databricks";
+        }
+
+        @Override
+        public String displayName() {
+            return "Serializing probe";
+        }
+
+        @Override
+        public ConnectorStatus status() {
+            return ConnectorStatus.SUPPORTED;
+        }
+
+        @Override
+        public void validate(Map<String, String> config) {
+            // The fake intentionally has no external configuration contract.
+        }
+
+        @Override
+        public void write(List<ChangeRecord> batch) {
+            int call = writeCalls.incrementAndGet();
+            int active = concurrentWrites.incrementAndGet();
+            maxConcurrentWrites.accumulateAndGet(active, Math::max);
+            try {
+                if (call == 1) {
+                    firstWriteStarted.countDown();
+                    if (!releaseFirstWrite.await(5, TimeUnit.SECONDS)) {
+                        throw new IllegalStateException("test write release timed out");
+                    }
+                } else {
+                    secondWriteStarted.countDown();
+                }
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("test write interrupted", exception);
+            } finally {
+                concurrentWrites.decrementAndGet();
+            }
+        }
+
+        private CompletableFuture<Void> secondWriteStartedFuture() {
+            return CompletableFuture.runAsync(() -> {
+                try {
+                    if (!secondWriteStarted.await(5, TimeUnit.SECONDS)) {
+                        throw new IllegalStateException("second write did not start");
+                    }
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("test wait interrupted", exception);
+                }
+            });
         }
     }
 
