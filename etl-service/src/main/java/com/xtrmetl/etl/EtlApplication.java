@@ -19,10 +19,6 @@ import org.springframework.retry.annotation.EnableRetry;
 @EnableConfigurationProperties({ConnectorProperties.class, EtlProcessingProperties.class})
 public class EtlApplication {
 
-    private EtlApplication() {
-        // Application entry point only.
-    }
-
     public static void main(String[] args) {
         SpringApplication.run(EtlApplication.class, args);
     }
