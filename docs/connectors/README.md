@@ -38,13 +38,14 @@ TargetConnector
 2. Scaffold and unsupported connectors validate configuration, then fail closed without `open()` or `write()`.
 3. Supported connectors open lazily before the first write and reuse that opened instance across batches.
 4. Failed opens are not cached, so a later dispatch can retry.
-5. Shutdown waits for in-flight writes, closes each opened connector once, and rejects later dispatches.
+5. Writes are serialized per connector to preserve connector-local ordering and protect clients that are not thread-safe; different connector IDs may progress concurrently.
+6. Shutdown waits for in-flight writes, closes each opened connector once, and rejects later dispatches.
 
 The lifecycle is ready for live implementations, but the three external connectors listed above remain scaffolds.
 
 Catalog: `GET /api/etl/connectors` (`product=mightyETL`, `primaryLoadPath=postgresql`). Each connector row includes:
 
-- `status`, `enabled`, and `writable` capability state
+- `status`, `enabled`, and lifecycle-aware `writable` capability state
 - `opened`, the current runtime resource state
 - required/optional configuration key names without secret values
 - integration metadata and a write-refusal reason
