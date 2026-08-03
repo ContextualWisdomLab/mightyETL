@@ -23,14 +23,17 @@
 Operators may set either prefix for known keys (see `MightyEtlConfigAliasEnvironmentPostProcessor` in
 `cdc-service` / `etl-service`):
 
-| Prefer | Also accepted |
-|:-------|:--------------|
-| `mightyetl.cdc.autostart` | `xtrmetl.cdc.autostart` |
-| `mightyetl.replica.enabled` | `xtrmetl.replica.enabled` |
-| `mightyetl.connectors.databricks.enabled` | `xtrmetl.connectors.databricks.enabled` |
-| …other keys listed in the post-processor | same under `xtrmetl.*` |
+| Prefer | Also accepted | Short environment alias |
+|:-------|:--------------|:------------------------|
+| `mightyetl.cdc.autostart` | `xtrmetl.cdc.autostart` | — |
+| `mightyetl.replica.enabled` | `xtrmetl.replica.enabled` | — |
+| `mightyetl.etl.max-batch-records` | `xtrmetl.etl.max-batch-records` | `ETL_MAX_BATCH_RECORDS` |
+| `mightyetl.etl.max-concurrency` | `xtrmetl.etl.max-concurrency` | `ETL_MAX_CONCURRENCY` |
+| `mightyetl.etl.queue-capacity` | `xtrmetl.etl.queue-capacity` | `ETL_QUEUE_CAPACITY` |
+| `mightyetl.connectors.databricks.enabled` | `xtrmetl.connectors.databricks.enabled` | `DATABRICKS_CONNECTOR_ENABLED` in `application.yml` |
+| …other keys listed in the post-processor | same under `xtrmetl.*` | deployment-specific |
 
-**Rule:** if both are set, **`mightyetl.*` wins** and is mirrored onto `xtrmetl.*` for binding.
+**Rule:** if both full prefixes are set, **`mightyetl.*` wins** and is mirrored onto `xtrmetl.*` for binding. A short ETL environment alias is used only when neither full prefixed key is set.
 
 ## Migration checklist (future)
 
