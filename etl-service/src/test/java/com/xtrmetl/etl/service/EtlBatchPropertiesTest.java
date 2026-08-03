@@ -6,7 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * Verifies default and invalid values for ETL batch safety settings.
+ * Verifies default, supported, and invalid values for ETL batch safety settings.
  */
 class EtlBatchPropertiesTest {
 
@@ -19,29 +19,37 @@ class EtlBatchPropertiesTest {
     }
 
     @Test
-    void acceptsPositiveOverrides() {
+    void acceptsPositiveOverridesAtSupportedCeilings() {
         EtlBatchProperties properties = new EtlBatchProperties();
 
-        properties.setMaxPayloadBytes(2_048);
-        properties.setMaxBatchRecords(25);
+        properties.setMaxPayloadBytes(EtlBatchProperties.MAX_MAX_PAYLOAD_BYTES);
+        properties.setMaxBatchRecords(EtlBatchProperties.MAX_MAX_BATCH_RECORDS);
 
-        assertEquals(2_048, properties.getMaxPayloadBytes());
-        assertEquals(25, properties.getMaxBatchRecords());
+        assertEquals(EtlBatchProperties.MAX_MAX_PAYLOAD_BYTES, properties.getMaxPayloadBytes());
+        assertEquals(EtlBatchProperties.MAX_MAX_BATCH_RECORDS, properties.getMaxBatchRecords());
     }
 
     @Test
-    void rejectsNonPositivePayloadLimit() {
+    void rejectsPayloadLimitsOutsideSupportedRange() {
         EtlBatchProperties properties = new EtlBatchProperties();
 
         assertThrows(IllegalArgumentException.class, () -> properties.setMaxPayloadBytes(0));
         assertThrows(IllegalArgumentException.class, () -> properties.setMaxPayloadBytes(-1));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> properties.setMaxPayloadBytes(EtlBatchProperties.MAX_MAX_PAYLOAD_BYTES + 1)
+        );
     }
 
     @Test
-    void rejectsNonPositiveRecordLimit() {
+    void rejectsRecordLimitsOutsideSupportedRange() {
         EtlBatchProperties properties = new EtlBatchProperties();
 
         assertThrows(IllegalArgumentException.class, () -> properties.setMaxBatchRecords(0));
         assertThrows(IllegalArgumentException.class, () -> properties.setMaxBatchRecords(-1));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> properties.setMaxBatchRecords(EtlBatchProperties.MAX_MAX_BATCH_RECORDS + 1)
+        );
     }
 }
