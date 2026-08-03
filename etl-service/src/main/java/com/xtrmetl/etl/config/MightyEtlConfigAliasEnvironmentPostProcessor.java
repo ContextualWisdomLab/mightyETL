@@ -12,20 +12,32 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Dual-read config bridge: {@code mightyetl.*} preferred, mirrored to {@code xtrmetl.*}.
- * See docs/rebrand-name-matrix.md.
+ * Dual-read configuration bridge: {@code mightyetl.*} is preferred and mirrored to the legacy
+ * {@code xtrmetl.*} namespace used by existing configuration-property consumers.
+ *
+ * <p>Only explicitly supported product keys are mirrored. See
+ * {@code docs/rebrand-name-matrix.md} for compatibility boundaries.</p>
  */
 @Order(Ordered.HIGHEST_PRECEDENCE + 10)
 public class MightyEtlConfigAliasEnvironmentPostProcessor implements EnvironmentPostProcessor {
 
+    /** Name of the highest-precedence synthetic alias property source. */
     public static final String PROPERTY_SOURCE_NAME = "mightyetl-xtrmetl-aliases";
 
     static final List<String> RELATIVE_KEYS = List.of(
+            "etl.max-payload-bytes",
+            "etl.max-batch-records",
             "connectors.databricks.enabled",
             "connectors.snowflake.enabled",
             "connectors.qlik-sense.enabled"
     );
 
+    /**
+     * Adds known aliases ahead of ordinary configuration sources.
+     *
+     * @param environment configurable application environment
+     * @param application Spring application being prepared
+     */
     @Override
     public void postProcessEnvironment(ConfigurableEnvironment environment, SpringApplication application) {
         Map<String, Object> aliases = buildAliases(environment);
