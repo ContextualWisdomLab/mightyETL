@@ -3,7 +3,6 @@ package com.xtrmetl.cdc.spi;
 import com.xtrmetl.cdc.service.CdcService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.kafka.core.KafkaTemplate;
 
 import java.util.List;
 import java.util.Map;
@@ -12,7 +11,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
+/**
+ * Verifies source registry composition and the PostgreSQL SPI delegation contract.
+ */
 class CdcSourceRegistryTest {
 
     @Test
@@ -27,14 +30,34 @@ class CdcSourceRegistryTest {
     }
 
     @Test
-    void postgresSpiStartDelegatesToCdcService() {
-        @SuppressWarnings("unchecked")
-        KafkaTemplate<String, String> kafka = (KafkaTemplate<String, String>) mock(KafkaTemplate.class);
-        CdcService service = new CdcService(kafka, false);
-        // Pre-seed a mock engine so start does not need PG env
-        ReflectionSeed.seedEngine(service);
+    void postgresSpiStartAndStopDelegateToCdcService() throws Exception {
+        CdcService service = mock(CdcService.class);
+        ObjectProvider<CdcService> provider = providerFor(service);
+        PostgresDebeziumCdcSource source = new PostgresDebeziumCdcSource(provider);
 
-        ObjectProvider<CdcService> provider = new ObjectProvider<>() {
+        source.validate(Map.of());
+        source.start(Map.of());
+        source.stop();
+
+        verify(service).start();
+        verify(service).stop();
+    }
+
+    @Test
+    void registersScaffoldSourcesWhenProvided() {
+        CdcSourceRegistry registry = new CdcSourceRegistry(List.of(
+                new PostgresDebeziumCdcSource(),
+                new MysqlDebeziumCdcSource(),
+                new SqlServerDebeziumCdcSource()
+        ));
+
+        assertEquals(3, registry.all().size());
+        assertTrue(registry.find(MysqlDebeziumCdcSource.ID).orElseThrow().capabilities().scaffoldOnly());
+        assertTrue(registry.find(SqlServerDebeziumCdcSource.ID).orElseThrow().capabilities().scaffoldOnly());
+    }
+
+    private static ObjectProvider<CdcService> providerFor(CdcService service) {
+        return new ObjectProvider<>() {
             @Override
             public CdcService getObject() {
                 return service;
@@ -55,35 +78,5 @@ class CdcSourceRegistryTest {
                 return service;
             }
         };
-
-        PostgresDebeziumCdcSource source = new PostgresDebeziumCdcSource(provider);
-        source.validate(Map.of());
-        source.start(Map.of());
-        assertTrue(service.isRunning());
-        source.stop();
-    }
-
-    @Test
-    void registersScaffoldSourcesWhenProvided() {
-        CdcSourceRegistry registry = new CdcSourceRegistry(List.of(
-                new PostgresDebeziumCdcSource(),
-                new MysqlDebeziumCdcSource(),
-                new SqlServerDebeziumCdcSource()
-        ));
-
-        assertEquals(3, registry.all().size());
-        assertTrue(registry.find(MysqlDebeziumCdcSource.ID).orElseThrow().capabilities().scaffoldOnly());
-        assertTrue(registry.find(SqlServerDebeziumCdcSource.ID).orElseThrow().capabilities().scaffoldOnly());
-    }
-
-    /** Avoid pulling ReflectionTestUtils dependency issues — tiny helper. */
-    static final class ReflectionSeed {
-        static void seedEngine(CdcService service) {
-            @SuppressWarnings("unchecked")
-            io.debezium.engine.DebeziumEngine<io.debezium.engine.ChangeEvent<String, String>> engine =
-                    (io.debezium.engine.DebeziumEngine<io.debezium.engine.ChangeEvent<String, String>>)
-                            mock(io.debezium.engine.DebeziumEngine.class);
-            org.springframework.test.util.ReflectionTestUtils.setField(service, "debeziumEngine", engine);
-        }
     }
 }
