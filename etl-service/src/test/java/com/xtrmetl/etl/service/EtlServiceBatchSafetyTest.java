@@ -22,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
@@ -88,7 +89,7 @@ class EtlServiceBatchSafetyTest {
 
         assertEquals(2, executor.executions.get());
         assertEquals("Processed: 1\nProcessed: 2", result);
-        verify(jdbcTemplate).update(anyString(), anyString());
+        verify(jdbcTemplate, times(2)).update(anyString(), anyString());
     }
 
     @Test
