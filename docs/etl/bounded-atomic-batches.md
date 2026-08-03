@@ -22,7 +22,7 @@ A request is accepted only when all of the following are true:
 6. Every record's field names remain unique after locale-independent uppercase normalization.
 7. Every record can be transformed before the first JDBC call.
 
-Exact duplicate field names are rejected rather than accepting parser-dependent “first value” or “last value” semantics. Case variants and other field names that normalize to the same output key are also rejected, preventing ambiguous transformed records such as two `ID` or two `NAME` entries. A rejected request performs no database writes.
+Duplicate field names are rejected rather than accepting parser-dependent “first value” or “last value” semantics. Case variants and other field names that normalize to the same output key are also rejected, preventing ambiguous transformed records such as two `ID` or two `NAME` entries. A rejected request performs no database writes.
 
 ## Transaction contract
 
