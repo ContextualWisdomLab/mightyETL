@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -31,11 +32,12 @@ class EtlBatchDocsAlignmentTest {
     @Test
     void runbookStatesAdmissionRollbackAndIngressBoundaries() throws IOException {
         String runbook = read("docs/etl/bounded-atomic-batches.md");
+        String normalizedRunbook = runbook.toLowerCase(Locale.ROOT);
 
         assertTrue(runbook.contains("A rejected request performs no database writes"));
         assertTrue(runbook.contains("rolls back earlier writes"));
         assertTrue(runbook.contains("not a substitute for edge enforcement"));
-        assertTrue(runbook.contains("numeric JSON identifier types are rejected"));
+        assertTrue(normalizedRunbook.contains("numeric json identifier types are rejected"));
     }
 
     @Test
