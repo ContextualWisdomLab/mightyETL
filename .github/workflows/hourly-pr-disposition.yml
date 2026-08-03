@@ -31,6 +31,8 @@ jobs:
           set -euo pipefail
 
           repo="${REPOSITORY}"
+          owner="${repo%%/*}"
+          name="${repo#*/}"
           echo "## Hourly PR disposition" >> "${GITHUB_STEP_SUMMARY}"
           echo "Repository: ${repo}; base: ${BASE_BRANCH}" >> "${GITHUB_STEP_SUMMARY}"
 
@@ -61,14 +63,16 @@ jobs:
                   continue
                 fi
 
-                labels=$(gh api --paginate "/repos/${repo}/issues/${number}/labels?per_page=100" | jq -s 'add | map(.name)')
+                labels=$(gh api --paginate "/repos/${repo}/issues/${number}/labels?per_page=100" \
+                  | jq -s 'add | map(.name)')
                 if jq -e 'any(. == "do-not-merge" or . == "manual-merge" or . == "security-review" or . == "breaking-change")' \
                     >/dev/null <<<"${labels}"; then
                   skip "manual-review label present"
                   continue
                 fi
 
-                files=$(gh api --paginate "/repos/${repo}/pulls/${number}/files?per_page=100" | jq -s 'add | map(.filename)')
+                files=$(gh api --paginate "/repos/${repo}/pulls/${number}/files?per_page=100" \
+                  | jq -s 'add | map(.filename)')
                 if jq -e 'any(startswith(".github/workflows/"))' >/dev/null <<<"${files}" \
                     && ! jq -e 'any(. == "automerge-workflow")' >/dev/null <<<"${labels}"; then
                   skip "workflow change requires automerge-workflow label"
@@ -89,8 +93,44 @@ jobs:
                   continue
                 fi
 
+                review_threads=$(gh api graphql --paginate \
+                  -F owner="${owner}" \
+                  -F name="${name}" \
+                  -F number="${number}" \
+                  -f query='
+                    query(
+                      $owner: String!
+                      $name: String!
+                      $number: Int!
+                      $endCursor: String
+                    ) {
+                      repository(owner: $owner, name: $name) {
+                        pullRequest(number: $number) {
+                          reviewThreads(first: 100, after: $endCursor) {
+                            nodes {
+                              isResolved
+                              isOutdated
+                            }
+                            pageInfo {
+                              hasNextPage
+                              endCursor
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ')
+                unresolved_threads=$(jq -s '[
+                  .[].data.repository.pullRequest.reviewThreads.nodes[]?
+                  | select(.isResolved == false and .isOutdated == false)
+                ] | length' <<<"${review_threads}")
+                if [[ "${unresolved_threads}" -gt 0 ]]; then
+                  skip "${unresolved_threads} unresolved review threads"
+                  continue
+                fi
+
                 checks=$(gh api --paginate -H "Accept: application/vnd.github+json" \
-                  "/repos/${repo}/commits/${head_sha}/check-runs?per_page=100")
+                  "/repos/${repo}/commits/${head_sha}/check-runs?filter=latest&per_page=100")
                 check_summary=$(jq -s '
                   [.[].check_runs[]] as $runs
                   | {
@@ -100,7 +140,10 @@ jobs:
                         .status == "completed"
                         and (.conclusion != "success" and .conclusion != "neutral" and .conclusion != "skipped")
                       )) | length),
-                      names: ($runs | map(.name) | unique)
+                      names: ($runs | map(.name) | unique),
+                      successful_names: ($runs
+                        | map(select(.status == "completed" and .conclusion == "success") | .name)
+                        | unique)
                     }
                 ' <<<"${checks}")
                 check_total=$(jq -r '.total' <<<"${check_summary}")
@@ -122,11 +165,11 @@ jobs:
                   "osv-scan",
                   "scorecard"
                 ]'
-                missing_checks=$(jq --argjson required "${required_checks}" '
-                  ($required - .names) | length
+                missing_successful_checks=$(jq --argjson required "${required_checks}" '
+                  ($required - .successful_names) | length
                 ' <<<"${check_summary}")
-                if [[ "${missing_checks}" -gt 0 ]]; then
-                  skip "not every required check has reported"
+                if [[ "${missing_successful_checks}" -gt 0 ]]; then
+                  skip "not every required check completed successfully"
                   continue
                 fi
 
@@ -152,9 +195,14 @@ jobs:
                   continue
                 fi
 
-                result=$(gh api -X PUT "/repos/${repo}/pulls/${number}/merge" \
+                if ! result=$(gh api -X PUT "/repos/${repo}/pulls/${number}/merge" \
                   -f sha="${head_sha}" \
-                  -f merge_method="squash")
+                  -f merge_method="squash" 2>&1); then
+                  message=$(tr '\n' ' ' <<<"${result}" | cut -c1-500)
+                  skip "GitHub merge request failed: ${message}"
+                  continue
+                fi
+
                 if [[ "$(jq -r '.merged' <<<"${result}")" == "true" ]]; then
                   echo "- PR #${number}: merged — ${title}" >> "${GITHUB_STEP_SUMMARY}"
                 else
