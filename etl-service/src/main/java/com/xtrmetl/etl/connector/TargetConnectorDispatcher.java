@@ -72,9 +72,10 @@ public class TargetConnectorDispatcher {
      *
      * <p>Non-supported connectors validate their bound configuration first so operators receive
      * missing-key diagnostics before the implementation-status refusal. Supported connectors are
-     * opened exactly once per dispatcher lifecycle; an open failure is cleaned up, not cached, and
-     * can be retried by a later dispatch. Writes to the same connector are serialized, while
-     * independent connectors may progress concurrently. Dispatch is refused after shutdown begins.</p>
+     * validated and opened exactly once per dispatcher lifecycle; an open failure is cleaned up,
+     * not cached, and can be retried by a later dispatch. Writes to the same connector are
+     * serialized, while independent connectors may progress concurrently. Dispatch is refused
+     * after shutdown begins.</p>
      *
      * @param connectorId registered connector identifier
      * @param batch normalized change records to write
@@ -156,7 +157,7 @@ public class TargetConnectorDispatcher {
     }
 
     /**
-     * Opens a supported connector while its connector-specific monitor is held.
+     * Validates and opens a supported connector while its connector-specific monitor is held.
      *
      * <p>If opening fails after allocating partial resources, {@link TargetConnector#close()} is
      * invoked as a best-effort rollback. A cleanup failure is attached to the original exception
@@ -177,6 +178,7 @@ public class TargetConnectorDispatcher {
             );
         }
 
+        connector.validate(config);
         try {
             connector.open(config);
         } catch (RuntimeException openFailure) {
