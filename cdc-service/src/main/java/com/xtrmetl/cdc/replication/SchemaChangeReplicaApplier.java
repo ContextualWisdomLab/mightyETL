@@ -51,7 +51,7 @@ public class SchemaChangeReplicaApplier {
             ObjectMapper objectMapper,
             @Value("${xtrmetl.replica.ddl-enabled:false}") boolean ddlEnabled,
             @Value("${xtrmetl.replica.ddl-validation-mode:whitelist}") String ddlValidationMode,
-            @Value("${xtrmetl.replica.ddl-allowed-prefixes:CREATE TABLE,ALTER TABLE,CREATE INDEX}") String ddlAllowedPrefixes,
+            @Value("${xtrmetl.replica.ddl-allowed-prefixes:CREATE TABLE,ALTER TABLE,CREATE INDEX,CREATE UNIQUE INDEX}") String ddlAllowedPrefixes,
             @Value("${xtrmetl.replica.ddl-blocked-prefixes:DROP TABLE,DROP SCHEMA,DROP DATABASE,TRUNCATE}") String ddlBlockedPrefixes
     ) {
         this.jdbcTemplate = jdbcTemplate;
@@ -286,7 +286,7 @@ public class SchemaChangeReplicaApplier {
 
         static DdlValidationMode from(String value) {
             if (value == null || value.isBlank()) {
-                return NONE;
+                return WHITELIST;
             }
             String normalized = value.trim().toUpperCase(Locale.ROOT);
             if ("BLACKLIST".equals(normalized)) {
