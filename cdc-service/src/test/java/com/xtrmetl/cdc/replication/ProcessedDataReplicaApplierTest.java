@@ -51,6 +51,29 @@ class ProcessedDataReplicaApplierTest {
     }
 
     @Test
+    void constructorRejectsUnsafeIdentifiers() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new ProcessedDataReplicaApplier(
+                        jdbcTemplate,
+                        new ObjectMapper(),
+                        java.util.Set.of("processed_data;drop")
+                )
+        );
+    }
+
+    @Test
+    void ignoresInjectedTopicSuffix() {
+        String topic = "xtrmetl-cdc.public.processed_data;drop_table";
+        String keyJson = "{\"payload\":{\"id\":1}}";
+        String valueJson = "{\"payload\":{\"op\":\"c\",\"after\":{\"id\":1,\"data\":\"hello\"}}}";
+
+        applier.apply(topic, keyJson, valueJson);
+
+        verifyNoInteractions(jdbcTemplate);
+    }
+
+    @Test
     void ignoresNonProcessedDataTopics() {
         applier.apply("xtrmetl-cdc.public.users", "{\"payload\":{\"id\":1}}", "{\"payload\":{\"op\":\"c\"}}");
         verifyNoInteractions(jdbcTemplate);

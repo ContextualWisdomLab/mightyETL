@@ -13,15 +13,16 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
-import java.util.Objects;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
  * Applies CDC events for configured tables that share the {@code processed_data} row shape
- * ({@code id}, {@code data}). Table names are validated as SQL identifiers only.
+ * ({@code id}, {@code data}). Table names are compiled from validated configuration only.
  */
 @Service
 @ConditionalOnProperty(prefix = "xtrmetl.replica", name = "enabled", havingValue = "true")
@@ -34,6 +35,7 @@ public class ProcessedDataReplicaApplier {
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
     private final Set<String> allowedTables;
+    private final Map<String, TableSql> sqlByTable;
 
     public ProcessedDataReplicaApplier(
             @Qualifier("replicaJdbcTemplate") JdbcTemplate jdbcTemplate,
@@ -53,10 +55,18 @@ public class ProcessedDataReplicaApplier {
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
-        this.allowedTables = Set.copyOf(allowedTables);
+        this.allowedTables = allowedTables.stream()
+                .map(ProcessedDataReplicaApplier::requireSafeTable)
+                .collect(Collectors.toUnmodifiableSet());
         if (this.allowedTables.isEmpty()) {
             throw new IllegalArgumentException("xtrmetl.replica.tables must list at least one table");
         }
+
+        Map<String, TableSql> compiledSql = new LinkedHashMap<>();
+        for (String table : this.allowedTables) {
+            compiledSql.put(table, new TableSql(upsertSql(table), deleteSql(table)));
+        }
+        this.sqlByTable = Map.copyOf(compiledSql);
     }
 
     public void apply(@Nullable String topic, @Nullable String keyJson, @Nullable String valueJson) {
@@ -64,8 +74,8 @@ public class ProcessedDataReplicaApplier {
             return;
         }
 
-        String table = tableFromTopic(topic);
-        if (table == null || !allowedTables.contains(table)) {
+        TableSql tableSql = sqlByTable.get(tableFromTopic(topic));
+        if (tableSql == null) {
             return;
         }
 
@@ -82,25 +92,28 @@ public class ProcessedDataReplicaApplier {
 
         String op = envelope.op();
         if ("d".equals(op)) {
-            jdbcTemplate.update(deleteSql(table), id);
+            // JDBC cannot bind identifiers. This SQL was precompiled from the constructor-validated
+            // table allow-list; the public topic input can only select an existing map entry.
+            jdbcTemplate.update(tableSql.deleteSql(), id); // nosemgrep: java.spring.security.audit.spring-sqli.spring-sqli
             return;
         }
 
         JsonNode after = envelope.after();
         if (after == null || after.isNull() || !after.has("data")) {
-            log.error("Replica apply failed: missing {}.data field (topic={}, id={})", table, topic, id);
-            throw new IllegalStateException("Missing " + table + ".data field in CDC event for id=" + id);
+            log.error("Replica apply failed: missing data field (topic={}, id={})", topic, id);
+            throw new IllegalStateException("Missing data field in CDC event for id=" + id);
         }
 
         JsonNode dataNode = after.get("data");
         if (dataNode.isNull()) {
-            log.error("Replica apply failed: {}.data is null (topic={}, id={})", table, topic, id);
-            throw new IllegalStateException(table + ".data is null in CDC event for id=" + id);
+            log.error("Replica apply failed: data is null (topic={}, id={})", topic, id);
+            throw new IllegalStateException("data is null in CDC event for id=" + id);
         }
 
         String data = dataNode.isTextual() ? dataNode.asText() : dataNode.toString();
         // created_at is set by the replica DB on insert (DEFAULT) and intentionally not updated on upserts.
-        jdbcTemplate.update(Objects.requireNonNull(upsertSql(table)), id, data);
+        // The statement is precompiled from validated configuration; id/data remain JDBC-bound values.
+        jdbcTemplate.update(tableSql.upsertSql(), id, data); // nosemgrep: java.spring.security.audit.spring-sqli.spring-sqli
     }
 
     Set<String> allowedTables() {
@@ -114,16 +127,18 @@ public class ProcessedDataReplicaApplier {
         Set<String> tables = Arrays.stream(tablesConfig.split(","))
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
-                .map(s -> {
-                    if (!SAFE_TABLE.matcher(s).matches()) {
-                        throw new IllegalArgumentException(
-                                "Invalid replica table name '" + s + "': must match " + SAFE_TABLE.pattern()
-                        );
-                    }
-                    return s;
-                })
+                .map(ProcessedDataReplicaApplier::requireSafeTable)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
         return tables.isEmpty() ? Set.of("processed_data") : tables;
+    }
+
+    private static String requireSafeTable(String table) {
+        if (table == null || !SAFE_TABLE.matcher(table).matches()) {
+            throw new IllegalArgumentException(
+                    "Invalid replica table name '" + table + "': must match " + SAFE_TABLE.pattern()
+            );
+        }
+        return table;
     }
 
     private static String tableFromTopic(String topic) {
@@ -135,7 +150,6 @@ public class ProcessedDataReplicaApplier {
     }
 
     private static String upsertSql(String table) {
-        // table already validated against SAFE_TABLE
         return """
                 INSERT INTO %s (id, data)
                 VALUES (?, ?)
@@ -221,6 +235,8 @@ public class ProcessedDataReplicaApplier {
 
         return null;
     }
+
+    private record TableSql(String upsertSql, String deleteSql) {}
 
     private record DebeziumEnvelope(String op, JsonNode after) {}
 }
