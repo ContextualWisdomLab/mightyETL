@@ -19,9 +19,10 @@ A request is accepted only when all of the following are true:
 3. The array does not exceed the configured record limit.
 4. Every array element is a JSON object.
 5. Every record has a trimmed, non-blank JSON string `id` containing no ISO control, Unicode line-separator, or paragraph-separator characters and no more than 256 Unicode code points; numeric JSON identifier types are rejected.
-6. Every record can be transformed before the first JDBC call.
+6. Every record's field names remain unique after locale-independent uppercase normalization.
+7. Every record can be transformed before the first JDBC call.
 
-Duplicate field names are rejected rather than accepting parser-dependent “first value” or “last value” semantics. A rejected request performs no database writes.
+Exact duplicate field names are rejected rather than accepting parser-dependent “first value” or “last value” semantics. Case variants and other field names that normalize to the same output key are also rejected, preventing ambiguous transformed records such as two `ID` or two `NAME` entries. A rejected request performs no database writes.
 
 ## Transaction contract
 
@@ -39,6 +40,7 @@ Only `TransientDataAccessException` failures are retried. Invalid input and dete
 
 Fields are transformed directly from the Jackson JSON tree; values are not split on commas or colons.
 
+- Field names use locale-independent uppercase normalization and must remain unique after normalization.
 - `NAME` values use locale-independent uppercase conversion.
 - `EMAIL` values use locale-independent lowercase conversion.
 - `AMOUNT` values use `BigDecimal`, `HALF_UP`, scale `2`, and `toPlainString()`.
