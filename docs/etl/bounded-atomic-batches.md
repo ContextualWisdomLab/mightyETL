@@ -18,7 +18,7 @@ A request is accepted only when all of the following are true:
 2. The body parses as a top-level JSON array.
 3. The array does not exceed the configured record limit.
 4. Every array element is a JSON object.
-5. Every record has a non-blank JSON string `id`; numeric JSON identifiers are rejected.
+5. Every record has a trimmed, non-blank JSON string `id` containing no ISO control characters and no more than 256 Unicode code points; numeric JSON identifier types are rejected.
 6. Every record can be transformed before the first JDBC call.
 
 A rejected request performs no database writes.
@@ -43,7 +43,8 @@ Fields are transformed directly from the Jackson JSON tree; values are not split
 - `EMAIL` values use locale-independent lowercase conversion.
 - `AMOUNT` values use `BigDecimal`, `HALF_UP`, scale `2`, and `toPlainString()`.
 - Invalid, excessive-precision, or extreme-scale amounts retain the legacy fallback `0.00` without expanding attacker-controlled exponents into huge strings.
-- Response lines remain `Processed: <id>` in input order.
+- Nested arrays and objects are retained as compact JSON instead of collapsing to empty text.
+- Response lines remain `Processed: <id>` in input order. Identifier whitespace, control characters, and length are bounded so one record cannot inject or amplify response lines.
 
 ## Configuration
 
