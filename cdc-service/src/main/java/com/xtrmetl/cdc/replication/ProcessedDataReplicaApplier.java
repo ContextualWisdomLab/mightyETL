@@ -92,7 +92,9 @@ public class ProcessedDataReplicaApplier {
 
         String op = envelope.op();
         if ("d".equals(op)) {
-            jdbcTemplate.update(tableSql.deleteSql(), id);
+            // JDBC cannot bind identifiers. This SQL was precompiled from the constructor-validated
+            // table allow-list; the public topic input can only select an existing map entry.
+            jdbcTemplate.update(tableSql.deleteSql(), id); // nosemgrep: java.spring.security.audit.spring-sqli.spring-sqli
             return;
         }
 
@@ -110,7 +112,8 @@ public class ProcessedDataReplicaApplier {
 
         String data = dataNode.isTextual() ? dataNode.asText() : dataNode.toString();
         // created_at is set by the replica DB on insert (DEFAULT) and intentionally not updated on upserts.
-        jdbcTemplate.update(tableSql.upsertSql(), id, data);
+        // The statement is precompiled from validated configuration; id/data remain JDBC-bound values.
+        jdbcTemplate.update(tableSql.upsertSql(), id, data); // nosemgrep: java.spring.security.audit.spring-sqli.spring-sqli
     }
 
     Set<String> allowedTables() {
