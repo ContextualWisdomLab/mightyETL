@@ -38,6 +38,15 @@ class EtlBatchAdmissionDocumentationTest {
         assertTrue(application.contains("queue-capacity: ${ETL_QUEUE_CAPACITY:1024}"));
     }
 
+    @Test
+    void changelogRecordsAdmissionAndExecutorChanges() throws IOException {
+        String changelog = read("CHANGELOG.md");
+
+        assertTrue(changelog.contains("fully preflighted before scheduling or database writes"));
+        assertTrue(changelog.contains("bounded queue and caller-runs backpressure"));
+        assertTrue(changelog.contains("docs/etl/batch-admission-and-backpressure.md"));
+    }
+
     private static String read(String relativePath) throws IOException {
         return Files.readString(projectRoot().resolve(relativePath), StandardCharsets.UTF_8);
     }
