@@ -15,13 +15,13 @@ This closes three production risks in the legacy implementation:
 A request is accepted only when all of the following are true:
 
 1. The body does not exceed the configured UTF-8 byte limit.
-2. The body parses as a top-level JSON array.
+2. The body parses as a top-level JSON array with no duplicate object-field names.
 3. The array does not exceed the configured record limit.
 4. Every array element is a JSON object.
-5. Every record has a trimmed, non-blank JSON string `id` containing no ISO control characters and no more than 256 Unicode code points; numeric JSON identifier types are rejected.
+5. Every record has a trimmed, non-blank JSON string `id` containing no ISO control, Unicode line-separator, or paragraph-separator characters and no more than 256 Unicode code points; numeric JSON identifier types are rejected.
 6. Every record can be transformed before the first JDBC call.
 
-A rejected request performs no database writes.
+Duplicate field names are rejected rather than accepting parser-dependent “first value” or “last value” semantics. A rejected request performs no database writes.
 
 ## Transaction contract
 
@@ -44,7 +44,7 @@ Fields are transformed directly from the Jackson JSON tree; values are not split
 - `AMOUNT` values use `BigDecimal`, `HALF_UP`, scale `2`, and `toPlainString()`.
 - Invalid, excessive-precision, or extreme-scale amounts retain the legacy fallback `0.00` without expanding attacker-controlled exponents into huge strings.
 - Nested arrays and objects are retained as compact JSON instead of collapsing to empty text.
-- Response lines remain `Processed: <id>` in input order. Identifier whitespace, control characters, and length are bounded so one record cannot inject or amplify response lines.
+- Response lines remain `Processed: <id>` in input order. Identifier whitespace, control and Unicode line-separator characters, and length are bounded so one record cannot inject or amplify response lines.
 
 ## Configuration
 
