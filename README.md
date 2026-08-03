@@ -1,6 +1,6 @@
 # mightyETL - Enterprise ETL and CDC Platform
 
-A microservices-based platform for real-time Change Data Capture (CDC) and Extract-Transform-Load (ETL) operations.
+A microservices-based platform for real-time Change Data Capture (CDC) and bounded Extract-Transform-Load (ETL) operations.
 
 > **Formerly xtrmETL.** Product branding is **mightyETL**. Java packages (`com.xtrmetl.*`), Maven coordinates, and some runtime defaults still use the legacy `xtrmetl` identifier for binary compatibility; see [docs/rebrand-name-matrix.md](docs/rebrand-name-matrix.md).
 
@@ -9,7 +9,7 @@ A microservices-based platform for real-time Change Data Capture (CDC) and Extra
 mightyETL provides enterprise-grade capabilities for:
 
 - **Real-time Change Data Capture**: Monitor PostgreSQL databases and capture all data changes (Postgres → Kafka today; multi-source roadmap in [docs/cdc/any-to-any-cdc.md](docs/cdc/any-to-any-cdc.md))
-- **Data Transformation**: Apply business rules and transform data at scale
+- **Bounded transactional ETL**: Enforce UTF-8 payload and record limits, prevalidate the complete batch, transform deterministically, and commit accepted records in one transaction
 - **Event Streaming**: Publish changes to Kafka for downstream processing
 - **Warehouse / BI targets (scaffold)**: Databricks, Snowflake, and Qlik Sense connector contracts — see [docs/connectors/](docs/connectors/)
 - **Secure Access**: JWT-based authentication with role-based access control
@@ -23,7 +23,7 @@ mightyETL provides enterprise-grade capabilities for:
 | CDC capture | **PostgreSQL → Kafka** (Debezium embedded) | Ops: `GET /api/cdc/status`, slot lag, `cdcEngine` health — [ops-and-reliability](docs/cdc/ops-and-reliability.md) |
 | CDC replica apply | **Optional** Postgres JDBC | Tables with `(id, data)` shape (`xtrmetl.replica.tables`) |
 | Any-to-any CDC | **Scaffold** | Source/target SPI + factory; MySQL/SQL Server **not live** |
-| ETL load | **PostgreSQL** via `POST /api/etl/process` | |
+| ETL load | **PostgreSQL** via `POST /api/etl/process` | Bounded, fully prevalidated, transaction-scoped request batches — [runbook](docs/etl/bounded-atomic-batches.md) |
 | Databricks / Snowflake / Qlik | **Scaffold** (not production) | SPI + YAML binding + required-key validation + catalog; `write()` always refused — [docs/connectors/](docs/connectors/) |
 | Progress tracker | [docs/mightyETL-product-upgrade-progress.md](docs/mightyETL-product-upgrade-progress.md) | |
 
@@ -48,7 +48,7 @@ Do **not** market multi-cloud warehouse CDC or BI loaders as production-ready un
     │   PostgreSQL     │      │  Kafka + Debezium│
     │   (Target DB)    │      │  (Event Stream)  │
     └──────────────────┘      └──────────────────┘
-             
+
 ┌───────────────────┐         ┌──────────────────┐
 │  Eureka Server    │         │   Config Server  │
 │   Port 8761       │         │   (Future)       │
@@ -101,6 +101,16 @@ export PGPASSWORD=your_password
 export PGDATABASE=your_database
 ```
 
+Optional ETL admission limits:
+
+```bash
+# Defaults: 1 MiB and 1,000 records. See docs/etl/bounded-atomic-batches.md.
+export ETL_MAX_PAYLOAD_BYTES=1048576
+export ETL_MAX_BATCH_RECORDS=1000
+```
+
+The service rejects a request before any JDBC call when either limit is exceeded or any record is invalid. Keep the gateway/ingress body-size limit aligned: the service-level UTF-8 check is defense in depth after the MVC stack has materialized the request body.
+
 Optional (CDC / Debezium):
 
 ```bash
@@ -127,18 +137,17 @@ export REPLICA_DDL_ENABLED=true
 If you don’t need replication, set `REPLICA_ENABLED=false` and the CDC service will skip replica applies.
 
 Security note: enabling `REPLICA_DDL_ENABLED` can apply destructive DDL (e.g. `DROP`, `TRUNCATE`) on the replica.
-For production, consider configuring `REPLICA_DDL_VALIDATION_MODE=whitelist` (or `blocklist`) and tightening the
-allowed/blocked prefix lists accordingly.
+For production, keep the secure default `REPLICA_DDL_VALIDATION_MODE=whitelist` and tighten the allowed prefixes for the deployment.
 
 ### Build
 
 ```bash
 # Build all modules
-mvn clean install
+./mvnw clean install
 
 # Or build individual services
-cd etl-service && mvn clean package
-cd cdc-service && mvn clean package
+cd etl-service && ../mvnw clean package
+cd cdc-service && ../mvnw clean package
 ```
 
 ### Run Services
@@ -148,19 +157,19 @@ Start services in the following order:
 ```bash
 # 1. Start Eureka Server (Service Discovery)
 cd eureka-server
-mvn spring-boot:run
+../mvnw spring-boot:run
 
 # 2. Start CDC Service
 cd cdc-service
-mvn spring-boot:run
+../mvnw spring-boot:run
 
 # 3. Start ETL Service
 cd etl-service
-mvn spring-boot:run
+../mvnw spring-boot:run
 
 # 4. Start Zuul Gateway
 cd zuul-gateway
-mvn spring-boot:run
+../mvnw spring-boot:run
 ```
 
 Access the gateway at: `http://localhost:8080`
@@ -175,34 +184,38 @@ Captures database changes in real-time using Debezium.
 
 - PostgreSQL change data capture
 - Kafka event publishing
-- Real-time monitoring
+- Real-time status and replication-slot lag monitoring
 - Minimal source database impact
 
 **API Endpoints:**
 
 - `POST /api/cdc/start` - Start CDC process
 - `POST /api/cdc/stop` - Stop CDC process
+- `GET /api/cdc/status` - Read operator-safe runtime status
 
 ### ETL Service (Port 8000)
 
-Processes and transforms data with configurable business rules.
+Processes and transforms bounded JSON batches with configurable business rules.
 
 **Key Features:**
 
-- JSON data processing
-- Parallel record processing
-- Automatic retry on failures
-- Configurable transformations
+- UTF-8 payload and record-count admission limits
+- Full-batch structural validation and transformation before the first database write
+- One Spring transaction for every accepted request batch
+- Retry limited to transient database failures
+- Delimiter-safe, locale-independent transformations with deterministic decimal formatting
 
 **API Endpoints:**
 
-- `POST /api/etl/process` - Process data
+- `POST /api/etl/process` - Process one bounded atomic batch
+- `GET /api/etl/connectors` - Inspect target connector capabilities and runtime state
 
 **Transformation Rules:**
 
-- NAME fields: Convert to uppercase
-- EMAIL fields: Convert to lowercase  
-- AMOUNT fields: Format to 2 decimal places
+- `NAME` fields: locale-independent uppercase
+- `EMAIL` fields: locale-independent lowercase
+- `AMOUNT` fields: `BigDecimal` with two decimal places and `HALF_UP` rounding
+- All other field values are preserved without comma/colon splitting
 
 ### Zuul Gateway (Port 8080)
 
@@ -219,6 +232,14 @@ API Gateway with authentication and routing.
 Service discovery and registration.
 
 **Dashboard:** `http://localhost:8761`
+
+### Config Server (Port 8888)
+
+Centralized configuration service scaffold. The current runtime still relies primarily on local YAML and environment variables.
+
+### Zipkin (Port 9412)
+
+Receives distributed tracing spans from the services.
 
 ## 🔐 Authentication
 
@@ -262,7 +283,7 @@ curl -X POST http://localhost:8080/api/etl/process \
   -H "Content-Type: application/json" \
   -d '[
     {
-      "id": "1",
+      "id": "record_alpha",
       "name": "john doe",
       "email": "JOHN@EXAMPLE.COM",
       "amount": "1234.567"
@@ -287,13 +308,13 @@ curl -X POST http://localhost:8080/api/etl/process \
   -H "Content-Type: application/json" \
   -d '[
     {
-      "id": "1",
+      "id": "record_alpha",
       "name": "jane smith",
-      "email": "JANE@COMPANY.COM", 
+      "email": "JANE@COMPANY.COM",
       "amount": "999.99"
     },
     {
-      "id": "2",
+      "id": "record_beta",
       "name": "bob jones",
       "email": "BOB@COMPANY.COM",
       "amount": "1500"
@@ -306,10 +327,13 @@ Expected transformations:
 - Names: `JANE SMITH`, `BOB JONES`
 - Emails: `jane@company.com`, `bob@company.com`
 - Amounts: `999.99`, `1500.00`
+- Response: `Processed: record_alpha` and `Processed: record_beta`, in input order
 
 ## 🗄️ Database Setup
 
 ### Create Security Tables
+
+The authentication schema below reflects the legacy application contract and is retained for compatibility:
 
 ```sql
 CREATE TABLE roles (
@@ -331,15 +355,18 @@ CREATE TABLE user_roles (
     FOREIGN KEY (role_id) REFERENCES roles(id)
 );
 
--- Insert default roles
 INSERT INTO roles (name) VALUES ('ROLE_USER'), ('ROLE_ADMIN');
 ```
 
 ### Create ETL Target Table
 
+Use a descriptive nonnumeric primary key while retaining the service’s existing `data` insert contract:
+
 ```sql
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 CREATE TABLE processed_data (
-    id SERIAL PRIMARY KEY,
+    processed_data_key UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     data TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -350,12 +377,12 @@ CREATE TABLE processed_data (
 ### Run All Tests
 
 ```bash
-mvn test
+./mvnw test
 ```
 
 ### Billing-Independent Checks (Local)
 
-If GitHub-hosted Actions runners are unavailable (billing/spending limit), run the local check script:
+If GitHub-hosted Actions runners are unavailable, run the local check script:
 
 ```bash
 ./scripts/ci.sh
@@ -370,19 +397,21 @@ Windows (PowerShell):
 ### Run Service-Specific Tests
 
 ```bash
-cd etl-service && mvn test
-cd cdc-service && mvn test
+./mvnw -pl etl-service test
+./mvnw -pl cdc-service test
 ```
 
 ### Test Coverage
 
 Current test coverage includes:
 
-- ✅ EtlServiceTest
-- ✅ EtlControllerTest
-- ✅ CdcServiceTest
-- ✅ CdcControllerTest
-- ✅ JwtAuthenticationFilterTest
+- `EtlServiceTest`
+- `EtlServiceBatchSafetyTest`
+- `EtlServiceTransactionIntegrationTest`
+- `EtlControllerTest`
+- `CdcServiceTest`
+- `CdcControllerTest`
+- `JwtAuthenticationFilterTest`
 
 ## 📊 Monitoring
 
@@ -403,11 +432,11 @@ All services are configured to send traces to Zipkin with 100% sampling rate.
 Spring Boot Actuator health endpoints are exposed for each service:
 
 ```text
-http://localhost:8000/actuator/health  (etl-service)
-http://localhost:8001/actuator/health  (cdc-service)
-http://localhost:8080/actuator/health  (zuul-gateway)
-http://localhost:8761/actuator/health  (eureka-server)
-http://localhost:8888/actuator/health  (config-server)
+http://localhost:8000/actuator/health  (ETL Service)
+http://localhost:8001/actuator/health  (CDC Service)
+http://localhost:8080/actuator/health  (Zuul Gateway)
+http://localhost:8761/actuator/health  (Eureka Server)
+http://localhost:8888/actuator/health  (Config Server)
 ```
 
 Eureka dashboard: `http://localhost:8761`
@@ -423,12 +452,25 @@ Key configuration files:
 - `zuul-gateway/src/main/resources/application.yml`
 - `eureka-server/src/main/resources/application.yml`
 
+### ETL Configuration
+
+Prefer the product namespace in external configuration:
+
+```yaml
+mightyetl:
+  etl:
+    max-payload-bytes: 1048576
+    max-batch-records: 1000
+```
+
+The compatibility namespace `xtrmetl.etl.*` remains accepted. See [the bounded atomic batch runbook](docs/etl/bounded-atomic-batches.md) for hard ceilings, rollback semantics, and capacity guidance.
+
 ### CDC Configuration
 
-Update table monitoring in `CdcService.java`:
+Update table monitoring through environment configuration, for example:
 
-```java
-.with("table.include.list", "public.your_table_name")
+```bash
+export CDC_TABLE_INCLUDE_LIST=public.processed_data
 ```
 
 ### Kafka Configuration
@@ -446,7 +488,6 @@ spring:
 Build Docker images:
 
 ```bash
-# Build each service
 docker build -t mightyetl/etl-service:latest ./etl-service
 docker build -t mightyetl/cdc-service:latest ./cdc-service
 docker build -t mightyetl/zuul-gateway:latest ./zuul-gateway
@@ -456,24 +497,24 @@ docker build -t mightyetl/eureka-server:latest ./eureka-server
 ## 📋 Technology Stack
 
 | Component | Technology | Version |
-| ----------- | ----------- | --------- |
+|:----------|:-----------|:--------|
 | Runtime | Java | 25 |
 | Framework | Spring Boot | 3.5.9 |
 | Cloud | Spring Cloud | 2025.0.1 |
 | CDC Engine | Debezium | 3.4.0.Final |
 | Database | PostgreSQL | 12+ |
-| Messaging | Apache Kafka | Latest |
-| Gateway | Spring Cloud Gateway | Latest |
-| Discovery | Netflix Eureka | Latest |
-| Tracing | Zipkin | Latest |
-| Security | Spring Security + JWT | Latest |
-| Build | Maven | 3.6+ |
+| Messaging | Apache Kafka | Current managed version |
+| Gateway | Spring Cloud Gateway / legacy Zuul naming | Repository-defined |
+| Discovery | Netflix Eureka | Repository-defined |
+| Tracing | Zipkin | Repository-defined |
+| Security | Spring Security + JWT | Repository-defined |
+| Build | Maven Wrapper | 3.9.x |
 
 ## 🎓 Key Concepts
 
 ### Change Data Capture (CDC)
 
-Monitors database transaction logs to capture INSERT, UPDATE, and DELETE operations in real-time without impacting source system performance.
+Monitors database transaction logs to capture INSERT, UPDATE, and DELETE operations in real-time without polling source tables.
 
 ### Extract-Transform-Load (ETL)
 
@@ -500,24 +541,27 @@ mightyETL/
 ├── pom.xml                    # Parent POM
 ├── README.md                  # This file
 ├── PRD.md                     # Product Requirements Document
-├── docs/                      # Architecture, connectors, CDC roadmap
-├── etl-service/              # ETL processing service (+ target connector SPI)
-├── cdc-service/              # CDC monitoring service (+ source SPI scaffold)
-├── zuul-gateway/             # API Gateway
-├── eureka-server/            # Service discovery
-├── config-server/            # Configuration management
-└── zipkin.jar                # Distributed tracing
+├── docs/                      # Architecture, operations, connectors, roadmaps
+├── etl-service/               # Transactional ETL service + target connector SPI
+├── cdc-service/               # CDC monitoring service + source SPI scaffold
+├── zuul-gateway/              # API Gateway
+├── eureka-server/             # Service discovery
+├── config-server/             # Configuration management
+└── zipkin.jar                 # Distributed tracing
 ```
 
 ### Adding New Transformations
 
-Edit `EtlService.java` and add cases to the transform method:
+Edit `EtlService.transformValue` and add a locale-safe case to the switch expression:
 
 ```java
-case "YOUR_FIELD":
-    value = yourTransformation(value);
-    break;
+return switch (key) {
+    case "YOUR_FIELD" -> yourTransformation(value);
+    default -> value;
+};
 ```
+
+Add focused unit tests for delimiters, locale behavior, null values, size amplification, and transactional failure behavior before exposing a new transformation.
 
 ### Adding New Routes
 
@@ -549,33 +593,35 @@ For issues, questions, or contributions:
 
 - Create an issue in the repository
 - Contact the development team
-- Refer to the [PRD.md](PRD.md) for detailed requirements
+- Refer to [PRD.md](PRD.md) for detailed requirements
+- Use [docs/etl/bounded-atomic-batches.md](docs/etl/bounded-atomic-batches.md) for ETL admission and rollback operations
 
 ## 🗺️ Roadmap
 
 ### Current (v1.0)
 
-- ✅ CDC for PostgreSQL
-- ✅ Basic ETL transformations
-- ✅ JWT authentication
-- ✅ Microservices architecture
-- ✅ Distributed tracing
+- CDC for PostgreSQL
+- Bounded, prevalidated, transaction-scoped PostgreSQL ETL batches
+- JWT authentication
+- Microservices architecture
+- Distributed tracing
 
 ### Planned (v2.0)
 
-- 🔲 Multi-database / any-to-any CDC (source SPI; see `docs/cdc/any-to-any-cdc.md`)
-- 🔲 Databricks / Snowflake / Qlik Sense loaders (target SPI; see `docs/connectors/`)
-- 🔲 Web UI for configuration
-- 🔲 Custom transformation functions
-- 🔲 Data quality validation
-- 🔲 Real-time monitoring dashboard
-- 🔲 Schema registry integration
-- 🔲 Enhanced error handling and DLQ
+- Multi-database / any-to-any CDC (source SPI; see `docs/cdc/any-to-any-cdc.md`)
+- Databricks / Snowflake / Qlik Sense loaders (target SPI; see `docs/connectors/`)
+- Asynchronous ingestion jobs, idempotency keys, and durable retry/DLQ semantics
+- Web UI for configuration
+- Custom transformation functions
+- Data quality validation
+- Real-time monitoring dashboard
+- Schema registry integration
 
 ## 📚 Additional Documentation
 
 - **[PRD.md](PRD.md)** - Complete Product Requirements Document
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - System architecture
+- **[docs/etl/bounded-atomic-batches.md](docs/etl/bounded-atomic-batches.md)** - ETL admission, deterministic transformation, and rollback contract
 - **[docs/connectors/](docs/connectors/)** - Target connector scaffolds (Qlik, Databricks, Snowflake)
 - **[docs/cdc/any-to-any-cdc.md](docs/cdc/any-to-any-cdc.md)** - Any-to-any CDC design and limitations
 - **[docs/rebrand-name-matrix.md](docs/rebrand-name-matrix.md)** - mightyETL vs legacy xtrmETL identifiers
@@ -584,5 +630,5 @@ For issues, questions, or contributions:
 ---
 
 **Version**: 1.0.0  
-**Last Updated**: 2026-01-08  
+**Last Updated**: 2026-08-03  
 **Status**: Active Development
