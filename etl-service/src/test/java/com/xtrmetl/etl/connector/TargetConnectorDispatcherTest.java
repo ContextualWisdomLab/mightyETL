@@ -2,9 +2,12 @@ package com.xtrmetl.etl.connector;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -24,14 +27,7 @@ class TargetConnectorDispatcherTest {
 
     @Test
     void refusesWriteWhenScaffoldEnabledWithCompleteConfig() {
-        ConnectorProperties props = new ConnectorProperties();
-        props.getDatabricks().setEnabled(true);
-        props.getDatabricks().setHost("h");
-        props.getDatabricks().setHttpPath("/sql");
-        props.getDatabricks().setToken("t");
-        props.getDatabricks().setCatalog("c");
-        props.getDatabricks().setSchema("s");
-        props.getDatabricks().setTable("tbl");
+        ConnectorProperties props = enabledDatabricksProperties();
         TargetConnectorDispatcher dispatcher =
                 new TargetConnectorDispatcher(new TargetConnectorRegistry(), props);
 
@@ -57,5 +53,129 @@ class TargetConnectorDispatcherTest {
 
         assertEquals(3, dispatcher.catalog().size());
         assertTrue(dispatcher.catalog().stream().noneMatch(row -> Boolean.TRUE.equals(row.get("writable"))));
+        assertTrue(dispatcher.catalog().stream().noneMatch(row -> Boolean.TRUE.equals(row.get("opened"))));
+    }
+
+    @Test
+    void opensSupportedConnectorOnceBeforeWritingAndClosesExactlyOnce() {
+        RecordingConnector connector = new RecordingConnector(ConnectorStatus.SUPPORTED, false);
+        TargetConnectorRegistry registry = new TargetConnectorRegistry();
+        registry.register(connector);
+        TargetConnectorDispatcher dispatcher =
+                new TargetConnectorDispatcher(registry, enabledDatabricksProperties());
+
+        dispatcher.dispatch("databricks", List.of());
+        dispatcher.dispatch("databricks", List.of());
+
+        assertEquals(List.of("open", "write", "write"), connector.events);
+        assertTrue(Boolean.TRUE.equals(dispatcher.catalog().stream()
+                .filter(row -> "databricks".equals(row.get("id")))
+                .findFirst()
+                .orElseThrow()
+                .get("opened")));
+
+        dispatcher.closeOpenedConnectors();
+        dispatcher.closeOpenedConnectors();
+
+        assertEquals(List.of("open", "write", "write", "close"), connector.events);
+        assertFalse(Boolean.TRUE.equals(dispatcher.catalog().stream()
+                .filter(row -> "databricks".equals(row.get("id")))
+                .findFirst()
+                .orElseThrow()
+                .get("opened")));
+    }
+
+    @Test
+    void retriesSupportedConnectorOpenAfterFailure() {
+        RecordingConnector connector = new RecordingConnector(ConnectorStatus.SUPPORTED, true);
+        TargetConnectorRegistry registry = new TargetConnectorRegistry();
+        registry.register(connector);
+        TargetConnectorDispatcher dispatcher =
+                new TargetConnectorDispatcher(registry, enabledDatabricksProperties());
+
+        assertThrows(IllegalStateException.class,
+                () -> dispatcher.dispatch("databricks", List.of()));
+        dispatcher.dispatch("databricks", List.of());
+
+        assertEquals(List.of("open", "open", "write"), connector.events);
+        dispatcher.closeOpenedConnectors();
+        assertEquals(List.of("open", "open", "write", "close"), connector.events);
+    }
+
+    @Test
+    void refusesUnsupportedConnectorBeforeOpenOrWrite() {
+        RecordingConnector connector = new RecordingConnector(ConnectorStatus.UNSUPPORTED, false);
+        TargetConnectorRegistry registry = new TargetConnectorRegistry();
+        registry.register(connector);
+        TargetConnectorDispatcher dispatcher =
+                new TargetConnectorDispatcher(registry, enabledDatabricksProperties());
+
+        assertThrows(UnsupportedOperationException.class,
+                () -> dispatcher.dispatch("databricks", List.of()));
+
+        assertTrue(connector.events.isEmpty());
+    }
+
+    private static ConnectorProperties enabledDatabricksProperties() {
+        ConnectorProperties props = new ConnectorProperties();
+        props.getDatabricks().setEnabled(true);
+        props.getDatabricks().setHost("h");
+        props.getDatabricks().setHttpPath("/sql");
+        props.getDatabricks().setToken("t");
+        props.getDatabricks().setCatalog("c");
+        props.getDatabricks().setSchema("s");
+        props.getDatabricks().setTable("tbl");
+        return props;
+    }
+
+    private static final class RecordingConnector implements TargetConnector {
+        private final ConnectorStatus status;
+        private final boolean failFirstOpen;
+        private final List<String> events = new ArrayList<>();
+        private int openAttempts;
+
+        private RecordingConnector(ConnectorStatus status, boolean failFirstOpen) {
+            this.status = status;
+            this.failFirstOpen = failFirstOpen;
+        }
+
+        @Override
+        public String id() {
+            return "databricks";
+        }
+
+        @Override
+        public String displayName() {
+            return "Recording connector";
+        }
+
+        @Override
+        public ConnectorStatus status() {
+            return status;
+        }
+
+        @Override
+        public void validate(Map<String, String> config) {
+            // The fake intentionally has no external configuration contract.
+        }
+
+        @Override
+        public void open(Map<String, String> config) {
+            events.add("open");
+            openAttempts++;
+            if (failFirstOpen && openAttempts == 1) {
+                throw new IllegalStateException("simulated open failure");
+            }
+        }
+
+        @Override
+        public void write(List<ChangeRecord> batch) {
+            events.add("write");
+        }
+
+        @Override
+        public void close() {
+            events.add("close");
+        }
     }
 }
