@@ -3,6 +3,7 @@ package com.xtrmetl.etl.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -27,6 +28,7 @@ class EtlServiceTransactionIntegrationTest {
     private final EtlService etlService;
     private final JdbcTemplate jdbcTemplate;
 
+    @Autowired
     EtlServiceTransactionIntegrationTest(EtlService etlService, JdbcTemplate jdbcTemplate) {
         this.etlService = etlService;
         this.jdbcTemplate = jdbcTemplate;
