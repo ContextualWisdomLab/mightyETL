@@ -106,7 +106,38 @@ class EtlServiceBatchSafetyTest {
     void rejectsNumericRecordIdentifierTypesBeforeJdbc() {
         EtlService service = service();
 
-        assertThrows(RuntimeException.class, () -> service.processData("[{\"id\":123}]") );
+        assertThrows(RuntimeException.class, () -> service.processData("[{\"id\":123}]"));
+
+        verifyNoInteractions(jdbcTemplate);
+    }
+
+    @Test
+    void rejectsIdentifiersWithLeadingOrTrailingWhitespaceBeforeJdbc() {
+        EtlService service = service();
+
+        assertThrows(RuntimeException.class,
+                () -> service.processData("[{\"id\":\" record_alpha \"}]"));
+
+        verifyNoInteractions(jdbcTemplate);
+    }
+
+    @Test
+    void rejectsIdentifiersContainingControlCharactersBeforeJdbc() {
+        EtlService service = service();
+
+        assertThrows(RuntimeException.class,
+                () -> service.processData("[{\"id\":\"record_alpha\\nforged_line\"}]"));
+
+        verifyNoInteractions(jdbcTemplate);
+    }
+
+    @Test
+    void rejectsIdentifiersLongerThanTheSupportedResponseBoundary() {
+        EtlService service = service();
+        String identifier = "record_" + "a".repeat(250);
+        String payload = "[{\"id\":\"" + identifier + "\"}]";
+
+        assertThrows(RuntimeException.class, () -> service.processData(payload));
 
         verifyNoInteractions(jdbcTemplate);
     }
@@ -119,6 +150,24 @@ class EtlServiceBatchSafetyTest {
         service.processData("[{\"id\":\"record_alpha\",\"name\":\"A:B,C\"}]");
 
         verify(jdbcTemplate).update(sql, "ID:record_alpha,NAME:A:B,C,");
+    }
+
+    @Test
+    void preservesNestedJsonValuesInsteadOfCollapsingThemToEmptyText() {
+        EtlService service = service();
+        String sql = "INSERT INTO processed_data (data) VALUES (?)";
+
+        service.processData("""
+                [{
+                  "id":"record_alpha",
+                  "metadata":{"region":"east:one","tags":["a,b","c:d"]}
+                }]
+                """);
+
+        verify(jdbcTemplate).update(
+                sql,
+                "ID:record_alpha,METADATA:{\"region\":\"east:one\",\"tags\":[\"a,b\",\"c:d\"]},"
+        );
     }
 
     @Test
