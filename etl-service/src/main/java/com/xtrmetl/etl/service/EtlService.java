@@ -43,10 +43,13 @@ public class EtlService {
     private final EtlBatchProperties batchProperties;
 
     /**
-     * Creates the ETL service and enables strict duplicate-field detection on its JSON parser.
+     * Creates the ETL service with an isolated strict duplicate-field JSON parser.
+     *
+     * <p>The injected mapper is copied before strict duplicate detection is enabled so this
+     * service cannot mutate shared application-wide JSON parsing behavior.</p>
      *
      * @param jdbcTemplate parameterized database access
-     * @param objectMapper JSON parser
+     * @param objectMapper JSON parser configuration to copy
      * @param batchProperties request safety limits; {@code null} uses safe defaults for legacy
      *                        direct construction and Mockito-based tests
      */
@@ -56,7 +59,11 @@ public class EtlService {
             @Nullable EtlBatchProperties batchProperties
     ) {
         this.jdbcTemplate = Objects.requireNonNull(jdbcTemplate, "jdbcTemplate must not be null");
-        this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
+        ObjectMapper sourceMapper = Objects.requireNonNull(
+                objectMapper,
+                "objectMapper must not be null"
+        );
+        this.objectMapper = sourceMapper.copy();
         this.objectMapper.enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION);
         this.batchProperties = batchProperties == null
                 ? new EtlBatchProperties()
