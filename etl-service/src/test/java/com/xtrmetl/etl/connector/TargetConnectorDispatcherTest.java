@@ -92,7 +92,7 @@ class TargetConnectorDispatcherTest {
     }
 
     @Test
-    void retriesSupportedConnectorOpenAfterFailure() {
+    void cleansUpFailedOpenBeforeRetryingSupportedConnector() {
         RecordingConnector connector = new RecordingConnector(ConnectorStatus.SUPPORTED, true);
         TargetConnectorRegistry registry = new TargetConnectorRegistry();
         registry.register(connector);
@@ -103,9 +103,9 @@ class TargetConnectorDispatcherTest {
                 () -> dispatcher.dispatch("databricks", List.of()));
         dispatcher.dispatch("databricks", List.of());
 
-        assertEquals(List.of("open", "open", "write"), connector.events);
+        assertEquals(List.of("open", "close", "open", "write"), connector.events);
         dispatcher.closeOpenedConnectors();
-        assertEquals(List.of("open", "open", "write", "close"), connector.events);
+        assertEquals(List.of("open", "close", "open", "write", "close"), connector.events);
     }
 
     @Test
