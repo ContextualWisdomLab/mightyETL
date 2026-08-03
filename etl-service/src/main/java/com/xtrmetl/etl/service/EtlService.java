@@ -1,5 +1,6 @@
 package com.xtrmetl.etl.service;
 
+import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.dao.DataAccessException;
@@ -42,7 +43,7 @@ public class EtlService {
     private final EtlBatchProperties batchProperties;
 
     /**
-     * Creates the ETL service.
+     * Creates the ETL service and enables strict duplicate-field detection on its JSON parser.
      *
      * @param jdbcTemplate parameterized database access
      * @param objectMapper JSON parser
@@ -56,6 +57,7 @@ public class EtlService {
     ) {
         this.jdbcTemplate = Objects.requireNonNull(jdbcTemplate, "jdbcTemplate must not be null");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
+        this.objectMapper.enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION);
         this.batchProperties = batchProperties == null
                 ? new EtlBatchProperties()
                 : batchProperties;
@@ -148,11 +150,11 @@ public class EtlService {
 
         String id = idNode.asText();
         int codePointCount = id.codePointCount(0, id.length());
-        boolean hasControlCharacter = id.codePoints().anyMatch(Character::isISOControl);
+        boolean hasUnsafeCodePoint = id.codePoints().anyMatch(EtlService::isUnsafeIdentifierCodePoint);
         if (id.isBlank()
                 || !id.equals(id.strip())
                 || codePointCount > MAX_RECORD_ID_CODE_POINTS
-                || hasControlCharacter) {
+                || hasUnsafeCodePoint) {
             throw invalidIdentifier(index);
         }
 
@@ -160,11 +162,19 @@ public class EtlService {
         return new ProcessedRecord(id, transformedData);
     }
 
+    private static boolean isUnsafeIdentifierCodePoint(int codePoint) {
+        int characterType = Character.getType(codePoint);
+        return Character.isISOControl(codePoint)
+                || characterType == Character.LINE_SEPARATOR
+                || characterType == Character.PARAGRAPH_SEPARATOR;
+    }
+
     private static IllegalArgumentException invalidIdentifier(int index) {
         return new IllegalArgumentException(
                 "Record at index " + index
-                        + " requires a trimmed, control-free string id of at most "
-                        + MAX_RECORD_ID_CODE_POINTS + " characters"
+                        + " requires a trimmed string id without control or line-separator "
+                        + "characters and with at most "
+                        + MAX_RECORD_ID_CODE_POINTS + " Unicode code points"
         );
     }
 
