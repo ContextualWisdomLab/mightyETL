@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.locks.Lock;
@@ -22,9 +23,10 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * batches, and closed during application shutdown. Scaffold and unsupported connectors retain
  * fail-closed write behavior. Primary ETL still uses PostgreSQL via {@code EtlService}.</p>
  *
- * <p>A fair read/write lifecycle gate permits concurrent dispatches while ensuring shutdown waits
- * for every in-flight write, closes resources once, and prevents a connector from reopening after
- * destruction has begun.</p>
+ * <p>A fair read/write lifecycle gate permits concurrent work across different connectors while
+ * ensuring shutdown waits for every in-flight write. Each connector has its own monitor so open,
+ * write, and close operations for that connector remain ordered even when callers dispatch
+ * concurrently.</p>
  */
 @Component
 public class TargetConnectorDispatcher {
@@ -39,8 +41,8 @@ public class TargetConnectorDispatcher {
     private boolean closed;
 
     public TargetConnectorDispatcher(TargetConnectorRegistry registry, ConnectorProperties properties) {
-        this.registry = registry;
-        this.properties = properties;
+        this.registry = Objects.requireNonNull(registry, "registry must not be null");
+        this.properties = Objects.requireNonNull(properties, "properties must not be null");
     }
 
     @PostConstruct
@@ -71,15 +73,20 @@ public class TargetConnectorDispatcher {
      * <p>Non-supported connectors validate their bound configuration first so operators receive
      * missing-key diagnostics before the implementation-status refusal. Supported connectors are
      * opened exactly once per dispatcher lifecycle; an open failure is not cached and can be
-     * retried by a later dispatch. Dispatch is refused after shutdown begins.</p>
+     * retried by a later dispatch. Writes to the same connector are serialized, while independent
+     * connectors may progress concurrently. Dispatch is refused after shutdown begins.</p>
      *
      * @param connectorId registered connector identifier
      * @param batch normalized change records to write
+     * @throws NullPointerException when {@code connectorId} or {@code batch} is null
      * @throws IllegalArgumentException when the connector identifier is unknown
      * @throws IllegalStateException when the connector is disabled or the dispatcher is closed
      * @throws UnsupportedOperationException when the connector is not production-supported
      */
     public void dispatch(String connectorId, List<ChangeRecord> batch) {
+        Objects.requireNonNull(connectorId, "connectorId must not be null");
+        Objects.requireNonNull(batch, "batch must not be null");
+
         Lock dispatchLock = lifecycleGate.readLock();
         dispatchLock.lock();
         try {
@@ -103,8 +110,14 @@ public class TargetConnectorDispatcher {
                 throw new UnsupportedOperationException(connector.writeRefusalReason());
             }
 
-            ensureOpen(connectorId, connector, config);
-            connector.write(batch);
+            Object connectorLock = lifecycleLocks.computeIfAbsent(
+                    connectorId,
+                    ignored -> new Object()
+            );
+            synchronized (connectorLock) {
+                ensureOpen(connectorId, connector, config);
+                connector.write(batch);
+            }
         } finally {
             dispatchLock.unlock();
         }
@@ -142,6 +155,9 @@ public class TargetConnectorDispatcher {
         }
     }
 
+    /**
+     * Opens a supported connector while its connector-specific monitor is held.
+     */
     private void ensureOpen(
             String connectorId,
             TargetConnector connector,
@@ -157,22 +173,9 @@ public class TargetConnectorDispatcher {
             );
         }
 
-        Object lock = lifecycleLocks.computeIfAbsent(connectorId, ignored -> new Object());
-        synchronized (lock) {
-            active = openedConnectors.get(connectorId);
-            if (active == connector) {
-                return;
-            }
-            if (active != null) {
-                throw new IllegalStateException(
-                        "Connector registry entry changed after open: " + connectorId
-                );
-            }
-
-            connector.open(config);
-            openedConnectors.put(connectorId, connector);
-            log.info("Opened target connector id={}", connectorId);
-        }
+        connector.open(config);
+        openedConnectors.put(connectorId, connector);
+        log.info("Opened target connector id={}", connectorId);
     }
 
     /**
@@ -196,8 +199,11 @@ public class TargetConnectorDispatcher {
                     : new ArrayList<>(openedConnectors.entrySet())) {
                 String connectorId = entry.getKey();
                 TargetConnector connector = entry.getValue();
-                Object lock = lifecycleLocks.computeIfAbsent(connectorId, ignored -> new Object());
-                synchronized (lock) {
+                Object connectorLock = lifecycleLocks.computeIfAbsent(
+                        connectorId,
+                        ignored -> new Object()
+                );
+                synchronized (connectorLock) {
                     if (!openedConnectors.remove(connectorId, connector)) {
                         continue;
                     }
