@@ -40,7 +40,8 @@ xtrmetl:
     # Comma-separated tables with (id, data) shape; default processed_data
     tables: ${REPLICA_TABLES:processed_data}
     ddl-enabled: ${REPLICA_DDL_ENABLED:false}
-    ddl-validation-mode: ${REPLICA_DDL_VALIDATION_MODE:none}
+    # Positive allow-list is the secure default when DDL replication is explicitly enabled.
+    ddl-validation-mode: ${REPLICA_DDL_VALIDATION_MODE:whitelist}
     ddl-allowed-prefixes: ${REPLICA_DDL_ALLOWED_PREFIXES:CREATE TABLE,ALTER TABLE,CREATE INDEX}
     ddl-blocked-prefixes: ${REPLICA_DDL_BLOCKED_PREFIXES:DROP TABLE,DROP SCHEMA,DROP DATABASE,TRUNCATE}
 
