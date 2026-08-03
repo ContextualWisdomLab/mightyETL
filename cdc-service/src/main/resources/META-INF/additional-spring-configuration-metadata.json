@@ -45,12 +45,13 @@
     {
       "name": "xtrmetl.replica.ddl-enabled",
       "type": "java.lang.Boolean",
-      "description": "Whether to apply DDL events to the replica DB."
+      "description": "Whether to apply DDL events to the replica DB. Disabled by default."
     },
     {
       "name": "xtrmetl.replica.ddl-validation-mode",
       "type": "java.lang.String",
-      "description": "DDL validation mode (none|whitelist|blocklist)."
+      "defaultValue": "whitelist",
+      "description": "DDL validation mode (whitelist|blocklist|none). The secure default is whitelist."
     },
     {
       "name": "xtrmetl.replica.ddl-allowed-prefixes",
@@ -83,12 +84,8 @@
       "name": "xtrmetl.replica.ddl-validation-mode",
       "values": [
         {
-          "value": "none",
-          "description": "No validation."
-        },
-        {
           "value": "whitelist",
-          "description": "Allow only configured prefixes."
+          "description": "Allow only configured prefixes. This is the secure default."
         },
         {
           "value": "blocklist",
@@ -96,7 +93,11 @@
         },
         {
           "value": "blacklist",
-          "description": "Alias for blocklist."
+          "description": "Legacy alias for blocklist."
+        },
+        {
+          "value": "none",
+          "description": "Explicitly disable DDL validation. Not recommended."
         }
       ]
     }
