@@ -9,12 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- ETL JSON batches are fully preflighted before scheduling or database writes, with a default maximum of 1,000 records per request.
+- ETL transformations run on a dedicated fixed-size executor with a bounded queue and caller-runs backpressure instead of the JVM common pool.
 - Product branding: user-facing docs and suggested image tags use **mightyETL** (formerly xtrmETL).
   - Legacy Java packages (`com.xtrmetl.*`), Maven `artifactId` `xtrmETL`, and some env/topic defaults remain for compatibility.
   - See `docs/rebrand-name-matrix.md`.
 
 ### Added
 
+- Typed ETL processing limits under `mightyetl.etl.*` / `xtrmetl.etl.*`, plus `ETL_MAX_BATCH_RECORDS`, `ETL_MAX_CONCURRENCY`, and `ETL_QUEUE_CAPACITY` environment aliases.
+- ETL admission and backpressure operator runbook: `docs/etl/batch-admission-and-backpressure.md`.
 - Connector scaffolds (contracts + docs only): Qlik Sense, Databricks, Snowflake under `docs/connectors/` and `etl-service` SPI stubs.
 - Any-to-any CDC design notes and source SPI scaffold: `docs/cdc/any-to-any-cdc.md`, `cdc-service` SPI stubs.
 - CDC operations notes: `docs/cdc/ops-and-reliability.md`.
