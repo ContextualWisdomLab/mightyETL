@@ -29,7 +29,6 @@ import java.util.stream.Collectors;
 public class ProcessedDataReplicaApplier {
 
     private static final Logger log = LoggerFactory.getLogger(ProcessedDataReplicaApplier.class);
-
     private static final Pattern SAFE_TABLE = Pattern.compile("^[A-Za-z_][A-Za-z0-9_]*$");
 
     private final JdbcTemplate jdbcTemplate;
@@ -74,7 +73,11 @@ public class ProcessedDataReplicaApplier {
             return;
         }
 
-        TableSql tableSql = sqlByTable.get(tableFromTopic(topic));
+        String table = tableFromTopic(topic);
+        if (table == null) {
+            return;
+        }
+        TableSql tableSql = sqlByTable.get(table);
         if (tableSql == null) {
             return;
         }
@@ -175,11 +178,9 @@ public class ProcessedDataReplicaApplier {
 
             String op = payload.path("op").asText(null);
             JsonNode after = payload.get("after");
-
             if (op == null) {
                 op = after == null || after.isNull() ? "d" : "u";
             }
-
             return new DebeziumEnvelope(op, after);
         } catch (IOException e) {
             log.warn("Failed to parse Debezium value JSON; skipping replica apply", e);
@@ -192,7 +193,6 @@ public class ProcessedDataReplicaApplier {
         if (idFromKey != null) {
             return idFromKey;
         }
-
         return extractLong(after, "id");
     }
 
@@ -220,11 +220,9 @@ public class ProcessedDataReplicaApplier {
         if (value == null || value.isNull()) {
             return null;
         }
-
         if (value.isNumber()) {
             return value.longValue();
         }
-
         if (value.isTextual()) {
             try {
                 return Long.parseLong(value.asText());
@@ -232,7 +230,6 @@ public class ProcessedDataReplicaApplier {
                 return null;
             }
         }
-
         return null;
     }
 
