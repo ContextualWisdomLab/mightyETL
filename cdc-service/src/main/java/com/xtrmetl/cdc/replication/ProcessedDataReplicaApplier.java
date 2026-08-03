@@ -74,7 +74,11 @@ public class ProcessedDataReplicaApplier {
             return;
         }
 
-        TableSql tableSql = sqlByTable.get(tableFromTopic(topic));
+        String table = tableFromTopic(topic);
+        if (table == null) {
+            return;
+        }
+        TableSql tableSql = sqlByTable.get(table);
         if (tableSql == null) {
             return;
         }
