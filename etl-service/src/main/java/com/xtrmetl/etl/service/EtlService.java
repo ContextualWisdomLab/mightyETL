@@ -35,6 +35,7 @@ public class EtlService {
     private static final String INSERT_SQL = "INSERT INTO processed_data (data) VALUES (?)";
     private static final int MAX_AMOUNT_PRECISION = 38;
     private static final int MAX_AMOUNT_ABSOLUTE_SCALE = 18;
+    private static final int MAX_RECORD_ID_CODE_POINTS = 256;
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
@@ -141,15 +142,30 @@ public class EtlService {
         }
 
         JsonNode idNode = record.get("id");
-        if (idNode == null || !idNode.isTextual() || idNode.asText().isBlank()) {
-            throw new IllegalArgumentException(
-                    "Record at index " + index + " requires a non-blank string id"
-            );
+        if (idNode == null || !idNode.isTextual()) {
+            throw invalidIdentifier(index);
         }
 
         String id = idNode.asText();
+        int codePointCount = id.codePointCount(0, id.length());
+        boolean hasControlCharacter = id.codePoints().anyMatch(Character::isISOControl);
+        if (id.isBlank()
+                || !id.equals(id.strip())
+                || codePointCount > MAX_RECORD_ID_CODE_POINTS
+                || hasControlCharacter) {
+            throw invalidIdentifier(index);
+        }
+
         String transformedData = transformRecord(record);
         return new ProcessedRecord(id, transformedData);
+    }
+
+    private static IllegalArgumentException invalidIdentifier(int index) {
+        return new IllegalArgumentException(
+                "Record at index " + index
+                        + " requires a trimmed, control-free string id of at most "
+                        + MAX_RECORD_ID_CODE_POINTS + " characters"
+        );
     }
 
     private String transformRecord(JsonNode record) {
@@ -163,9 +179,14 @@ public class EtlService {
     }
 
     private String transformValue(String key, @Nullable JsonNode valueNode) {
-        String value = valueNode == null || valueNode.isNull()
-                ? "null"
-                : valueNode.asText();
+        if (valueNode == null || valueNode.isNull()) {
+            return "null";
+        }
+        if (valueNode.isContainerNode()) {
+            return valueNode.toString();
+        }
+
+        String value = valueNode.asText();
         return switch (key) {
             case "NAME" -> value.toUpperCase(Locale.ROOT);
             case "EMAIL" -> value.toLowerCase(Locale.ROOT);
