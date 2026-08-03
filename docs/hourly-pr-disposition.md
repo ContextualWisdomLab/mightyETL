@@ -12,7 +12,7 @@ A pull request is merged only when all of the following hold:
 2. The author is the configured trusted maintainer and the head branch belongs to this repository.
 3. No `do-not-merge`, `manual-merge`, `security-review`, or `breaking-change` label is present.
 4. Workflow changes are excluded unless a maintainer explicitly applies `automerge-workflow`.
-5. The latest review state for every reviewer contains no `CHANGES_REQUESTED` decision.
+5. For each reviewer, the most recent decisive review (`APPROVED` or `CHANGES_REQUESTED`) is evaluated; comment-only reviews cannot erase an outstanding change request.
 6. Every current, non-outdated review thread is resolved.
 7. Every named required CI, dependency, SBOM, SAST, and security check has completed with `success`; a skipped required check is not sufficient.
 8. No other reported check has failed or remains pending, commit status contexts are successful, and GitHub reports the pull request as cleanly mergeable.
