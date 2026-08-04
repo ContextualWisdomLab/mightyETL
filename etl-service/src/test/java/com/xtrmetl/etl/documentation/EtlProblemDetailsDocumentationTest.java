@@ -57,6 +57,16 @@ class EtlProblemDetailsDocumentationTest {
     }
 
     @Test
+    void localComposeBaselinesTheKnownBootstrapSchemaBeforeMigrationOne() throws IOException {
+        String compose = read("docker-compose.yml");
+        String runbook = read("docs/etl/idempotent-retries.md");
+
+        assertTrue(compose.contains("FLYWAY_BASELINE_ON_MIGRATE: \"true\""));
+        assertTrue(runbook.contains("local Compose stack sets `FLYWAY_BASELINE_ON_MIGRATE=true`"));
+        assertTrue(runbook.contains("baseline version remains `0`"));
+    }
+
+    @Test
     void readmeLinksTheContractAndRetryBoundary() throws IOException {
         String readme = read("README.md");
 
