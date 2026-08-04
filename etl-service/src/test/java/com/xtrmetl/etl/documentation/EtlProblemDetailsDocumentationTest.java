@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -44,6 +45,15 @@ class EtlProblemDetailsDocumentationTest {
         for (String errorCode : ERROR_CODES) {
             assertTrue(runbook.contains(errorCode), "Missing problem code: " + errorCode);
         }
+    }
+
+    @Test
+    void idempotencyRunbookUsesTheAuthenticationMechanismImplementedByTheService() throws IOException {
+        String runbook = read("docs/etl/idempotent-retries.md");
+
+        assertTrue(runbook.contains("Authorization: Basic <credentials>"));
+        assertTrue(runbook.contains("Spring Security HTTP Basic"));
+        assertFalse(runbook.contains("Authorization: Bearer <token>"));
     }
 
     @Test
