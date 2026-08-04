@@ -12,6 +12,7 @@ import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -45,12 +46,12 @@ class EtlServiceBatchSafetyTest {
         EtlService service = new EtlService(jdbcTemplate, objectMapper, properties);
         String payload = "[{\"id\":\"record_alpha\",\"name\":\"한글데이터\"}]";
 
-        RuntimeException exception = assertThrows(
-                RuntimeException.class,
+        EtlRequestException exception = assertThrows(
+                EtlRequestException.class,
                 () -> service.processData(payload)
         );
 
-        assertTrue(exception.getMessage().contains("payload"));
+        assertSame(EtlRequestError.PAYLOAD_TOO_LARGE, exception.error());
         verifyNoInteractions(jdbcTemplate);
     }
 
@@ -60,12 +61,12 @@ class EtlServiceBatchSafetyTest {
         EtlService service = new EtlService(jdbcTemplate, objectMapper, properties);
         String payload = "[{\"id\":\"record_alpha\"},{\"id\":\"record_beta\"}]";
 
-        RuntimeException exception = assertThrows(
-                RuntimeException.class,
+        EtlRequestException exception = assertThrows(
+                EtlRequestException.class,
                 () -> service.processData(payload)
         );
 
-        assertTrue(exception.getMessage().contains("record"));
+        assertSame(EtlRequestError.BATCH_TOO_LARGE, exception.error());
         verifyNoInteractions(jdbcTemplate);
     }
 
@@ -80,8 +81,12 @@ class EtlServiceBatchSafetyTest {
                 }]
                 """;
 
-        assertThrows(RuntimeException.class, () -> service.processData(payload));
+        EtlRequestException exception = assertThrows(
+                EtlRequestException.class,
+                () -> service.processData(payload)
+        );
 
+        assertSame(EtlRequestError.INVALID_JSON, exception.error());
         verifyNoInteractions(jdbcTemplate);
     }
 
@@ -94,8 +99,12 @@ class EtlServiceBatchSafetyTest {
         );
         String payload = "[{\"id\":\"record_alpha\",\"name\":\"valid\"},{\"name\":\"missing id\"}]";
 
-        assertThrows(RuntimeException.class, () -> service.processData(payload));
+        EtlRequestException exception = assertThrows(
+                EtlRequestException.class,
+                () -> service.processData(payload)
+        );
 
+        assertSame(EtlRequestError.INVALID_RECORD, exception.error());
         verifyNoInteractions(jdbcTemplate);
     }
 
@@ -103,8 +112,12 @@ class EtlServiceBatchSafetyTest {
     void rejectsNonObjectRecordsBeforeJdbc() {
         EtlService service = service();
 
-        assertThrows(RuntimeException.class, () -> service.processData("[\"not-an-object\"]"));
+        EtlRequestException exception = assertThrows(
+                EtlRequestException.class,
+                () -> service.processData("[\"not-an-object\"]")
+        );
 
+        assertSame(EtlRequestError.INVALID_RECORD, exception.error());
         verifyNoInteractions(jdbcTemplate);
     }
 
@@ -112,8 +125,12 @@ class EtlServiceBatchSafetyTest {
     void rejectsBlankRecordIdentifiersBeforeJdbc() {
         EtlService service = service();
 
-        assertThrows(RuntimeException.class, () -> service.processData("[{\"id\":\"   \"}]"));
+        EtlRequestException exception = assertThrows(
+                EtlRequestException.class,
+                () -> service.processData("[{\"id\":\"   \"}]")
+        );
 
+        assertSame(EtlRequestError.INVALID_RECORD, exception.error());
         verifyNoInteractions(jdbcTemplate);
     }
 
@@ -121,8 +138,12 @@ class EtlServiceBatchSafetyTest {
     void rejectsNumericRecordIdentifierTypesBeforeJdbc() {
         EtlService service = service();
 
-        assertThrows(RuntimeException.class, () -> service.processData("[{\"id\":123}]"));
+        EtlRequestException exception = assertThrows(
+                EtlRequestException.class,
+                () -> service.processData("[{\"id\":123}]")
+        );
 
+        assertSame(EtlRequestError.INVALID_RECORD, exception.error());
         verifyNoInteractions(jdbcTemplate);
     }
 
@@ -130,9 +151,12 @@ class EtlServiceBatchSafetyTest {
     void rejectsIdentifiersWithLeadingOrTrailingWhitespaceBeforeJdbc() {
         EtlService service = service();
 
-        assertThrows(RuntimeException.class,
-                () -> service.processData("[{\"id\":\" record_alpha \"}]"));
+        EtlRequestException exception = assertThrows(
+                EtlRequestException.class,
+                () -> service.processData("[{\"id\":\" record_alpha \"}]")
+        );
 
+        assertSame(EtlRequestError.INVALID_RECORD, exception.error());
         verifyNoInteractions(jdbcTemplate);
     }
 
@@ -140,9 +164,12 @@ class EtlServiceBatchSafetyTest {
     void rejectsIdentifiersContainingControlCharactersBeforeJdbc() {
         EtlService service = service();
 
-        assertThrows(RuntimeException.class,
-                () -> service.processData("[{\"id\":\"record_alpha\\nforged_line\"}]"));
+        EtlRequestException exception = assertThrows(
+                EtlRequestException.class,
+                () -> service.processData("[{\"id\":\"record_alpha\\nforged_line\"}]")
+        );
 
+        assertSame(EtlRequestError.INVALID_RECORD, exception.error());
         verifyNoInteractions(jdbcTemplate);
     }
 
@@ -150,9 +177,12 @@ class EtlServiceBatchSafetyTest {
     void rejectsIdentifiersContainingUnicodeLineSeparatorsBeforeJdbc() {
         EtlService service = service();
 
-        assertThrows(RuntimeException.class,
-                () -> service.processData("[{\"id\":\"record_alpha\\u2028forged_line\"}]"));
+        EtlRequestException exception = assertThrows(
+                EtlRequestException.class,
+                () -> service.processData("[{\"id\":\"record_alpha\\u2028forged_line\"}]")
+        );
 
+        assertSame(EtlRequestError.INVALID_RECORD, exception.error());
         verifyNoInteractions(jdbcTemplate);
     }
 
@@ -160,11 +190,17 @@ class EtlServiceBatchSafetyTest {
     void rejectsIdentifiersContainingUnicodeFormatControlsBeforeJdbc() {
         EtlService service = service();
 
-        assertThrows(RuntimeException.class,
-                () -> service.processData("[{\"id\":\"record_alpha\\u202Egpj.exe\"}]"));
-        assertThrows(RuntimeException.class,
-                () -> service.processData("[{\"id\":\"record_alpha\\u200Bhidden\"}]"));
+        EtlRequestException bidiException = assertThrows(
+                EtlRequestException.class,
+                () -> service.processData("[{\"id\":\"record_alpha\\u202Egpj.exe\"}]")
+        );
+        EtlRequestException zeroWidthException = assertThrows(
+                EtlRequestException.class,
+                () -> service.processData("[{\"id\":\"record_alpha\\u200Bhidden\"}]")
+        );
 
+        assertSame(EtlRequestError.INVALID_RECORD, bidiException.error());
+        assertSame(EtlRequestError.INVALID_RECORD, zeroWidthException.error());
         verifyNoInteractions(jdbcTemplate);
     }
 
@@ -174,8 +210,12 @@ class EtlServiceBatchSafetyTest {
         String identifier = "record_" + "a".repeat(250);
         String payload = "[{\"id\":\"" + identifier + "\"}]";
 
-        assertThrows(RuntimeException.class, () -> service.processData(payload));
+        EtlRequestException exception = assertThrows(
+                EtlRequestException.class,
+                () -> service.processData(payload)
+        );
 
+        assertSame(EtlRequestError.INVALID_RECORD, exception.error());
         verifyNoInteractions(jdbcTemplate);
     }
 
