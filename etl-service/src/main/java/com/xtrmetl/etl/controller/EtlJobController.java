@@ -34,8 +34,9 @@ import java.util.UUID;
  * status-monitor resource through both the representation and {@code Location} header. This intake
  * slice does not claim that worker execution has started.</p>
  *
- * <p>Successful job representations use {@code Cache-Control: no-store}. They are authenticated,
- * principal-scoped operational resources and must not be retained by shared or private caches.</p>
+ * <p>Success and covered failure responses use {@code Cache-Control: no-store}. Malformed, absent,
+ * and foreign-owned job identifiers use the same owner-safe not-found classification so the status
+ * endpoint does not become a cross-principal existence oracle.</p>
  */
 @RestController
 @RequestMapping("/api/etl/jobs")
@@ -114,20 +115,21 @@ public class EtlJobController {
     /**
      * Returns one status resource only within the authenticated principal namespace.
      *
-     * @param jobRecordId opaque durable job identifier
+     * @param jobRecordIdText opaque durable job identifier text
      * @param principal authenticated principal namespace
      * @return operator-safe status representation
      */
     @GetMapping("/{jobRecordId}")
     @Observed(name = "etl.jobs.status", contextualName = "etl-job-status")
     public ResponseEntity<EtlJobStatusResponse> status(
-            @PathVariable("jobRecordId") UUID jobRecordId,
+            @PathVariable("jobRecordId") String jobRecordIdText,
             @Nullable Principal principal
     ) {
         if (principal == null) {
             throw new EtlRequestException(EtlRequestError.IDEMPOTENCY_PRINCIPAL_REQUIRED);
         }
 
+        UUID jobRecordId = parseJobRecordId(jobRecordIdText);
         final EtlJobSnapshot snapshot;
         try {
             snapshot = etlJobService.findOwned(jobRecordId, principal.getName());
@@ -139,6 +141,17 @@ public class EtlJobController {
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
                 .body(EtlJobStatusResponse.from(snapshot));
+    }
+
+    private static UUID parseJobRecordId(String jobRecordIdText) {
+        try {
+            return UUID.fromString(Objects.requireNonNull(
+                    jobRecordIdText,
+                    "jobRecordIdText must not be null"
+            ));
+        } catch (IllegalArgumentException exception) {
+            throw new EtlRequestException(EtlRequestError.JOB_NOT_FOUND, exception);
+        }
     }
 
     private static String statusUrl(UUID jobRecordId) {
