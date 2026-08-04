@@ -57,6 +57,15 @@ class EtlProblemDetailsDocumentationTest {
     }
 
     @Test
+    void idempotencyRunbookDocumentsAdmissionBeforeLedgerAccess() throws IOException {
+        String runbook = read("docs/etl/idempotent-retries.md");
+
+        assertTrue(runbook.contains("413 etl_payload_too_large"));
+        assertTrue(runbook.contains("before request-lock or ledger access"));
+        assertTrue(runbook.contains("configured UTF-8 payload bound"));
+    }
+
+    @Test
     void localComposeBaselinesTheKnownBootstrapSchemaBeforeMigrationOne() throws IOException {
         String compose = read("docker-compose.yml");
         String runbook = read("docs/etl/idempotent-retries.md");
