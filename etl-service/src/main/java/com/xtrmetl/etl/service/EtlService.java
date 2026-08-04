@@ -17,11 +17,8 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -69,13 +66,6 @@ public class EtlService {
     private static final Pattern OUTER_IDENTIFIER_WHITESPACE = Pattern.compile(
             "^\\s|\\s$",
             Pattern.UNICODE_CHARACTER_CLASS
-    );
-    private static final String IDEMPOTENCY_KEY_VALUE_EXPRESSION = "[A-Za-z0-9._:-]{16,128}";
-    private static final Pattern IDEMPOTENCY_KEY_VALUE_PROFILE = Pattern.compile(
-            IDEMPOTENCY_KEY_VALUE_EXPRESSION
-    );
-    private static final Pattern IDEMPOTENCY_KEY_STRUCTURED_FIELD_PROFILE = Pattern.compile(
-            "\"(" + IDEMPOTENCY_KEY_VALUE_EXPRESSION + ")\""
     );
 
     private final JdbcTemplate jdbcTemplate;
@@ -161,6 +151,20 @@ public class EtlService {
     }
 
     /**
+     * Validates and transforms one bounded request without writing target data.
+     *
+     * <p>Durable job submission uses this method before creating a queue record. It applies the
+     * same UTF-8 size, JSON, record-count, identifier, duplicate-field, and transformation-input
+     * contract as synchronous processing while performing no JDBC operation.</p>
+     *
+     * @param data UTF-8 JSON array payload
+     * @throws EtlRequestException when the request violates an admission or semantic contract
+     */
+    public void validateData(@Nullable String data) {
+        prepareData(data);
+    }
+
+    /**
      * Processes or replays one principal-scoped idempotent ETL request.
      *
      * <p>The client key and authenticated principal are never stored in plaintext. A standards-
@@ -195,7 +199,7 @@ public class EtlService {
             @Nullable String idempotencyKey,
             @Nullable String principalScope
     ) {
-        String validatedKey = validateIdempotencyKey(idempotencyKey);
+        String validatedKey = EtlIdempotencyKey.normalize(idempotencyKey);
         String validatedScope = validatePrincipalScope(principalScope);
         if (data == null) {
             throw new EtlRequestException(EtlRequestError.INVALID_JSON);
@@ -203,10 +207,11 @@ public class EtlService {
         requireActiveTransaction();
         enforcePayloadLimit(data);
 
-        String idempotencyKeyHash = sha256(
-                validatedScope.length() + ":" + validatedScope + ":" + validatedKey
+        String idempotencyKeyHash = EtlIdempotencyKey.scopedHash(
+                validatedScope,
+                validatedKey
         );
-        String requestDigest = sha256(data);
+        String requestDigest = EtlIdempotencyKey.sha256(data);
 
         if (!requestLock.tryLock(idempotencyKeyHash)) {
             throw new EtlRequestException(EtlRequestError.IDEMPOTENCY_REQUEST_IN_PROGRESS);
@@ -230,6 +235,17 @@ public class EtlService {
     }
 
     private String processDataInCurrentTransaction(@Nullable String data) {
+        List<ProcessedRecord> preparedRecords = prepareData(data);
+        for (ProcessedRecord record : preparedRecords) {
+            jdbcTemplate.update(INSERT_SQL, record.data());
+        }
+
+        return preparedRecords.stream()
+                .map(record -> "Processed: " + record.id())
+                .collect(Collectors.joining("\n"));
+    }
+
+    private List<ProcessedRecord> prepareData(@Nullable String data) {
         if (data == null) {
             throw new EtlRequestException(EtlRequestError.INVALID_JSON);
         }
@@ -241,15 +257,7 @@ public class EtlService {
         } catch (JsonProcessingException exception) {
             throw new EtlRequestException(EtlRequestError.INVALID_JSON, exception);
         }
-
-        List<ProcessedRecord> preparedRecords = prepareBatch(root);
-        for (ProcessedRecord record : preparedRecords) {
-            jdbcTemplate.update(INSERT_SQL, record.data());
-        }
-
-        return preparedRecords.stream()
-                .map(record -> "Processed: " + record.id())
-                .collect(Collectors.joining("\n"));
+        return prepareBatch(root);
     }
 
     private StoredIdempotencyRecord findStoredIdempotencyRecord(String idempotencyKeyHash) {
@@ -262,20 +270,6 @@ public class EtlService {
                 idempotencyKeyHash
         );
         return records.isEmpty() ? null : records.getFirst();
-    }
-
-    private static String validateIdempotencyKey(@Nullable String idempotencyKey) {
-        if (idempotencyKey == null) {
-            throw new EtlRequestException(EtlRequestError.INVALID_IDEMPOTENCY_KEY);
-        }
-        var structuredFieldMatcher = IDEMPOTENCY_KEY_STRUCTURED_FIELD_PROFILE.matcher(idempotencyKey);
-        if (structuredFieldMatcher.matches()) {
-            return structuredFieldMatcher.group(1);
-        }
-        if (IDEMPOTENCY_KEY_VALUE_PROFILE.matcher(idempotencyKey).matches()) {
-            return idempotencyKey;
-        }
-        throw new EtlRequestException(EtlRequestError.INVALID_IDEMPOTENCY_KEY);
     }
 
     private static String validatePrincipalScope(@Nullable String principalScope) {
@@ -293,16 +287,6 @@ public class EtlService {
             throw new IllegalStateException(
                     "Idempotent ETL processing requires an active transaction"
             );
-        }
-    }
-
-    private static String sha256(String value) {
-        try {
-            MessageDigest messageDigest = MessageDigest.getInstance("SHA-256");
-            byte[] digest = messageDigest.digest(value.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(digest);
-        } catch (NoSuchAlgorithmException exception) {
-            throw new IllegalStateException("SHA-256 is required by the Java platform", exception);
         }
     }
 
