@@ -95,6 +95,21 @@ class EtlControllerTest {
     }
 
     @Test
+    void allowsProblemJsonOnlyClientsToReceiveFailureDetails() throws Exception {
+        when(etlService.processData(anyString())).thenThrow(
+                new EtlRequestException(EtlRequestError.INVALID_RECORD)
+        );
+
+        mockMvc.perform(post(PROCESS_PATH)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_PROBLEM_JSON)
+                        .content("[{\"id\":\"record_alpha\"}]"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.errorCode").value("etl_invalid_record"));
+    }
+
+    @Test
     void mapsMissingBodyToInvalidJsonProblem() throws Exception {
         mockMvc.perform(post(PROCESS_PATH).contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isBadRequest())
