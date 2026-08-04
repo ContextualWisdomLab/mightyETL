@@ -1,9 +1,9 @@
 package com.xtrmetl.etl.service;
 
 import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.dao.DataAccessException;
 import org.springframework.dao.TransientDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.lang.Nullable;
@@ -32,6 +32,10 @@ import java.util.stream.Collectors;
  * are then written synchronously inside one Spring transaction, so a runtime failure rolls the
  * batch back rather than leaving committed prefix records. The service intentionally avoids the
  * JVM common pool and one-task-per-record fan-out.</p>
+ *
+ * <p>Deterministic request rejections use {@link EtlRequestException} so the HTTP boundary can
+ * expose stable RFC 9457 classifications without copying parser, validation, SQL, or internal
+ * exception text into a response.</p>
  */
 @Service
 public class EtlService {
@@ -80,12 +84,13 @@ public class EtlService {
     /**
      * Processes one JSON-array request as a prevalidated transaction-scoped batch.
      *
-     * <p>Only transient Spring data-access failures are retried. Invalid client input and
-     * deterministic constraint violations fail immediately instead of repeating the same work.</p>
+     * <p>Only transient Spring data-access failures are retried. Typed input failures and
+     * deterministic target constraints fail immediately instead of repeating the same work.</p>
      *
      * @param data UTF-8 JSON array payload
      * @return one {@code Processed: <id>} line per record, in input order
-     * @throws RuntimeException when parsing, admission, transformation, or loading fails
+     * @throws EtlRequestException when the request violates an admission or semantic contract
+     * @throws org.springframework.dao.DataAccessException when the target database rejects work
      */
     @Retryable(
             retryFor = TransientDataAccessException.class,
@@ -93,52 +98,42 @@ public class EtlService {
             backoff = @Backoff(delay = 1000)
     )
     @Transactional
-    public String processData(String data) {
-        try {
-            String payload = Objects.requireNonNull(data, "Input payload must not be null");
-            enforcePayloadLimit(payload);
-
-            JsonNode root = objectMapper.readTree(payload);
-            List<ProcessedRecord> preparedRecords = prepareBatch(root);
-
-            for (ProcessedRecord record : preparedRecords) {
-                jdbcTemplate.update(INSERT_SQL, record.data());
-            }
-
-            return preparedRecords.stream()
-                    .map(record -> "Processed: " + record.id())
-                    .collect(Collectors.joining("\n"));
-        } catch (DataAccessException exception) {
-            throw exception;
-        } catch (Exception exception) {
-            throw new RuntimeException(
-                    "Error processing data: " + exception.getMessage(),
-                    exception
-            );
+    public String processData(@Nullable String data) {
+        if (data == null) {
+            throw new EtlRequestException(EtlRequestError.INVALID_JSON);
         }
+        enforcePayloadLimit(data);
+
+        final JsonNode root;
+        try {
+            root = objectMapper.readTree(data);
+        } catch (JsonProcessingException exception) {
+            throw new EtlRequestException(EtlRequestError.INVALID_JSON, exception);
+        }
+
+        List<ProcessedRecord> preparedRecords = prepareBatch(root);
+        for (ProcessedRecord record : preparedRecords) {
+            jdbcTemplate.update(INSERT_SQL, record.data());
+        }
+
+        return preparedRecords.stream()
+                .map(record -> "Processed: " + record.id())
+                .collect(Collectors.joining("\n"));
     }
 
     private void enforcePayloadLimit(String payload) {
         int payloadBytes = payload.getBytes(StandardCharsets.UTF_8).length;
         if (payloadBytes > batchProperties.getMaxPayloadBytes()) {
-            throw new IllegalArgumentException(
-                    "Input payload contains " + payloadBytes
-                            + " UTF-8 bytes; maximum is "
-                            + batchProperties.getMaxPayloadBytes()
-            );
+            throw new EtlRequestException(EtlRequestError.PAYLOAD_TOO_LARGE);
         }
     }
 
     private List<ProcessedRecord> prepareBatch(@Nullable JsonNode root) {
         if (root == null || root.isNull() || !root.isArray()) {
-            throw new IllegalArgumentException("Input must be a JSON array");
+            throw new EtlRequestException(EtlRequestError.INVALID_JSON);
         }
         if (root.size() > batchProperties.getMaxBatchRecords()) {
-            throw new IllegalArgumentException(
-                    "Input contains " + root.size()
-                            + " records; maximum is "
-                            + batchProperties.getMaxBatchRecords()
-            );
+            throw new EtlRequestException(EtlRequestError.BATCH_TOO_LARGE);
         }
 
         List<ProcessedRecord> preparedRecords = new ArrayList<>(root.size());
@@ -152,14 +147,12 @@ public class EtlService {
 
     private ProcessedRecord prepareRecord(@Nullable JsonNode record, int index) {
         if (record == null || !record.isObject()) {
-            throw new IllegalArgumentException(
-                    "Record at index " + index + " must be a JSON object"
-            );
+            throw invalidRecord();
         }
 
         JsonNode idNode = record.get("id");
         if (idNode == null || !idNode.isTextual()) {
-            throw invalidIdentifier(index);
+            throw invalidRecord();
         }
 
         String id = idNode.asText();
@@ -171,7 +164,7 @@ public class EtlService {
                 || hasOuterUnicodeWhitespace
                 || codePointCount > MAX_RECORD_ID_CODE_POINTS
                 || hasUnsafeCodePoint) {
-            throw invalidIdentifier(index);
+            throw invalidRecord();
         }
 
         String transformedData = transformRecord(record, index);
@@ -186,13 +179,8 @@ public class EtlService {
                 || characterType == Character.PARAGRAPH_SEPARATOR;
     }
 
-    private static IllegalArgumentException invalidIdentifier(int index) {
-        return new IllegalArgumentException(
-                "Record at index " + index
-                        + " requires a trimmed string id without control, formatting, or "
-                        + "line-separator characters and with at most "
-                        + MAX_RECORD_ID_CODE_POINTS + " Unicode code points"
-        );
+    private static EtlRequestException invalidRecord() {
+        return new EtlRequestException(EtlRequestError.INVALID_RECORD);
     }
 
     private String transformRecord(JsonNode record, int index) {
@@ -201,10 +189,7 @@ public class EtlService {
         for (Map.Entry<String, JsonNode> field : record.properties()) {
             String key = field.getKey().toUpperCase(Locale.ROOT);
             if (!normalizedKeys.add(key)) {
-                throw new IllegalArgumentException(
-                        "Record at index " + index
-                                + " contains field names that collide after case normalization"
-                );
+                throw invalidRecord();
             }
             String value = transformValue(key, field.getValue());
             transformed.append(key).append(":").append(value).append(",");
