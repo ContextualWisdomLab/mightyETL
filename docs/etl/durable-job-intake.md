@@ -7,11 +7,12 @@ bounded intake slice persists accepted work and exposes its status monitor; it d
 yet. Execution, PostgreSQL `FOR UPDATE SKIP LOCKED` claiming, lease fencing, bounded attempts,
 terminal payload clearing, and crash recovery belong to the following worker and lease-fencing slice.
 
-The incomplete intake surface is fail-closed. It is absent unless an operator explicitly sets
+The incomplete intake surface is disabled by default. It is absent unless an operator explicitly
+sets the preferred `mightyetl.etl.jobs.intake-enabled=true` property or its supported legacy alias
 `xtrmetl.etl.jobs.intake-enabled=true`. Enabling it accepts the temporary boundary that submitted
 payloads remain retained in `PENDING` jobs until the worker and terminal payload-clearing slice is
-implemented. Deployments that cannot accept that retention boundary must leave the property unset or
-set it to `false`.
+implemented. Deployments that cannot accept that retention boundary must leave both properties unset
+or set the chosen property to `false`.
 
 The existing synchronous `POST /api/etl/process` endpoint remains unchanged.
 
@@ -108,12 +109,13 @@ encryption, backup, and retention policy accordingly.
 ## Operational boundary
 
 This slice deliberately does not advertise job completion or background execution. The controller is
-disabled by default through `xtrmetl.etl.jobs.intake-enabled=false`; setting the property to `true` is
-an explicit operator opt-in to durable intake without execution. Deployments that need completed
-asynchronous processing must wait for the worker and lease-fencing slice. The next slice must claim
-jobs safely across replicas, fence stale lease owners, commit target effects and terminal success
-atomically, reclaim expired leases, bound attempts, publish stable failure codes, and clear the stored
-request payload at terminal state.
+disabled by default; `mightyetl.etl.jobs.intake-enabled=true` is preferred and
+`xtrmetl.etl.jobs.intake-enabled=true` remains a compatibility alias. Setting either property to
+`true` is an explicit operator opt-in to durable intake without execution. Deployments that need
+completed asynchronous processing must wait for the worker and lease-fencing slice. The next slice
+must claim jobs safely across replicas, fence stale lease owners, commit target effects and terminal
+success atomically, reclaim expired leases, bound attempts, publish stable failure codes, and clear
+the stored request payload at terminal state.
 
 ## Standards basis
 
