@@ -20,13 +20,14 @@ import java.net.URI;
 /**
  * Converts covered ETL endpoint failures into stable, non-sensitive RFC 9457 responses.
  *
- * <p>The advice is scoped to {@link EtlController}; unrelated controllers retain their existing
- * exception contracts. Every client-visible field is fixed by a typed definition. Raw exception
- * messages, SQL details, credentials, paths, causes, and stack traces are never copied into the
- * HTTP body. Spring MVC routing and response-negotiation failures are deliberately not captured
- * by a broad exception handler and therefore retain their framework-owned status semantics.</p>
+ * <p>The advice is scoped to the synchronous and durable-job ETL controllers; unrelated
+ * controllers retain their existing exception contracts. Every client-visible field is fixed by a
+ * typed definition. Raw exception messages, SQL details, credentials, paths, causes, and stack
+ * traces are never copied into the HTTP body. Spring MVC routing and response-negotiation failures
+ * are deliberately not captured by a broad exception handler and therefore retain their
+ * framework-owned status semantics.</p>
  */
-@RestControllerAdvice(assignableTypes = EtlController.class)
+@RestControllerAdvice(assignableTypes = {EtlController.class, EtlJobController.class})
 public class EtlApiProblemHandler {
 
     private static final Logger log = LoggerFactory.getLogger(EtlApiProblemHandler.class);
@@ -152,7 +153,7 @@ public class EtlApiProblemHandler {
     }
 
     /**
-     * Renders an unexpected failure raised inside the ETL service invocation boundary.
+     * Renders an unexpected failure raised inside an ETL service invocation boundary.
      *
      * @param exception dedicated wrapper around the original unexpected runtime failure
      * @param request current servlet request
