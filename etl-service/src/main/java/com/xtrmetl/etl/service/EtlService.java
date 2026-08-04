@@ -39,8 +39,8 @@ import java.util.stream.Collectors;
  * JVM common pool and one-task-per-record fan-out.</p>
  *
  * <p>Callers may optionally use {@link #processDataIdempotently(String, String, String)}. That
- * method serializes requests by a principal-scoped key hash, replays a prior successful response,
- * and commits the ETL rows and durable ledger entry in the same transaction.</p>
+ * method attempts a principal-scoped transaction lock without waiting, replays a prior successful
+ * response, and commits the ETL rows and durable ledger entry in the same transaction.</p>
  *
  * <p>Deterministic request rejections use {@link EtlRequestException} so the HTTP boundary can
  * expose stable RFC 9457 classifications without copying parser, validation, SQL, or internal
@@ -166,9 +166,9 @@ public class EtlService {
      * <p>The client key and authenticated principal are never stored in plaintext. A standards-
      * shaped RFC 9651 quoted String and the retained legacy raw representation are normalized to
      * the same semantic key before its principal-scoped SHA-256 hash is calculated. A transaction-
-     * level lock serializes competing requests. Reusing a committed key with the same payload
-     * returns the original response without another target write. Reusing it with a different
-     * payload is rejected.</p>
+     * level try-lock rejects a competing in-progress request without waiting. Reusing a committed
+     * key with the same payload returns the original response without another target write. Reusing
+     * it with a different payload is rejected.</p>
      *
      * <p>The target writes and ledger insert share one transaction. A target or ledger failure
      * therefore leaves neither a partial batch nor a false successful replay record. Transient
@@ -180,7 +180,7 @@ public class EtlService {
      * @param idempotencyKey quoted RFC 9651 String or legacy raw safe-ASCII key of 16 to 128 characters
      * @param principalScope authenticated principal name used only to isolate the key namespace
      * @return response body and whether it was replayed from the durable ledger
-     * @throws EtlRequestException when the key, principal, payload, or record contract is invalid
+     * @throws EtlRequestException when the key, principal, payload, record, or lock contract fails
      * @throws IllegalStateException when no actual transaction is active for the idempotent work
      * @throws org.springframework.dao.DataAccessException when the target database rejects work
      */
@@ -208,7 +208,9 @@ public class EtlService {
         );
         String requestDigest = sha256(data);
 
-        requestLock.lock(idempotencyKeyHash);
+        if (!requestLock.tryLock(idempotencyKeyHash)) {
+            throw new EtlRequestException(EtlRequestError.IDEMPOTENCY_REQUEST_IN_PROGRESS);
+        }
         StoredIdempotencyRecord storedRecord = findStoredIdempotencyRecord(idempotencyKeyHash);
         if (storedRecord != null) {
             if (!storedRecord.requestDigest().equals(requestDigest)) {
