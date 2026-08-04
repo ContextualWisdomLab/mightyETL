@@ -20,7 +20,7 @@ The maintenance workflow will:
 - remove the local authorization header through an `EXIT` trap after success, failure, or process timeout;
 - omit the ineffective `AGENT` environment variable because raw OpenCode 1.18.13 uses repository `default_agent` configuration or its `build` fallback;
 - disable public session sharing;
-- cap each run with workflow and process timeouts;
+- cap each run with a 45-minute `TERM` timeout, 30-second `KILL` escalation, and 50-minute workflow timeout;
 - run from the protected default branch and never from pull-request code.
 
 ## Direct-token credential lifecycle
@@ -33,7 +33,7 @@ The workflow resolves this version-specific gap without weakening checkout isola
 2. the run step fails closed if either `NVIDIA_API_KEY` or `GITHUB_TOKEN` is empty;
 3. a Basic GitHub authorization header is derived in memory from the repository token and stored only in the checkout's local Git configuration;
 4. local `user.name` and `user.email` identify infrastructure-created commits as `opencode-agent[bot]`;
-5. an `EXIT` trap removes the authorization header even when OpenCode fails or the process timeout returns non-zero;
+5. an `EXIT` trap removes the authorization header even when OpenCode fails, exits after `TERM`, or is forcibly ended after the grace period;
 6. no personal token, OIDC permission, model fallback, tracked credential file, or review-agent secret is introduced.
 
 The agent process already requires `GITHUB_TOKEN` for GitHub API calls, so this bootstrap does not expand token scope. It makes the granted `contents: write` capability operational while keeping the credential bounded to the ephemeral runner and repository-local Git configuration.
@@ -69,14 +69,14 @@ The deterministic hourly disposition workflow remains responsible for exact-head
 - A missing `NVIDIA_NIM_API_KEY`, missing `GITHUB_TOKEN`, unavailable NVIDIA endpoint, OpenCode installation mismatch, Git bootstrap failure, timeout, test failure, or GitHub permission denial fails the scheduled job visibly.
 - No fallback provider or Copilot credential is configured.
 - Concurrency is serialized with `cancel-in-progress: false`, preventing overlapping maintenance runs from racing.
-- A timed-out process receives `TERM` before the workflow hard timeout, and the shell cleanup trap removes the local Git authorization header.
+- At 45 minutes, the process receives `TERM`; if it remains alive after 30 seconds, `timeout` sends `KILL` so the shell can complete its credential-cleanup trap before the 50-minute workflow limit.
 - The workflow does not publish a release or merge partial work.
 
 ## Verification
 
 A repository test will parse the workflow as text and fail unless it proves all of the following:
 
-- hourly off-peak schedule, serialized concurrency, and bounded timeout;
+- hourly off-peak schedule, serialized concurrency, bounded graceful timeout, and forced termination;
 - full-SHA checkout pinning and disabled credential persistence;
 - exact OpenCode version pin and no `@latest` use;
 - exclusive use of `NVIDIA_NIM_API_KEY` through `NVIDIA_API_KEY` with the explicit NVIDIA model;
