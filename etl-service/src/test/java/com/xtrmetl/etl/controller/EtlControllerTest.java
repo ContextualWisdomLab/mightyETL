@@ -126,6 +126,11 @@ class EtlControllerTest {
     }
 
     @Test
+    void rejectsMissingUnexpectedFailureCause() {
+        assertThrows(NullPointerException.class, () -> new EtlUnexpectedException(null));
+    }
+
+    @Test
     void mapsMissingBodyToInvalidJsonProblem() throws Exception {
         mockMvc.perform(post(PROCESS_PATH).contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isBadRequest())
