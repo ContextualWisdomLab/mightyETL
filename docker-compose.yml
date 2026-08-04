@@ -117,6 +117,8 @@ services:
       PGDATABASE: ${POSTGRES_DB:-xtrmetl}
       PGUSER: ${POSTGRES_USER:-xtrmetl}
       PGPASSWORD: ${POSTGRES_PASSWORD:-xtrmetl}
+      # The known local init schema predates Flyway; baseline at 0 so V1 still executes.
+      FLYWAY_BASELINE_ON_MIGRATE: "true"
       EUREKA_HOST: eureka-server
       ZIPKIN_HOST: zipkin
     ports:
