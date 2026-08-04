@@ -119,6 +119,22 @@ class EtlRequestExceptionTest {
                         "An authenticated principal is required when Idempotency-Key is supplied."
                 ),
                 Arguments.of(
+                        EtlRequestError.JOB_PRINCIPAL_REQUIRED,
+                        HttpStatus.UNAUTHORIZED,
+                        "etl_job_principal_required",
+                        URI.create("urn:mightyetl:problem:etl-job-principal-required"),
+                        "ETL job authentication required",
+                        "An authenticated principal is required for ETL job resources."
+                ),
+                Arguments.of(
+                        EtlRequestError.JOB_NOT_FOUND,
+                        HttpStatus.NOT_FOUND,
+                        "etl_job_not_found",
+                        URI.create("urn:mightyetl:problem:etl-job-not-found"),
+                        "ETL job not found",
+                        "The requested ETL job was not found."
+                ),
+                Arguments.of(
                         EtlRequestError.IDEMPOTENCY_KEY_REUSED,
                         HttpStatus.UNPROCESSABLE_ENTITY,
                         "etl_idempotency_key_reused",
