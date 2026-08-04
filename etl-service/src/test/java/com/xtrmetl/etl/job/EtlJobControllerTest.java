@@ -113,7 +113,7 @@ class EtlJobControllerTest {
     }
 
     @Test
-    void returnsAnOwnerScopedJobSnapshotWithoutPayloadOrInternalHashes() throws Exception {
+    void returnsAnOwnerScopedJobSnapshotWithoutPayloadLeaseOrInternalHashes() throws Exception {
         UUID jobRecordId = UUID.fromString("cf4f083f-8c90-4f34-a8b6-b53761de44ef");
         Instant createdAt = Instant.parse("2026-08-04T10:00:00Z");
         Instant updatedAt = Instant.parse("2026-08-04T10:00:01Z");
@@ -122,6 +122,7 @@ class EtlJobControllerTest {
                         jobRecordId,
                         EtlJobStatus.PENDING,
                         0,
+                        null,
                         null,
                         createdAt,
                         updatedAt
@@ -134,13 +135,41 @@ class EtlJobControllerTest {
                 .andExpect(jsonPath("$.jobStatus").value("PENDING"))
                 .andExpect(jsonPath("$.attemptCount").value(0))
                 .andExpect(jsonPath("$.failureCode").doesNotExist())
+                .andExpect(jsonPath("$.processedRecordCount").doesNotExist())
                 .andExpect(jsonPath("$.createdAt").value("2026-08-04T10:00:00Z"))
                 .andExpect(jsonPath("$.updatedAt").value("2026-08-04T10:00:01Z"))
                 .andExpect(jsonPath("$.requestPayload").doesNotExist())
                 .andExpect(jsonPath("$.principalScopeHash").doesNotExist())
-                .andExpect(jsonPath("$.submissionKeyHash").doesNotExist());
+                .andExpect(jsonPath("$.submissionKeyHash").doesNotExist())
+                .andExpect(jsonPath("$.leaseToken").doesNotExist())
+                .andExpect(jsonPath("$.leaseExpiresAt").doesNotExist());
 
         verify(etlJobService).findOwned(jobRecordId, "tenant_alpha");
+    }
+
+    @Test
+    void returnsTheSuccessfulProcessedRecordCount() throws Exception {
+        UUID jobRecordId = UUID.fromString("cf4f083f-8c90-4f34-a8b6-b53761de44ef");
+        Instant createdAt = Instant.parse("2026-08-04T10:00:00Z");
+        Instant updatedAt = Instant.parse("2026-08-04T10:05:00Z");
+        when(etlJobService.findOwned(jobRecordId, "tenant_alpha"))
+                .thenReturn(new EtlJobSnapshot(
+                        jobRecordId,
+                        EtlJobStatus.SUCCEEDED,
+                        1,
+                        null,
+                        2,
+                        createdAt,
+                        updatedAt
+                ));
+
+        mockMvc.perform(get(JOBS_PATH + "/" + jobRecordId).principal(PRINCIPAL))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.jobStatus").value("SUCCEEDED"))
+                .andExpect(jsonPath("$.attemptCount").value(1))
+                .andExpect(jsonPath("$.processedRecordCount").value(2))
+                .andExpect(jsonPath("$.failureCode").doesNotExist());
     }
 
     @Test
