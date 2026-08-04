@@ -58,7 +58,7 @@ jobs:
 
             Never approve or merge a pull request. Never push directly to develop or main. Do not bypass branch protection, independent approval, security gates, repository policy, required checks, or test coverage. Do not publish a release unless a separate release-authorized workflow and every acceptance gate explicitly permit it.
 
-            Do not alter the existing review agent, its workflow, its provider configuration, or its credential flow. Do not change any review-agent secret name. Do not inspect, print, echo, summarize, or expose secret values. Do not modify .github/workflows/ or CODEOWNERS unless an open issue explicitly labeled automation-maintenance authorizes that exact bounded automation change; even then, prepare a pull request and leave approval and merge to an independent gate.
+            Do not alter the existing review agent, its workflow, its provider configuration, or its credential flow. Do not change any review-agent secret name. Do not inspect secret values. Do not print, echo, summarize, or expose secret values. Do not modify .github/workflows/ or CODEOWNERS unless an open issue explicitly labeled automation-maintenance authorizes that exact bounded automation change; even then, prepare a pull request and leave approval and merge to an independent gate.
 
             Use the repository-scoped GitHub token only for the minimum branch, pull-request, issue, check, status, and security-read operations required by this run. Keep the working tree and pull-request description truthful about tests, skipped coverage, remaining risks, and release readiness. Leave one reviewable feature branch and pull request; never represent pending external gates as completed.
         run: |
