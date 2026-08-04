@@ -11,20 +11,34 @@ import java.nio.file.Paths;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Keeps the idempotency runbook honest about failures rejected before controller invocation.
+ * Keeps the idempotency runbook honest about authentication and header syntax boundaries.
  */
 class EtlIdempotencyAuthenticationBoundaryDocumentationTest {
 
     @Test
     void distinguishesSecurityLayerRejectionFromTheControllerPrincipalGuard() throws IOException {
-        String runbook = Files.readString(
-                projectRoot().resolve("docs/etl/idempotent-retries.md"),
-                StandardCharsets.UTF_8
-        );
+        String runbook = readRunbook();
 
         assertTrue(runbook.contains("rejected before the ETL controller"));
         assertTrue(runbook.contains("may not carry `etl_idempotency_principal_required`"));
         assertTrue(runbook.contains("reaches the controller without a principal"));
+    }
+
+    @Test
+    void documentsStructuredFieldWireSyntaxAndLegacyNormalization() throws IOException {
+        String runbook = readRunbook();
+
+        assertTrue(runbook.contains("RFC 9651"));
+        assertTrue(runbook.contains("Idempotency-Key: \"550e8400-e29b-41d4-a716-446655440000\""));
+        assertTrue(runbook.contains("legacy unquoted form"));
+        assertTrue(runbook.contains("same semantic key"));
+    }
+
+    private static String readRunbook() throws IOException {
+        return Files.readString(
+                projectRoot().resolve("docs/etl/idempotent-retries.md"),
+                StandardCharsets.UTF_8
+        );
     }
 
     private static Path projectRoot() {
