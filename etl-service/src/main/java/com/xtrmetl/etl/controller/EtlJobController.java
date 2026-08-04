@@ -9,6 +9,7 @@ import com.xtrmetl.etl.service.EtlRequestError;
 import com.xtrmetl.etl.service.EtlRequestException;
 import io.micrometer.observation.annotation.Observed;
 import org.springframework.dao.DataAccessException;
+import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.lang.Nullable;
@@ -32,6 +33,9 @@ import java.util.UUID;
  * intentionally noncommittal under RFC 9110: it reports the durable pending state and supplies a
  * status-monitor resource through both the representation and {@code Location} header. This intake
  * slice does not claim that worker execution has started.</p>
+ *
+ * <p>Successful job representations use {@code Cache-Control: no-store}. They are authenticated,
+ * principal-scoped operational resources and must not be retained by shared or private caches.</p>
  */
 @RestController
 @RequestMapping("/api/etl/jobs")
@@ -97,6 +101,7 @@ public class EtlJobController {
                 statusUrl
         );
         return ResponseEntity.accepted()
+                .cacheControl(CacheControl.noStore())
                 .location(URI.create(statusUrl))
                 .header(
                         IDEMPOTENCY_REPLAYED_HEADER,
@@ -131,7 +136,9 @@ public class EtlJobController {
         } catch (RuntimeException exception) {
             throw new EtlUnexpectedException(exception);
         }
-        return ResponseEntity.ok(EtlJobStatusResponse.from(snapshot));
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(EtlJobStatusResponse.from(snapshot));
     }
 
     private static String statusUrl(UUID jobRecordId) {
