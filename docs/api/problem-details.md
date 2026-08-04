@@ -2,15 +2,17 @@
 
 ## Contract
 
-`POST /api/etl/process` uses [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457.html) Problem Details for HTTP APIs for every error response. The media type is:
+`POST /api/etl/process` uses [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457.html) Problem Details for HTTP APIs for request-body, validation, target, and unexpected application failures that reach the ETL controller boundary. The media type is:
 
 ```text
 application/problem+json
 ```
 
-Successful `POST /api/etl/process` responses remain `200 text/plain` with one `Processed: <id>` line per accepted record. Only error responses use the problem-details representation.
+Successful `POST /api/etl/process` responses remain `200 text/plain` with one `Processed: <id>` line per accepted record. Only covered failure responses use the problem-details representation.
 
-Every problem body contains:
+Routing, authentication, authorization, gateway, reverse-proxy, and servlet-container failures remain governed by the component that rejects the request. Clients must not assume that a request rejected before the ETL controller will carry an ETL `errorCode`.
+
+Every ETL problem body contains:
 
 | Field | Contract |
 |:------|:---------|
@@ -34,6 +36,10 @@ The response never includes internal exception text, nested causes, SQL statemen
 | 503 | `etl_target_unavailable` | `urn:mightyetl:problem:etl-target-unavailable` | The target failed with a transient data-access condition after the configured retry policy | Retry with bounded exponential backoff and jitter. |
 | 500 | `etl_target_failure` | `urn:mightyetl:problem:etl-target-failure` | The target rejected work with a non-transient data-access failure | Stop automatic retries and involve an operator. |
 | 500 | `etl_internal_error` | `urn:mightyetl:problem:etl-internal-error` | An unexpected application failure occurred | Stop automatic retries and involve an operator. |
+
+## Content negotiation
+
+The endpoint does not constrain handler selection to the successful `text/plain` representation. A caller that sends `Accept: application/problem+json` can therefore receive a covered failure response without an early `406` caused by the success media type. Successful responses remain explicitly `text/plain`.
 
 ## Example
 
@@ -63,6 +69,6 @@ A retry of the synchronous endpoint repeats the whole accepted transaction. This
 
 ## Compatibility
 
-The stable compatibility surface consists of HTTP status, media type, `type`, and `errorCode`. The existing successful plain-text body is unchanged. Error responses intentionally replace the legacy ad-hoc plain-text `400` response with RFC 9457 JSON.
+The stable compatibility surface consists of HTTP status, media type, `type`, and `errorCode`. The existing successful plain-text body is unchanged. Covered error responses intentionally replace the legacy ad-hoc plain-text `400` response with RFC 9457 JSON.
 
 The advice is scoped to `EtlController`; CDC endpoints, connector catalog success responses, and unrelated services do not inherit this error contract automatically.
