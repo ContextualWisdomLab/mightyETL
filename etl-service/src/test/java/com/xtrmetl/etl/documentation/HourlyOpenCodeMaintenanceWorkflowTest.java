@@ -68,8 +68,9 @@ class HourlyOpenCodeMaintenanceWorkflowTest {
     }
 
     /**
-     * Verifies that repository source and the OpenCode executable are pinned without retaining
-     * checkout credentials that a generated process could reuse implicitly.
+     * Verifies that repository source and the OpenCode executable are pinned by immutable
+     * content identifiers without retaining checkout credentials that a generated process could
+     * reuse implicitly.
      */
     @Test
     void pinsCheckoutAndOpenCodeWithoutPersistedCredentials() {
@@ -78,8 +79,19 @@ class HourlyOpenCodeMaintenanceWorkflowTest {
         ));
         assertTrue(workflow.contains("fetch-depth: 1"));
         assertTrue(workflow.contains("persist-credentials: false"));
-        assertTrue(workflow.contains("npm install --global opencode-ai@1.18.13"));
-        assertTrue(workflow.contains("test \"$(opencode --version)\" = \"1.18.13\""));
+        assertTrue(workflow.contains(
+                "https://github.com/anomalyco/opencode/releases/download/"
+                        + "v${OPENCODE_VERSION}/opencode-linux-x64.tar.gz"
+        ));
+        assertTrue(workflow.contains(
+                "OPENCODE_SHA256: \"8d500b20fed2d26e537e221895b1a575476571b4f0089bb29fb13eeb8eb9e937\""
+        ));
+        assertTrue(workflow.contains("sha256sum --check --strict"));
+        assertTrue(workflow.contains("tar --extract --gzip"));
+        assertTrue(workflow.contains(
+                "test \"$(\"${install_dir}/opencode\" --version)\" = \"${OPENCODE_VERSION}\""
+        ));
+        assertFalse(workflow.contains("npm install"));
         assertFalse(workflow.contains("opencode-ai@latest"));
         assertFalse(workflow.contains("anomalyco/opencode/github@"));
     }
@@ -141,15 +153,23 @@ class HourlyOpenCodeMaintenanceWorkflowTest {
     }
 
     /**
-     * Verifies least-privilege repository access and rejects an unnecessary OIDC token path.
+     * Verifies least-privilege repository access, scopes write authority to the sole maintenance
+     * job instead of every future job, and rejects an unnecessary OIDC token path.
      */
     @Test
     void grantsOnlyRepositoryMaintenancePermissions() {
-        assertTrue(workflow.contains("contents: write"));
-        assertTrue(workflow.contains("pull-requests: write"));
-        assertTrue(workflow.contains("issues: write"));
-        assertTrue(workflow.contains("checks: read"));
-        assertTrue(workflow.contains("statuses: read"));
+        assertTrue(workflow.contains("permissions:\n  contents: read\n\njobs:"));
+        assertTrue(workflow.contains(
+                "maintain-repository:\n"
+                        + "    permissions:\n"
+                        + "      actions: read\n"
+                        + "      checks: read\n"
+                        + "      contents: write\n"
+                        + "      issues: write\n"
+                        + "      pull-requests: write\n"
+                        + "      security-events: read\n"
+                        + "      statuses: read"
+        ));
         assertFalse(workflow.contains("id-token:"));
         assertFalse(workflow.contains("actions: write"));
         assertFalse(workflow.contains("security-events: write"));
