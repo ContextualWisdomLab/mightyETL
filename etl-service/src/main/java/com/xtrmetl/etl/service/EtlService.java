@@ -70,8 +70,12 @@ public class EtlService {
             "^\\s|\\s$",
             Pattern.UNICODE_CHARACTER_CLASS
     );
-    private static final Pattern IDEMPOTENCY_KEY_PROFILE = Pattern.compile(
-            "[A-Za-z0-9._:-]{16,128}"
+    private static final String IDEMPOTENCY_KEY_VALUE_EXPRESSION = "[A-Za-z0-9._:-]{16,128}";
+    private static final Pattern IDEMPOTENCY_KEY_VALUE_PROFILE = Pattern.compile(
+            IDEMPOTENCY_KEY_VALUE_EXPRESSION
+    );
+    private static final Pattern IDEMPOTENCY_KEY_STRUCTURED_FIELD_PROFILE = Pattern.compile(
+            "\"(" + IDEMPOTENCY_KEY_VALUE_EXPRESSION + ")\""
     );
 
     private final JdbcTemplate jdbcTemplate;
@@ -159,11 +163,12 @@ public class EtlService {
     /**
      * Processes or replays one principal-scoped idempotent ETL request.
      *
-     * <p>The client key and authenticated principal are never stored in plaintext. Their
-     * length-delimited combination is hashed with SHA-256, the full hash becomes the ledger key,
-     * and a transaction-level lock serializes competing requests. Reusing a committed key with
-     * the same payload returns the original response without another target write. Reusing it with
-     * a different payload is rejected.</p>
+     * <p>The client key and authenticated principal are never stored in plaintext. A standards-
+     * shaped RFC 8941 quoted String and the retained legacy raw representation are normalized to
+     * the same semantic key before its principal-scoped SHA-256 hash is calculated. A transaction-
+     * level lock serializes competing requests. Reusing a committed key with the same payload
+     * returns the original response without another target write. Reusing it with a different
+     * payload is rejected.</p>
      *
      * <p>The target writes and ledger insert share one transaction. A target or ledger failure
      * therefore leaves neither a partial batch nor a false successful replay record. Transient
@@ -172,7 +177,7 @@ public class EtlService {
      * which prevents direct construction or self-invocation from silently weakening durability.</p>
      *
      * @param data UTF-8 JSON array payload
-     * @param idempotencyKey client-generated safe ASCII key containing 16 to 128 characters
+     * @param idempotencyKey quoted RFC 8941 String or legacy raw safe-ASCII key of 16 to 128 characters
      * @param principalScope authenticated principal name used only to isolate the key namespace
      * @return response body and whether it was replayed from the durable ledger
      * @throws EtlRequestException when the key, principal, payload, or record contract is invalid
@@ -258,10 +263,17 @@ public class EtlService {
     }
 
     private static String validateIdempotencyKey(@Nullable String idempotencyKey) {
-        if (idempotencyKey == null || !IDEMPOTENCY_KEY_PROFILE.matcher(idempotencyKey).matches()) {
+        if (idempotencyKey == null) {
             throw new EtlRequestException(EtlRequestError.INVALID_IDEMPOTENCY_KEY);
         }
-        return idempotencyKey;
+        var structuredFieldMatcher = IDEMPOTENCY_KEY_STRUCTURED_FIELD_PROFILE.matcher(idempotencyKey);
+        if (structuredFieldMatcher.matches()) {
+            return structuredFieldMatcher.group(1);
+        }
+        if (IDEMPOTENCY_KEY_VALUE_PROFILE.matcher(idempotencyKey).matches()) {
+            return idempotencyKey;
+        }
+        throw new EtlRequestException(EtlRequestError.INVALID_IDEMPOTENCY_KEY);
     }
 
     private static String validatePrincipalScope(@Nullable String principalScope) {
