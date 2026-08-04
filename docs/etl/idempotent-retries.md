@@ -58,6 +58,9 @@ Idempotency-Replayed: true
 | 401 | `etl_idempotency_principal_required` | A keyed request has no authenticated principal namespace. |
 | 422 | `etl_idempotency_key_reused` | The same principal-scoped key already committed a different payload digest. |
 
+Existing ETL admission errors also apply to keyed requests. In particular, an oversized UTF-8
+payload returns `413 etl_payload_too_large` before request-lock or ledger access.
+
 Errors use the repository's RFC 9457 `application/problem+json` contract and never include the raw
 key, principal, payload, SQL text, or exception message.
 
@@ -69,12 +72,13 @@ it does not store the raw client key, principal name, or request payload.
 
 For a new key, mightyETL performs this sequence in one retryable Spring transaction:
 
-1. acquire a PostgreSQL transaction-level advisory lock derived from the scoped key hash;
-2. inspect `etl_idempotency_records` for a prior committed result;
-3. prevalidate and transform the complete ETL batch;
-4. write all accepted target rows;
-5. insert the durable response ledger row; and
-6. commit both target rows and ledger together.
+1. validate the key, principal namespace, and configured UTF-8 payload bound before lock or ledger access;
+2. acquire a PostgreSQL transaction-level advisory lock derived from the scoped key hash;
+3. inspect `etl_idempotency_records` for a prior committed result;
+4. prevalidate and transform the complete ETL batch;
+5. write all accepted target rows;
+6. insert the durable response ledger row; and
+7. commit both target rows and ledger together.
 
 Java callers must invoke the idempotent method through the Spring-managed service proxy or establish
 an explicit transaction boundary before invocation. Direct construction and same-class
