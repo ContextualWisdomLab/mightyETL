@@ -26,6 +26,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -44,12 +45,18 @@ class EtlServiceIdempotencyIntegrationTest {
 
     private final EtlService etlService;
     private final JdbcTemplate jdbcTemplate;
+    private final InMemoryTransactionRequestLock requestLock;
     private ExecutorService executorService;
 
     @Autowired
-    EtlServiceIdempotencyIntegrationTest(EtlService etlService, JdbcTemplate jdbcTemplate) {
+    EtlServiceIdempotencyIntegrationTest(
+            EtlService etlService,
+            JdbcTemplate jdbcTemplate,
+            InMemoryTransactionRequestLock requestLock
+    ) {
         this.etlService = etlService;
         this.jdbcTemplate = jdbcTemplate;
+        this.requestLock = requestLock;
     }
 
     @BeforeEach
@@ -76,6 +83,7 @@ class EtlServiceIdempotencyIntegrationTest {
 
     @AfterEach
     void stopExecutor() throws InterruptedException {
+        requestLock.releaseHeldAcquisition();
         executorService.shutdownNow();
         assertTrue(executorService.awaitTermination(5, TimeUnit.SECONDS));
     }
@@ -186,27 +194,40 @@ class EtlServiceIdempotencyIntegrationTest {
     }
 
     @Test
-    void serializesConcurrentRequestsForTheSameScopedKey() throws Exception {
+    void rejectsAConcurrentRequestThenReplaysAfterTheFirstCommit() throws Exception {
         String payload = "[{\"id\":\"record_alpha\"}]";
-        CountDownLatch startGate = new CountDownLatch(1);
-
-        Future<EtlIdempotencyResult> firstFuture = executorService.submit(() -> {
-            startGate.await();
-            return etlService.processDataIdempotently(payload, IDEMPOTENCY_KEY, PRINCIPAL_SCOPE);
-        });
-        Future<EtlIdempotencyResult> secondFuture = executorService.submit(() -> {
-            startGate.await();
-            return etlService.processDataIdempotently(payload, IDEMPOTENCY_KEY, PRINCIPAL_SCOPE);
-        });
-
-        startGate.countDown();
-        List<EtlIdempotencyResult> results = List.of(
-                firstFuture.get(10, TimeUnit.SECONDS),
-                secondFuture.get(10, TimeUnit.SECONDS)
+        requestLock.holdNextAcquisition();
+        Future<EtlIdempotencyResult> firstFuture = executorService.submit(
+                () -> etlService.processDataIdempotently(payload, IDEMPOTENCY_KEY, PRINCIPAL_SCOPE)
         );
 
-        assertEquals(1, results.stream().filter(EtlIdempotencyResult::replayed).count());
-        assertEquals(1, results.stream().filter(result -> !result.replayed()).count());
+        assertTrue(requestLock.awaitHeldAcquisition(5, TimeUnit.SECONDS));
+        try {
+            EtlRequestException inProgress = assertThrows(
+                    EtlRequestException.class,
+                    () -> etlService.processDataIdempotently(
+                            payload,
+                            IDEMPOTENCY_KEY,
+                            PRINCIPAL_SCOPE
+                    )
+            );
+            assertEquals(EtlRequestError.IDEMPOTENCY_REQUEST_IN_PROGRESS, inProgress.error());
+            assertEquals(0, countRows("processed_data"));
+            assertEquals(0, countRows("etl_idempotency_records"));
+        } finally {
+            requestLock.releaseHeldAcquisition();
+        }
+
+        EtlIdempotencyResult first = firstFuture.get(10, TimeUnit.SECONDS);
+        EtlIdempotencyResult replay = etlService.processDataIdempotently(
+                payload,
+                IDEMPOTENCY_KEY,
+                PRINCIPAL_SCOPE
+        );
+
+        assertFalse(first.replayed());
+        assertTrue(replay.replayed());
+        assertEquals(first.responseBody(), replay.responseBody());
         assertEquals(1, countRows("processed_data"));
         assertEquals(1, countRows("etl_idempotency_records"));
     }
@@ -273,7 +294,7 @@ class EtlServiceIdempotencyIntegrationTest {
         }
 
         @Bean
-        EtlRequestLock etlRequestLock() {
+        InMemoryTransactionRequestLock etlRequestLock() {
             return new InMemoryTransactionRequestLock();
         }
 
@@ -282,23 +303,45 @@ class EtlServiceIdempotencyIntegrationTest {
                 JdbcTemplate jdbcTemplate,
                 ObjectMapper objectMapper,
                 EtlBatchProperties properties,
-                EtlRequestLock requestLock
+                InMemoryTransactionRequestLock requestLock
         ) {
             return new EtlService(jdbcTemplate, objectMapper, properties, requestLock);
         }
     }
 
     /**
-     * Test-only lock that mirrors a PostgreSQL transaction advisory lock's release semantics.
+     * Test-only lock that mirrors PostgreSQL try-advisory-lock and transaction release semantics.
      */
-    private static final class InMemoryTransactionRequestLock implements EtlRequestLock {
+    static final class InMemoryTransactionRequestLock implements EtlRequestLock {
 
         private final Map<String, ReentrantLock> locks = new ConcurrentHashMap<>();
+        private final AtomicBoolean holdNext = new AtomicBoolean();
+        private volatile CountDownLatch heldSignal = new CountDownLatch(0);
+        private volatile CountDownLatch releaseSignal = new CountDownLatch(0);
+
+        void holdNextAcquisition() {
+            heldSignal = new CountDownLatch(1);
+            releaseSignal = new CountDownLatch(1);
+            holdNext.set(true);
+        }
+
+        boolean awaitHeldAcquisition(long timeout, TimeUnit unit) throws InterruptedException {
+            return heldSignal.await(timeout, unit);
+        }
+
+        void releaseHeldAcquisition() {
+            releaseSignal.countDown();
+        }
 
         @Override
-        public void lock(String idempotencyKeyHash) {
-            ReentrantLock lock = locks.computeIfAbsent(idempotencyKeyHash, ignored -> new ReentrantLock());
-            lock.lock();
+        public boolean tryLock(String idempotencyKeyHash) {
+            ReentrantLock lock = locks.computeIfAbsent(
+                    idempotencyKeyHash,
+                    ignored -> new ReentrantLock()
+            );
+            if (!lock.tryLock()) {
+                return false;
+            }
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCompletion(int status) {
@@ -308,6 +351,18 @@ class EtlServiceIdempotencyIntegrationTest {
                     }
                 }
             });
+            if (holdNext.compareAndSet(true, false)) {
+                heldSignal.countDown();
+                try {
+                    if (!releaseSignal.await(5, TimeUnit.SECONDS)) {
+                        throw new IllegalStateException("Timed out waiting to release test lock");
+                    }
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("Interrupted while holding test lock", exception);
+                }
+            }
+            return true;
         }
     }
 }
