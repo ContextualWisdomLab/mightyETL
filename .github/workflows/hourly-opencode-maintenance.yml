@@ -10,16 +10,18 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  actions: read
-  checks: read
-  contents: write
-  issues: write
-  pull-requests: write
-  security-events: read
-  statuses: read
+  contents: read
 
 jobs:
   maintain-repository:
+    permissions:
+      actions: read
+      checks: read
+      contents: write
+      issues: write
+      pull-requests: write
+      security-events: read
+      statuses: read
     runs-on: ubuntu-latest
     timeout-minutes: 50
     steps:
@@ -29,17 +31,41 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Install pinned OpenCode CLI
+      - name: Install checksum-pinned OpenCode CLI
         shell: bash
+        env:
+          OPENCODE_VERSION: "1.18.13"
+          OPENCODE_SHA256: "8d500b20fed2d26e537e221895b1a575476571b4f0089bb29fb13eeb8eb9e937"
         run: |
           set -euo pipefail
-          npm install --global opencode-ai@1.18.13 --no-audit --no-fund
-          test "$(opencode --version)" = "1.18.13"
+          archive="${RUNNER_TEMP}/opencode-linux-x64.tar.gz"
+          install_dir="${RUNNER_TEMP}/opencode-bin"
+
+          command -v curl >/dev/null
+          command -v rg >/dev/null
+          command -v sha256sum >/dev/null
+          command -v tar >/dev/null
+
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --output "${archive}" \
+            "https://github.com/anomalyco/opencode/releases/download/v${OPENCODE_VERSION}/opencode-linux-x64.tar.gz"
+          printf '%s  %s\n' "${OPENCODE_SHA256}" "${archive}" \
+            | sha256sum --check --strict
+
+          rm -rf "${install_dir}"
+          mkdir -p "${install_dir}"
+          tar --extract --gzip --no-same-owner --no-same-permissions \
+            --file "${archive}" --directory "${install_dir}"
+          test -f "${install_dir}/opencode"
+          chmod 0755 "${install_dir}/opencode"
+          test "$("${install_dir}/opencode" --version)" = "${OPENCODE_VERSION}"
+          printf '%s\n' "${install_dir}" >> "${GITHUB_PATH}"
 
       - name: Run bounded NVIDIA OpenCode maintenance
         shell: bash
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_NIM_API_KEY }}
           MODEL: nvidia/qwen/qwen3-coder-480b-a35b-instruct
           SHARE: "false"
@@ -66,25 +92,22 @@ jobs:
             echo "NVIDIA_NIM_API_KEY is required for scheduled OpenCode maintenance" >&2
             exit 1
           fi
-          if [[ -z "${GITHUB_TOKEN}" ]]; then
-            echo "The repository-scoped GITHUB_TOKEN is required for scheduled maintenance" >&2
+          if [[ -z "${GITHUB_TOKEN}" || -z "${GH_TOKEN}" ]]; then
+            echo "The repository-scoped GitHub token is required for scheduled maintenance" >&2
             exit 1
           fi
 
           # OpenCode 1.18.13 skips its internal Git credential and author setup in
-          # USE_GITHUB_TOKEN mode. Bootstrap a repository-local header explicitly while
+          # USE_GITHUB_TOKEN mode. Install a repository-local GitHub CLI helper while
           # preserving checkout's persist-credentials: false supply-chain boundary.
-          git_config_key="http.https://github.com/.extraheader"
+          git_credential_key="credential.https://github.com.helper"
           cleanup_git_credentials() {
-            git config --local --unset-all "${git_config_key}" >/dev/null 2>&1 || true
+            git config --local --unset-all "${git_credential_key}" >/dev/null 2>&1 || true
           }
           trap cleanup_git_credentials EXIT
           cleanup_git_credentials
-          github_basic_auth="$(
-            printf 'x-access-token:%s' "${GITHUB_TOKEN}" | base64 | tr -d '\r\n'
-          )"
-          git config --local "${git_config_key}" "AUTHORIZATION: basic ${github_basic_auth}"
-          unset github_basic_auth
+          git config --local --add "${git_credential_key}" ""
+          git config --local --add "${git_credential_key}" "!gh auth git-credential"
           git config --local user.name "opencode-agent[bot]"
           git config --local user.email "opencode-agent[bot]@users.noreply.github.com"
 
