@@ -18,12 +18,13 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import java.net.URI;
 
 /**
- * Converts ETL endpoint failures into stable, non-sensitive RFC 9457 problem responses.
+ * Converts covered ETL endpoint failures into stable, non-sensitive RFC 9457 responses.
  *
  * <p>The advice is scoped to {@link EtlController}; unrelated controllers retain their existing
  * exception contracts. Every client-visible field is fixed by a typed definition. Raw exception
  * messages, SQL details, credentials, paths, causes, and stack traces are never copied into the
- * HTTP body.</p>
+ * HTTP body. Spring MVC routing and response-negotiation failures are deliberately not captured
+ * by a broad exception handler and therefore retain their framework-owned status semantics.</p>
  */
 @RestControllerAdvice(assignableTypes = EtlController.class)
 public class EtlApiProblemHandler {
@@ -151,21 +152,21 @@ public class EtlApiProblemHandler {
     }
 
     /**
-     * Renders an unexpected endpoint failure as a generic internal problem.
+     * Renders an unexpected failure raised inside the ETL service invocation boundary.
      *
-     * @param exception unexpected application failure
+     * @param exception dedicated wrapper around the original unexpected runtime failure
      * @param request current servlet request
      * @return generic internal-error problem response
      */
-    @ExceptionHandler(Exception.class)
+    @ExceptionHandler(EtlUnexpectedException.class)
     public ResponseEntity<ProblemDetail> handleUnexpectedFailure(
-            Exception exception,
+            EtlUnexpectedException exception,
             HttpServletRequest request
     ) {
         log.error(
                 "Unexpected ETL failure path={} exceptionType={}",
                 request.getRequestURI(),
-                exception.getClass().getName()
+                exception.getCause().getClass().getName()
         );
         return problem(
                 HttpStatus.INTERNAL_SERVER_ERROR,
