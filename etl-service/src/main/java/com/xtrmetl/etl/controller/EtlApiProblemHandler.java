@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.TransientDataAccessException;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
@@ -23,9 +24,11 @@ import java.net.URI;
  * <p>The advice is scoped to the synchronous and durable-job ETL controllers; unrelated
  * controllers retain their existing exception contracts. Every client-visible field is fixed by a
  * typed definition. Raw exception messages, SQL details, credentials, paths, causes, and stack
- * traces are never copied into the HTTP body. Spring MVC routing and response-negotiation failures
- * are deliberately not captured by a broad exception handler and therefore retain their
- * framework-owned status semantics.</p>
+ * traces are never copied into the HTTP body. Covered responses use
+ * {@code Cache-Control: no-store} so authenticated operational failures are not retained by shared
+ * or private caches. Spring MVC routing and response-negotiation failures are deliberately not
+ * captured by a broad exception handler and therefore retain their framework-owned status
+ * semantics.</p>
  */
 @RestControllerAdvice(assignableTypes = {EtlController.class, EtlJobController.class})
 public class EtlApiProblemHandler {
@@ -193,6 +196,7 @@ public class EtlApiProblemHandler {
         problem.setInstance(URI.create(request.getRequestURI()));
         problem.setProperty("errorCode", errorCode);
         return ResponseEntity.status(status)
+                .cacheControl(CacheControl.noStore())
                 .contentType(MediaType.APPLICATION_PROBLEM_JSON)
                 .body(problem);
     }
