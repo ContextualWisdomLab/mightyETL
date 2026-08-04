@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -175,13 +176,14 @@ class EtlServiceTest {
     class FailureTests {
 
         @Test
-        void wrapsInvalidJsonWithOriginalParsingCause() {
-            RuntimeException exception = assertThrows(
-                    RuntimeException.class,
+        void classifiesInvalidJsonAndRetainsOriginalParsingCause() {
+            EtlRequestException exception = assertThrows(
+                    EtlRequestException.class,
                     () -> etlService.processData("not json")
             );
 
-            assertTrue(exception.getMessage().contains("Error processing data"));
+            assertSame(EtlRequestError.INVALID_JSON, exception.error());
+            assertEquals("etl_invalid_json", exception.getMessage());
             assertNotNull(exception.getCause());
             assertInstanceOf(JsonProcessingException.class, exception.getCause());
             verifyNoInteractions(jdbcTemplate);
@@ -202,22 +204,28 @@ class EtlServiceTest {
 
         @Test
         void rejectsNullAndNonArrayDocumentsBeforeJdbc() {
-            assertThrows(RuntimeException.class, () -> etlService.processData("null"));
-            assertThrows(
-                    RuntimeException.class,
+            EtlRequestException nullDocument = assertThrows(
+                    EtlRequestException.class,
+                    () -> etlService.processData("null")
+            );
+            EtlRequestException objectDocument = assertThrows(
+                    EtlRequestException.class,
                     () -> etlService.processData("{\"id\":\"record_alpha\"}")
             );
 
+            assertSame(EtlRequestError.INVALID_JSON, nullDocument.error());
+            assertSame(EtlRequestError.INVALID_JSON, objectDocument.error());
             verifyNoInteractions(jdbcTemplate);
         }
 
         @Test
         void rejectsMissingIdentifierBeforeJdbc() {
-            assertThrows(
-                    RuntimeException.class,
+            EtlRequestException exception = assertThrows(
+                    EtlRequestException.class,
                     () -> etlService.processData("[{\"name\":\"missing id\"}]")
             );
 
+            assertSame(EtlRequestError.INVALID_RECORD, exception.error());
             verifyNoInteractions(jdbcTemplate);
         }
     }
@@ -256,7 +264,7 @@ class EtlServiceTest {
 
         @Test
         void invalidInputNeverReachesJdbc() {
-            assertThrows(RuntimeException.class, () -> etlService.processData("invalid"));
+            assertThrows(EtlRequestException.class, () -> etlService.processData("invalid"));
 
             verify(jdbcTemplate, never()).update(anyString(), anyString());
         }
