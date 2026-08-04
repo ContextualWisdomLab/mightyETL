@@ -82,6 +82,40 @@ class HourlyOpenCodeMaintenanceWorkflowTest {
     }
 
     /**
+     * Verifies that direct-token mode can actually create commits and push a feature branch.
+     *
+     * <p>OpenCode 1.18.13 intentionally skips its internal Git credential and author setup when
+     * {@code USE_GITHUB_TOKEN=true}. Because checkout credentials remain disabled, the workflow
+     * must install a local, short-lived authorization header and local author identity before
+     * starting OpenCode, then remove the authorization header even when the process fails or
+     * times out.</p>
+     */
+    @Test
+    void bootstrapsAndRemovesDirectTokenGitCredentials() {
+        assertTrue(workflow.contains(
+                "git_config_key=\"http.https://github.com/.extraheader\""
+        ));
+        assertTrue(workflow.contains("cleanup_git_credentials()"));
+        assertTrue(workflow.contains("trap cleanup_git_credentials EXIT"));
+        assertTrue(workflow.contains(
+                "printf 'x-access-token:%s' \"${GITHUB_TOKEN}\""
+        ));
+        assertTrue(workflow.contains(
+                "git config --local \"${git_config_key}\" "
+                        + "\"AUTHORIZATION: basic ${github_basic_auth}\""
+        ));
+        assertTrue(workflow.contains(
+                "git config --local user.name \"opencode-agent[bot]\""
+        ));
+        assertTrue(workflow.contains(
+                "git config --local user.email "
+                        + "\"opencode-agent[bot]@users.noreply.github.com\""
+        ));
+        assertTrue(workflow.contains("unset github_basic_auth"));
+        assertFalse(workflow.contains("AGENT: build"));
+    }
+
+    /**
      * Verifies that the repository's NVIDIA NIM secret is the only model credential and is
      * mapped to the environment variable documented by OpenCode's NVIDIA provider.
      */
