@@ -26,6 +26,11 @@ xtrmetl:
   etl:
     max-payload-bytes: ${ETL_MAX_PAYLOAD_BYTES:1048576}
     max-batch-records: ${ETL_MAX_BATCH_RECORDS:1000}
+    jobs:
+      enabled: ${ETL_JOB_ENABLED:true}
+      poll-delay-ms: ${ETL_JOB_POLL_DELAY_MS:1000}
+      lease-duration-seconds: ${ETL_JOB_LEASE_DURATION_SECONDS:300}
+      max-attempts: ${ETL_JOB_MAX_ATTEMPTS:5}
   # Warehouse/BI targets: SPI + config binding + validation + catalog; writes remain SCAFFOLD.
   connectors:
     databricks:
