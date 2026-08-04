@@ -8,6 +8,7 @@ import com.xtrmetl.etl.job.EtlJobSubmission;
 import com.xtrmetl.etl.service.EtlRequestError;
 import com.xtrmetl.etl.service.EtlRequestException;
 import io.micrometer.observation.annotation.Observed;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
@@ -34,10 +35,20 @@ import java.util.UUID;
  * status-monitor resource through both the representation and {@code Location} header. This intake
  * slice does not claim that worker execution has started.</p>
  *
+ * <p>Because this bounded slice retains payloads but does not yet execute jobs or clear terminal
+ * payloads, the controller is disabled by default. Operators must explicitly set
+ * {@code xtrmetl.etl.jobs.intake-enabled=true} after accepting that temporary lifecycle boundary.</p>
+ *
  * <p>Success and covered failure responses use {@code Cache-Control: no-store}. Malformed, absent,
  * and foreign-owned job identifiers use the same owner-safe not-found classification so the status
  * endpoint does not become a cross-principal existence oracle.</p>
  */
+@ConditionalOnBooleanProperty(
+        prefix = "xtrmetl.etl.jobs",
+        name = "intake-enabled",
+        havingValue = true,
+        matchIfMissing = false
+)
 @RestController
 @RequestMapping("/api/etl/jobs")
 public class EtlJobController {
