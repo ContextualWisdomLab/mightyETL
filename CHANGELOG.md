@@ -114,10 +114,10 @@ existing xtrmETL platform.
    - Key features overview
    - System architecture summary
    - Technology stack
-   - Use cases and scenarios
+   - Use cases
    - API specifications
    - Quick start guide
-   - Future improvements roadmap
+   - Future improvements
    - Technical debt assessment
 
 #### Project Understanding
@@ -130,7 +130,7 @@ Through code analysis, identified the platform as:
 - Data transformation pipelines with parallel processing
 - JWT-based security with role-based access control
 - Event streaming via Apache Kafka
-- Service discovery and registration
+- Service discovery with Netflix Eureka
 - Distributed tracing with Zipkin
 
 #### Key Components Documented
