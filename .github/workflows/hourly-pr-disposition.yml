@@ -80,16 +80,33 @@ jobs:
                 fi
 
                 reviews=$(gh api --paginate "/repos/${repo}/pulls/${number}/reviews?per_page=100")
-                blocking_reviews=$(jq -s '
+                decisive_reviews=$(jq -s '
                   add
                   | map(select(.state == "APPROVED" or .state == "CHANGES_REQUESTED"))
                   | group_by(.user.login)
                   | map(max_by(.submitted_at // ""))
-                  | map(select(.state == "CHANGES_REQUESTED"))
-                  | length
                 ' <<<"${reviews}")
+                blocking_reviews=$(jq '
+                  map(select(.state == "CHANGES_REQUESTED"))
+                  | length
+                ' <<<"${decisive_reviews}")
                 if [[ "${blocking_reviews}" -gt 0 ]]; then
                   skip "latest decisive review state includes requested changes"
+                  continue
+                fi
+
+                independent_exact_head_approvals=$(jq \
+                  --arg author "${author}" \
+                  --arg head_sha "${head_sha}" '
+                    map(select(
+                      .state == "APPROVED"
+                      and .user.login != $author
+                      and .commit_id == $head_sha
+                    ))
+                    | length
+                  ' <<<"${decisive_reviews}")
+                if [[ "${independent_exact_head_approvals}" -eq 0 ]]; then
+                  skip "independent exact-head approval is absent"
                   continue
                 fi
 
