@@ -75,7 +75,7 @@ Idempotency-Replayed: true
 | ---: | --- | --- |
 | 400 | `etl_invalid_idempotency_key` | The field is neither a valid quoted Structured Field String nor a supported legacy raw value, or its semantic value is outside the bounded safe profile. |
 | 401 | `etl_idempotency_principal_required` | A keyed request reached the ETL controller without a principal; default unauthenticated HTTP requests are normally rejected earlier by Spring Security. |
-| 409 | `etl_idempotency_request_in_progress` | Another transaction currently owns the same principal-scoped semantic key. The request is rejected immediately rather than waiting. |
+| 409 | `etl_idempotency_request_in_progress` | Another transaction currently owns the same principal-scoped semantic key. The request returns immediately instead of waiting. |
 | 422 | `etl_idempotency_key_reused` | The same principal-scoped semantic key already committed a different payload digest. |
 
 A `409` response requires no request correction. Retry the same semantic key and identical JSON text
@@ -118,9 +118,9 @@ principal-scoped semantic key receives an immediate 409 without ledger lookup or
 retry after the first transaction commits acquires the lock and replays the stored response. A
 rollback releases the lock and leaves neither target rows nor a false success ledger entry.
 
-A 64-bit prefix selects the advisory lock, while the full 256-bit hash remains the ledger primary
-key. A rare advisory-prefix collision can cause an unrelated concurrent request to receive a false
-409, but it cannot make that request replay or overwrite the wrong ledger record.
+A rare 64-bit advisory-prefix collision can cause an unrelated concurrent request to receive a false
+409, but it cannot make that request replay or overwrite the wrong ledger record because the full
+256-bit hash remains the ledger primary key.
 
 ## Schema migration
 
