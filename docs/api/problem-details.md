@@ -10,7 +10,7 @@ application/problem+json
 
 Successful `POST /api/etl/process` responses remain `200 text/plain` with one `Processed: <id>` line per accepted record. Only covered failure responses use the problem-details representation. Keyed synchronous successes also return `Idempotency-Replayed: false` for the first committed execution or `Idempotency-Replayed: true` when a prior response is replayed.
 
-Durable job submission returns RFC 9110 `202 Accepted`, `Location: /api/etl/jobs/{job_record_id}`, an `application/json` pending-job representation, and the same replay header. Owner-scoped status lookup returns `200 application/json`. See [`docs/etl/durable-job-intake.md`](../etl/durable-job-intake.md).
+Durable job submission returns RFC 9110 `202 Accepted`, `Location: /api/etl/jobs/{job_record_id}`, an `application/json` pending-job representation, and the same replay header. Owner-scoped status lookup returns `200 application/json`. Successful durable-job responses and all covered ETL problem responses include `Cache-Control: no-store`. See [`docs/etl/durable-job-intake.md`](../etl/durable-job-intake.md).
 
 Routing, authentication, authorization, gateway, reverse-proxy, and servlet-container failures remain governed by the component that rejects the request. Clients must not assume that a request rejected before an ETL controller will carry an ETL `errorCode`.
 
@@ -40,8 +40,8 @@ The response never includes internal exception text, nested causes, SQL statemen
 | 409 | `etl_idempotency_request_in_progress` | `urn:mightyetl:problem:etl-idempotency-request-in-progress` | Another transaction is still processing the same principal-scoped synchronous semantic key | Retry the same key and identical JSON text with bounded exponential backoff and jitter. No `Retry-After` is emitted because completion time is unknown. |
 | 422 | `etl_idempotency_key_reused` | `urn:mightyetl:problem:etl-idempotency-key-reused` | The same principal-scoped synchronous semantic key already committed a different payload digest | Do not retry with that semantic key; use the original JSON text or generate a new key for a new logical batch. |
 | 409 | `etl_job_submission_in_progress` | `urn:mightyetl:problem:etl-job-submission-in-progress` | Another transaction is creating the same principal-scoped durable job | Retry the same key and byte-identical JSON text with bounded exponential backoff and jitter. |
-| 409 | `etl_job_submission_key_reused` | `urn:mightyetl:problem:etl-job-submission-key-reused` | The principal-scoped durable submission key already identifies different JSON text | Use the original JSON text or generate a new key for a new logical job. |
-| 404 | `etl_job_not_found` | `urn:mightyetl:problem:etl-job-not-found` | The job is absent from the authenticated principal namespace | Stop polling that identifier. The same response deliberately covers missing and differently owned jobs. |
+| 422 | `etl_job_submission_key_reused` | `urn:mightyetl:problem:etl-job-submission-key-reused` | The principal-scoped durable submission key already identifies different JSON text | Use the original JSON text or generate a new key for a new logical job. |
+| 404 | `etl_job_not_found` | `urn:mightyetl:problem:etl-job-not-found` | The job is absent from the authenticated principal namespace | Stop polling that identifier. The same response deliberately covers malformed, missing, and differently owned identifiers. |
 | 503 | `etl_target_unavailable` | `urn:mightyetl:problem:etl-target-unavailable` | The target failed with a transient data-access condition after the configured retry policy | Retry with bounded exponential backoff and jitter. For keyed requests, preserve the same semantic key and identical JSON text. |
 | 500 | `etl_target_failure` | `urn:mightyetl:problem:etl-target-failure` | The target or durable job store rejected work with a non-transient data-access failure | Stop automatic retries and involve an operator. |
 | 500 | `etl_internal_error` | `urn:mightyetl:problem:etl-internal-error` | An unexpected application failure occurred | Stop automatic retries and involve an operator. |
@@ -53,13 +53,14 @@ The synchronous endpoint does not constrain handler selection to the successful 
 ## Example
 
 ```http
-HTTP/1.1 409 Conflict
+HTTP/1.1 422 Unprocessable Content
+Cache-Control: no-store
 Content-Type: application/problem+json
 
 {
   "type": "urn:mightyetl:problem:etl-job-submission-key-reused",
   "title": "ETL job submission key reused",
-  "status": 409,
+  "status": 422,
   "detail": "The Idempotency-Key already identifies a different durable ETL job payload.",
   "instance": "/api/etl/jobs",
   "errorCode": "etl_job_submission_key_reused"
