@@ -55,7 +55,7 @@ class EtlServiceErrorClassificationTest {
             "[\"not-an-object\"]",
             "[{\"name\":\"missing-id\"}]",
             "[{\"id\":123}]",
-            "[{\"id\":\" record_alpha \\"}]",
+            "[{\"id\":\" record_alpha \"}]",
             "[{\"id\":\"record_alpha\",\"Name\":\"first\",\"NAME\":\"second\"}]"
     })
     void classifiesSemanticRecordFailuresAsInvalidRecord(String payload) {
