@@ -38,6 +38,7 @@ header identifies the status monitor:
 ```http
 HTTP/1.1 202 Accepted
 Location: /api/etl/jobs/{job_record_id}
+Cache-Control: no-store
 Idempotency-Replayed: false
 Content-Type: application/json
 
@@ -48,9 +49,13 @@ Content-Type: application/json
 }
 ```
 
+All successful and covered problem responses for durable job resources include
+`Cache-Control: no-store`. These authenticated operational resources must not be retained by shared
+or private caches.
+
 A retry that resolves to the same durable resource returns the same job identifier and
 `Idempotency-Replayed: true`. Reusing the same principal-scoped key with different JSON text returns
-`409 etl_job_submission_key_reused`. A concurrent creation attempt that cannot acquire the
+`422 etl_job_submission_key_reused`. A concurrent creation attempt that cannot acquire the
 transaction-level submission lock returns `409 etl_job_submission_in_progress` rather than waiting
 without a client-visible bound.
 
@@ -81,13 +86,18 @@ descriptive multi-word `snake_case` names. The database stores:
 
 - an opaque UUID job identifier;
 - SHA-256 hashes of the principal scope, semantic submission key, and exact JSON text;
-- the request payload needed by the future worker;
+- the request payload needed by the future worker while status is `PENDING` or `RUNNING`;
 - status, attempt, failure, and timestamp fields.
 
+The schema reserves the stable lifecycle vocabulary `PENDING`, `RUNNING`, `SUCCEEDED`, and `FAILED`.
+A database check requires a non-null request payload only for the two nonterminal states and requires
+that payload to be null for both terminal states. This makes terminal payload clearing an enforced
+persistence invariant rather than a documentation-only convention.
+
 Raw authenticated principal names and raw idempotency keys are never persisted. The request payload
-is sensitive operational data and must inherit the classification of its source records. It must be
-cleared when a later worker reaches a terminal state; until that worker slice ships, operators must
-apply database access control, encryption, backup, and retention policy accordingly.
+is sensitive operational data and must inherit the classification of its source records. Until the
+worker slice reaches a terminal state and clears it, operators must apply database access control,
+encryption, backup, and retention policy accordingly.
 
 ## Operational boundary
 
@@ -105,7 +115,7 @@ and clear the stored request payload at terminal state.
   failures.
 - RFC 9651 defines the current Structured Fields String syntax accepted for `Idempotency-Key`.
 - The expired IETF HTTPAPI `Idempotency-Key` draft-07 is used only as work-in-progress design
-  evidence for unique client keys, request fingerprints, conflict handling, and tenant-isolation
+  evidence for unique client keys, request fingerprints, `422` payload conflicts, and tenant-isolation
   security concerns. It expired on April 18, 2026 and is not represented as a published RFC.
 
 ### References
