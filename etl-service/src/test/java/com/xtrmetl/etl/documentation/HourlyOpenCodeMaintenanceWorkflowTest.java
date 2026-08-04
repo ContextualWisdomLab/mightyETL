@@ -53,7 +53,8 @@ class HourlyOpenCodeMaintenanceWorkflowTest {
     }
 
     /**
-     * Verifies that runs are offset from the top of the hour, serialized, and time bounded.
+     * Verifies that runs are offset from the top of the hour, serialized, and time bounded,
+     * including forced termination when an agent ignores the graceful termination signal.
      */
     @Test
     void schedulesOneBoundedNonOverlappingRunPerHour() {
@@ -61,7 +62,9 @@ class HourlyOpenCodeMaintenanceWorkflowTest {
         assertTrue(workflow.contains("group: hourly-opencode-maintenance"));
         assertTrue(workflow.contains("cancel-in-progress: false"));
         assertTrue(workflow.contains("timeout-minutes: 50"));
-        assertTrue(workflow.contains("timeout --signal=TERM 45m opencode github run"));
+        assertTrue(workflow.contains(
+                "timeout --signal=TERM --kill-after=30s 45m opencode github run"
+        ));
     }
 
     /**
