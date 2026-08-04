@@ -63,7 +63,7 @@ class EtlServiceErrorClassificationTest {
     }
 
     @Test
-    void classifiesDuplicateJsonFieldsAsInvalidRecord() {
+    void classifiesDuplicateJsonFieldsAsInvalidJson() {
         String payload = """
                 [{
                   "id":"record_alpha",
@@ -72,7 +72,7 @@ class EtlServiceErrorClassificationTest {
                 }]
                 """;
 
-        assertError(EtlRequestError.INVALID_RECORD, payload, properties(4096, 10));
+        assertError(EtlRequestError.INVALID_JSON, payload, properties(4096, 10));
     }
 
     private void assertError(
