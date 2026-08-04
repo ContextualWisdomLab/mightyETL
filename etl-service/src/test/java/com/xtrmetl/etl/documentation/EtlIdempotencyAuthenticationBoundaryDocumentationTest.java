@@ -17,7 +17,7 @@ class EtlIdempotencyAuthenticationBoundaryDocumentationTest {
 
     @Test
     void distinguishesSecurityLayerRejectionFromTheControllerPrincipalGuard() throws IOException {
-        String runbook = readRunbook();
+        String runbook = normalizedRunbook();
 
         assertTrue(runbook.contains("rejected before the ETL controller"));
         assertTrue(runbook.contains("may not carry `etl_idempotency_principal_required`"));
@@ -26,7 +26,7 @@ class EtlIdempotencyAuthenticationBoundaryDocumentationTest {
 
     @Test
     void documentsStructuredFieldWireSyntaxAndLegacyNormalization() throws IOException {
-        String runbook = readRunbook();
+        String runbook = normalizedRunbook();
 
         assertTrue(runbook.contains("RFC 9651"));
         assertTrue(runbook.contains("Idempotency-Key: \"550e8400-e29b-41d4-a716-446655440000\""));
@@ -34,11 +34,11 @@ class EtlIdempotencyAuthenticationBoundaryDocumentationTest {
         assertTrue(runbook.contains("same semantic key"));
     }
 
-    private static String readRunbook() throws IOException {
+    private static String normalizedRunbook() throws IOException {
         return Files.readString(
                 projectRoot().resolve("docs/etl/idempotent-retries.md"),
                 StandardCharsets.UTF_8
-        );
+        ).replaceAll("\\s+", " ");
     }
 
     private static Path projectRoot() {
