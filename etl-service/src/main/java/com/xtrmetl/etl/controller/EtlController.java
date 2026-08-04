@@ -1,8 +1,10 @@
 package com.xtrmetl.etl.controller;
 
 import com.xtrmetl.etl.connector.TargetConnectorDispatcher;
+import com.xtrmetl.etl.service.EtlRequestException;
 import com.xtrmetl.etl.service.EtlService;
 import io.micrometer.observation.annotation.Observed;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -47,7 +49,9 @@ public class EtlController {
      *
      * <p>The mapping does not constrain response negotiation to the successful representation.
      * This allows callers that accept only {@code application/problem+json} to receive typed
-     * failure responses before a successful text body is selected.</p>
+     * failure responses before a successful text body is selected. Typed request and data-access
+     * failures retain their dedicated handlers; only an unexpected runtime failure raised during
+     * the service invocation is wrapped as an ETL internal failure.</p>
      *
      * @param jsonInput UTF-8 JSON array request body
      * @return existing newline-delimited plain-text success response
@@ -55,9 +59,18 @@ public class EtlController {
     @PostMapping("/process")
     @Observed(name = "etl.process", contextualName = "etl-processing")
     public ResponseEntity<String> processData(@RequestBody String jsonInput) {
+        final String result;
+        try {
+            result = etlService.processData(jsonInput);
+        } catch (EtlRequestException | DataAccessException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            throw new EtlUnexpectedException(exception);
+        }
+
         return ResponseEntity.ok()
                 .contentType(MediaType.TEXT_PLAIN)
-                .body(etlService.processData(jsonInput));
+                .body(result);
     }
 
     /**
