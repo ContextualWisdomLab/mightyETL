@@ -56,7 +56,7 @@ public enum EtlRequestError {
             "etl_invalid_idempotency_key",
             "urn:mightyetl:problem:etl-invalid-idempotency-key",
             "Invalid ETL idempotency key",
-            "Idempotency-Key must contain 16 to 128 safe ASCII characters."
+            "Idempotency-Key must be a quoted Structured Field String or a supported legacy raw value containing 16 to 128 safe ASCII characters."
     ),
 
     /** An idempotency-protected request has no authenticated principal namespace. */
