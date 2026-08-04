@@ -164,7 +164,7 @@ public class EtlService {
      * Processes or replays one principal-scoped idempotent ETL request.
      *
      * <p>The client key and authenticated principal are never stored in plaintext. A standards-
-     * shaped RFC 8941 quoted String and the retained legacy raw representation are normalized to
+     * shaped RFC 9651 quoted String and the retained legacy raw representation are normalized to
      * the same semantic key before its principal-scoped SHA-256 hash is calculated. A transaction-
      * level lock serializes competing requests. Reusing a committed key with the same payload
      * returns the original response without another target write. Reusing it with a different
@@ -177,7 +177,7 @@ public class EtlService {
      * which prevents direct construction or self-invocation from silently weakening durability.</p>
      *
      * @param data UTF-8 JSON array payload
-     * @param idempotencyKey quoted RFC 8941 String or legacy raw safe-ASCII key of 16 to 128 characters
+     * @param idempotencyKey quoted RFC 9651 String or legacy raw safe-ASCII key of 16 to 128 characters
      * @param principalScope authenticated principal name used only to isolate the key namespace
      * @return response body and whether it was replayed from the durable ledger
      * @throws EtlRequestException when the key, principal, payload, or record contract is invalid
