@@ -8,6 +8,11 @@ spring:
     url: jdbc:postgresql://${PGHOST}:${PGPORT}/${PGDATABASE}
     username: ${PGUSER}
     password: ${PGPASSWORD}
+  flyway:
+    baseline-on-migrate: ${FLYWAY_BASELINE_ON_MIGRATE:false}
+    baseline-version: 0
+    clean-disabled: true
+    validate-migration-naming: true
   jpa:
     hibernate:
       ddl-auto: update
