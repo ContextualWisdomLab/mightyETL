@@ -174,6 +174,7 @@ public class EtlService {
     private static boolean isUnsafeIdentifierCodePoint(int codePoint) {
         int characterType = Character.getType(codePoint);
         return Character.isISOControl(codePoint)
+                || characterType == Character.FORMAT
                 || characterType == Character.LINE_SEPARATOR
                 || characterType == Character.PARAGRAPH_SEPARATOR;
     }
@@ -181,8 +182,8 @@ public class EtlService {
     private static IllegalArgumentException invalidIdentifier(int index) {
         return new IllegalArgumentException(
                 "Record at index " + index
-                        + " requires a trimmed string id without control or line-separator "
-                        + "characters and with at most "
+                        + " requires a trimmed string id without control, formatting, or "
+                        + "line-separator characters and with at most "
                         + MAX_RECORD_ID_CODE_POINTS + " Unicode code points"
         );
     }
