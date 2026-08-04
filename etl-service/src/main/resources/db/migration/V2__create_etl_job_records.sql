@@ -5,7 +5,7 @@ CREATE TABLE etl_job_records (
     principal_scope_hash CHAR(64) NOT NULL,
     submission_key_hash CHAR(64) NOT NULL,
     request_digest CHAR(64) NOT NULL,
-    request_payload TEXT NOT NULL,
+    request_payload TEXT,
     job_status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
     attempt_count INTEGER NOT NULL DEFAULT 0,
     failure_code VARCHAR(128),
@@ -21,7 +21,11 @@ CREATE TABLE etl_job_records (
         request_digest ~ '^[0-9a-f]{64}$'
     ),
     CONSTRAINT etl_job_status_value_check CHECK (
-        job_status IN ('PENDING', 'PROCESSING', 'SUCCEEDED', 'FAILED')
+        job_status IN ('PENDING', 'RUNNING', 'SUCCEEDED', 'FAILED')
+    ),
+    CONSTRAINT etl_job_payload_lifecycle_check CHECK (
+        (job_status IN ('PENDING', 'RUNNING') AND request_payload IS NOT NULL)
+        OR (job_status IN ('SUCCEEDED', 'FAILED') AND request_payload IS NULL)
     ),
     CONSTRAINT etl_job_attempt_count_nonnegative CHECK (
         attempt_count >= 0
