@@ -40,3 +40,11 @@ workflows, and service-level maintenance.
 - Prefer updates to existing workflows/docs over adding new systems.
 - Keep automation explicit and auditable (clear triggers, least-privilege permissions).
 - When unsure, prefer conservative defaults that reduce security and release risk.
+
+## Code-owner review gates — disabled (on hold)
+
+As of 2026-08-04, code-owner review requirements (`require_code_owner_reviews` in branch
+protection, `require_code_owner_review` in rulesets) are disabled across the ContextualWisdomLab
+org: there is a single maintainer (solo developer), so a code-owner approval gate can never be
+satisfied. This is ON HOLD until the org has multiple maintainers — do NOT re-enable these
+settings or add CODEOWNERS-based merge gates before then.
