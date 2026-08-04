@@ -14,11 +14,13 @@ This slice covers only the synchronous ETL request endpoint. Connector-catalog r
 |:-----------|------------:|:--------|:----------------------|
 | `etl_payload_too_large` | 413 | UTF-8 payload exceeds the configured byte limit | The ETL request payload exceeds the configured limit. |
 | `etl_batch_too_large` | 413 | JSON array exceeds the configured record limit | The ETL request contains too many records. |
-| `etl_invalid_json` | 400 | Body is null, malformed JSON, or not a top-level array | The request body must be a valid JSON array. |
-| `etl_invalid_record` | 422 | A record, identifier, duplicate field, normalized key, or transform input violates the ETL contract | One or more ETL records violate the request contract. |
+| `etl_invalid_json` | 400 | Body is null, malformed JSON, contains an exact duplicate JSON field, or is not a top-level array | The request body must be a valid JSON array. |
+| `etl_invalid_record` | 422 | A record, identifier, normalized output key, or transform input violates the ETL semantic contract | One or more ETL records violate the request contract. |
 | `etl_target_unavailable` | 503 | A transient target data-access failure remains after retries | The ETL target is temporarily unavailable. |
 | `etl_target_failure` | 500 | A deterministic or unexpected target data-access failure occurs | The ETL target could not process the request. |
 | `etl_internal_error` | 500 | An unexpected application failure escapes the typed boundaries | The ETL request could not be processed. |
+
+Exact duplicate JSON fields are classified as malformed JSON because Jackson rejects them while parsing, before a record tree exists. Distinct field names that collide after locale-independent uppercase normalization are valid JSON but invalid ETL records and therefore return 422.
 
 Every problem response includes:
 
@@ -62,7 +64,7 @@ Tests must prove:
 3. transient and non-transient data-access failures map to 503 and 500 respectively;
 4. raw exception text containing a synthetic secret never appears in the response;
 5. unexpected exceptions map to the generic 500 problem;
-6. the service emits the correct typed exception for payload, batch, JSON, and record failures;
+6. the service emits the correct typed exception for payload, batch, JSON, exact duplicate-field, and semantic-record failures;
 7. added production statements and branches reach 100% focused coverage.
 
 ## Documentation
