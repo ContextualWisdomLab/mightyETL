@@ -103,6 +103,28 @@ class EtlServiceIdempotencyIntegrationTest {
     }
 
     @Test
+    void normalizesStructuredFieldAndLegacyRepresentationsToTheSameLedgerKey() {
+        String payload = "[{\"id\":\"record_alpha\"}]";
+
+        EtlIdempotencyResult first = etlService.processDataIdempotently(
+                payload,
+                "\"" + IDEMPOTENCY_KEY + "\"",
+                PRINCIPAL_SCOPE
+        );
+        EtlIdempotencyResult replay = etlService.processDataIdempotently(
+                payload,
+                IDEMPOTENCY_KEY,
+                PRINCIPAL_SCOPE
+        );
+
+        assertFalse(first.replayed());
+        assertTrue(replay.replayed());
+        assertEquals(first.responseBody(), replay.responseBody());
+        assertEquals(1, countRows("processed_data"));
+        assertEquals(1, countRows("etl_idempotency_records"));
+    }
+
+    @Test
     void rejectsReuseOfTheSameScopedKeyWithDifferentPayload() {
         etlService.processDataIdempotently(
                 "[{\"id\":\"record_alpha\"}]",
