@@ -22,12 +22,7 @@ configuration. A deployment may place the service behind a gateway, but that gat
 or establish downstream authentication that the ETL service itself can verify. Gateway-only Reactor
 security context is not a downstream service principal and must not be treated as one.
 
-The default security chain requires authentication for `/api/**`. A request without valid service
-credentials is rejected before the ETL controller and may not carry
-`etl_idempotency_principal_required`, because the security layer owns that response. The typed code
-applies when a keyed request reaches the controller without a principal, such as an embedded
-integration or an alternate security chain. Clients must therefore treat any pre-controller `401`
-as an authentication failure without assuming an ETL problem body.
+The default security chain requires authentication for `/api/**`. A request without valid service credentials is rejected before the ETL controller and may not carry `etl_idempotency_principal_required`, because the security layer owns that response. The typed code applies when a keyed request reaches the controller without a principal, such as an embedded integration or an alternate security chain. Clients must therefore treat any pre-controller `401` as an authentication failure without assuming an ETL problem body.
 
 mightyETL accepts a deliberately narrow key profile: 16 to 128 characters from
 `A-Z`, `a-z`, `0-9`, `.`, `_`, `:`, and `-`. UUIDs satisfy this profile. Generate high-entropy,
