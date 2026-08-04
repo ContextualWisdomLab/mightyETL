@@ -36,7 +36,8 @@ class HourlyOpenCodeMaintenanceWorkflowTest {
 
     /**
      * Reads the workflow once after first producing an ordinary assertion failure when the
-     * production workflow has not yet been implemented.
+     * production workflow has not yet been implemented. Line endings are normalized so the same
+     * structural contracts run deterministically on Windows, Linux, and macOS checkouts.
      *
      * @throws IOException when the workflow exists but cannot be read as UTF-8 text
      */
@@ -49,7 +50,8 @@ class HourlyOpenCodeMaintenanceWorkflowTest {
                 Files.exists(workflowPath),
                 "The hourly OpenCode maintenance workflow must exist"
         );
-        workflow = Files.readString(workflowPath, StandardCharsets.UTF_8);
+        workflow = Files.readString(workflowPath, StandardCharsets.UTF_8)
+                .replace("\r\n", "\n");
     }
 
     /**
