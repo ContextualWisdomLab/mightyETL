@@ -22,6 +22,13 @@ configuration. A deployment may place the service behind a gateway, but that gat
 or establish downstream authentication that the ETL service itself can verify. Gateway-only Reactor
 security context is not a downstream service principal and must not be treated as one.
 
+The default security chain requires authentication for `/api/**`. A request without valid service
+credentials is rejected before the ETL controller and may not carry
+`etl_idempotency_principal_required`, because the security layer owns that response. The typed code
+applies when a keyed request reaches the controller without a principal, such as an embedded
+integration or an alternate security chain. Clients must therefore treat any pre-controller `401`
+as an authentication failure without assuming an ETL problem body.
+
 mightyETL accepts a deliberately narrow key profile: 16 to 128 characters from
 `A-Z`, `a-z`, `0-9`, `.`, `_`, `:`, and `-`. UUIDs satisfy this profile. Generate high-entropy,
 unguessable keys and use a new key for every logically new batch.
@@ -55,14 +62,15 @@ Idempotency-Replayed: true
 | HTTP | `errorCode` | Meaning |
 | ---: | --- | --- |
 | 400 | `etl_invalid_idempotency_key` | The key is absent from the supported safe profile. |
-| 401 | `etl_idempotency_principal_required` | A keyed request has no authenticated principal namespace. |
+| 401 | `etl_idempotency_principal_required` | A keyed request reached the ETL controller without a principal; default unauthenticated HTTP requests are normally rejected earlier by Spring Security. |
 | 422 | `etl_idempotency_key_reused` | The same principal-scoped key already committed a different payload digest. |
 
 Existing ETL admission errors also apply to keyed requests. In particular, an oversized UTF-8
 payload returns `413 etl_payload_too_large` before request-lock or ledger access.
 
-Errors use the repository's RFC 9457 `application/problem+json` contract and never include the raw
-key, principal, payload, SQL text, or exception message.
+Errors that reach the ETL controller use the repository's RFC 9457 `application/problem+json`
+contract and never include the raw key, principal, payload, SQL text, or exception message.
+Authentication or authorization failures rejected earlier remain governed by the security layer.
 
 ## Transaction and concurrency guarantees
 
