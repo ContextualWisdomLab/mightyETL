@@ -66,6 +66,16 @@ class EtlProblemDetailsDocumentationTest {
     }
 
     @Test
+    void publicServiceDocumentationUsesTheCurrentStructuredFieldsStandard() throws IOException {
+        String serviceSource = read(
+                "etl-service/src/main/java/com/xtrmetl/etl/service/EtlService.java"
+        );
+
+        assertTrue(serviceSource.contains("RFC 9651"));
+        assertFalse(serviceSource.contains("RFC 8941"));
+    }
+
+    @Test
     void localComposeBaselinesTheKnownBootstrapSchemaBeforeMigrationOne() throws IOException {
         String compose = read("docker-compose.yml");
         String runbook = read("docs/etl/idempotent-retries.md");
