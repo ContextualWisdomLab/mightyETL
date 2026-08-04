@@ -26,6 +26,9 @@ class EtlProblemDetailsDocumentationTest {
             "etl_idempotency_principal_required",
             "etl_idempotency_key_reused",
             "etl_idempotency_request_in_progress",
+            "etl_job_submission_key_reused",
+            "etl_job_submission_in_progress",
+            "etl_job_not_found",
             "etl_target_unavailable",
             "etl_target_failure",
             "etl_internal_error"
@@ -43,6 +46,8 @@ class EtlProblemDetailsDocumentationTest {
         assertTrue(runbook.contains("does not make retries idempotent"));
         assertTrue(runbook.contains("Idempotency-Replayed"));
         assertTrue(runbook.contains("docs/etl/idempotent-retries.md"));
+        assertTrue(runbook.contains("docs/etl/durable-job-intake.md"));
+        assertTrue(runbook.contains("202 Accepted"));
         for (String errorCode : ERROR_CODES) {
             assertTrue(runbook.contains(errorCode), "Missing problem code: " + errorCode);
         }
@@ -83,9 +88,11 @@ class EtlProblemDetailsDocumentationTest {
         String serviceSource = read(
                 "etl-service/src/main/java/com/xtrmetl/etl/service/EtlService.java"
         );
+        String jobRunbook = read("docs/etl/durable-job-intake.md");
 
         assertTrue(serviceSource.contains("RFC 9651"));
         assertFalse(serviceSource.contains("RFC 8941"));
+        assertTrue(jobRunbook.contains("RFC 9651"));
     }
 
     @Test
@@ -119,6 +126,8 @@ class EtlProblemDetailsDocumentationTest {
         assertTrue(changelog.contains("docs/api/problem-details.md"));
         assertTrue(changelog.contains("etl_idempotency_request_in_progress"));
         assertTrue(changelog.contains("pg_try_advisory_xact_lock"));
+        assertTrue(changelog.contains("POST /api/etl/jobs"));
+        assertTrue(changelog.contains("docs/etl/durable-job-intake.md"));
     }
 
     private static String read(String relativePath) throws IOException {
