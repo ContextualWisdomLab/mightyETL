@@ -24,6 +24,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -54,12 +55,16 @@ class EtlJobServiceIntegrationTest {
                     principal_scope_hash CHAR(64) NOT NULL,
                     submission_key_hash CHAR(64) NOT NULL,
                     request_digest CHAR(64) NOT NULL,
-                    request_payload VARCHAR(8192) NOT NULL,
+                    request_payload VARCHAR(8192),
                     job_status VARCHAR(32) NOT NULL,
                     attempt_count INTEGER NOT NULL DEFAULT 0,
                     failure_code VARCHAR(128),
                     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    lease_token UUID,
+                    lease_expires_at TIMESTAMP WITH TIME ZONE,
+                    next_attempt_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    processed_record_count INTEGER,
                     CONSTRAINT etl_job_submission_scope_unique
                         UNIQUE (principal_scope_hash, submission_key_hash)
                 )
@@ -138,8 +143,33 @@ class EtlJobServiceIntegrationTest {
         assertEquals(created.jobRecordId(), snapshot.jobRecordId());
         assertEquals(EtlJobStatus.PENDING, snapshot.jobStatus());
         assertEquals(0, snapshot.attemptCount());
+        assertNull(snapshot.processedRecordCount());
         assertEquals(EtlRequestError.JOB_NOT_FOUND, hidden.error());
         assertEquals(EtlRequestError.JOB_NOT_FOUND, missing.error());
+    }
+
+    @Test
+    void returnsTheSuccessfulProcessedRecordCount() {
+        EtlJobSubmission created = etlJobService.submit(PAYLOAD, IDEMPOTENCY_KEY, "tenant_alpha");
+        jdbcTemplate.update(
+                """
+                UPDATE etl_job_records
+                SET job_status = 'SUCCEEDED',
+                    request_payload = NULL,
+                    processed_record_count = 1,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE job_record_id = ?
+                """,
+                created.jobRecordId()
+        );
+
+        EtlJobSnapshot snapshot = etlJobService.findOwned(
+                created.jobRecordId(),
+                "tenant_alpha"
+        );
+
+        assertEquals(EtlJobStatus.SUCCEEDED, snapshot.jobStatus());
+        assertEquals(1, snapshot.processedRecordCount());
     }
 
     @Test
