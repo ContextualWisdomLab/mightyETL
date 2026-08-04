@@ -2,13 +2,13 @@
 
 ## Contract
 
-`POST /api/etl/process` uses [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457.html) Problem Details for HTTP APIs for request-body, validation, target, and unexpected application failures that reach the ETL controller boundary. The media type is:
+`POST /api/etl/process` uses [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457.html) Problem Details for HTTP APIs for request-body, validation, idempotency, target, and unexpected application failures that reach the ETL controller boundary. The media type is:
 
 ```text
 application/problem+json
 ```
 
-Successful `POST /api/etl/process` responses remain `200 text/plain` with one `Processed: <id>` line per accepted record. Only covered failure responses use the problem-details representation.
+Successful `POST /api/etl/process` responses remain `200 text/plain` with one `Processed: <id>` line per accepted record. Only covered failure responses use the problem-details representation. Keyed successes also return `Idempotency-Replayed: false` for the first committed execution or `Idempotency-Replayed: true` when a prior response is replayed.
 
 Routing, authentication, authorization, gateway, reverse-proxy, and servlet-container failures remain governed by the component that rejects the request. Clients must not assume that a request rejected before the ETL controller will carry an ETL `errorCode`.
 
@@ -23,7 +23,7 @@ Every ETL problem body contains:
 | `instance` | Request path without query-string data |
 | `errorCode` | Stable snake_case machine code |
 
-The response never includes internal exception text, nested causes, SQL statements, credentials, file-system paths, or stack traces. Clients should branch on `errorCode`, not parse prose from `title` or `detail`.
+The response never includes internal exception text, nested causes, SQL statements, credentials, file-system paths, raw idempotency keys, authenticated principal names, request payloads, or stack traces. Clients should branch on `errorCode`, not parse prose from `title` or `detail`.
 
 ## Error catalog
 
@@ -33,7 +33,10 @@ The response never includes internal exception text, nested causes, SQL statemen
 | 413 | `etl_batch_too_large` | `urn:mightyetl:problem:etl-batch-too-large` | Record count exceeds `max-batch-records` | Split the array into smaller requests. |
 | 400 | `etl_invalid_json` | `urn:mightyetl:problem:etl-invalid-json` | Body is absent, malformed, has an exact duplicate JSON field, or is not a top-level array | Correct the JSON document before retrying. |
 | 422 | `etl_invalid_record` | `urn:mightyetl:problem:etl-invalid-record` | A record, identifier, normalized output key, or semantic transform input violates the ETL contract | Correct the record content before retrying. |
-| 503 | `etl_target_unavailable` | `urn:mightyetl:problem:etl-target-unavailable` | The target failed with a transient data-access condition after the configured retry policy | Retry with bounded exponential backoff and jitter. |
+| 400 | `etl_invalid_idempotency_key` | `urn:mightyetl:problem:etl-invalid-idempotency-key` | `Idempotency-Key` is outside the supported bounded safe-ASCII profile | Generate a new 16-to-128-character high-entropy key using the documented character set. |
+| 401 | `etl_idempotency_principal_required` | `urn:mightyetl:problem:etl-idempotency-principal-required` | A keyed request reached the controller without an authenticated principal namespace | Authenticate and resend the request with the same body and key. |
+| 422 | `etl_idempotency_key_reused` | `urn:mightyetl:problem:etl-idempotency-key-reused` | The same principal-scoped key already committed a different payload digest | Do not retry with that key; use the original payload or generate a new key for a new logical batch. |
+| 503 | `etl_target_unavailable` | `urn:mightyetl:problem:etl-target-unavailable` | The target failed with a transient data-access condition after the configured retry policy | Retry with bounded exponential backoff and jitter. For keyed requests, preserve the same key and byte-identical body. |
 | 500 | `etl_target_failure` | `urn:mightyetl:problem:etl-target-failure` | The target rejected work with a non-transient data-access failure | Stop automatic retries and involve an operator. |
 | 500 | `etl_internal_error` | `urn:mightyetl:problem:etl-internal-error` | An unexpected application failure occurred | Stop automatic retries and involve an operator. |
 
@@ -61,11 +64,12 @@ The fixed detail deliberately does not reveal which internal parser, validation 
 
 ## Retry guidance
 
-- `400`, `413`, and `422` are deterministic request failures. Correct or split the request; blind retries repeat the same rejection.
+- `400`, `413`, and record-validation `422` responses are deterministic request failures. Correct or split the request; blind retries repeat the same rejection.
+- `etl_idempotency_key_reused` is also deterministic. A new logical payload requires a new key.
 - `503` represents a transient target failure. Retry only with a bounded attempt count, exponential backoff, and jitter.
 - `500` requires operator investigation. Do not automatically retry `500` responses.
 
-A retry of the synchronous endpoint repeats the whole accepted transaction. This contract does not make retries idempotent. Until a separate idempotency-key and durable job contract is shipped, callers must prevent duplicate business effects at their own workflow boundary.
+An unkeyed retry repeats the whole accepted transaction and can duplicate business effects after an ambiguous transport failure. A keyed retry is principal-scoped and durable: preserve the exact key and byte-identical payload to replay the prior committed response without another target write. See [`docs/etl/idempotent-retries.md`](../etl/idempotent-retries.md) for the complete key, migration, concurrency, and retention contract.
 
 ## Compatibility
 
