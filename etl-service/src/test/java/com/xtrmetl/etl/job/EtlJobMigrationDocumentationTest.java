@@ -37,7 +37,7 @@ class EtlJobMigrationDocumentationTest {
 
     @Test
     void runbookDocumentsAcceptedSemanticsOwnershipAndTheWorkerBoundary() throws IOException {
-        String runbook = read("docs/etl/durable-job-intake.md");
+        String runbook = read("docs/etl/durable-job-intake.md").replaceAll("\\s+", " ");
 
         assertTrue(runbook.contains("202 Accepted"));
         assertTrue(runbook.contains("Location: /api/etl/jobs/{job_record_id}"));
