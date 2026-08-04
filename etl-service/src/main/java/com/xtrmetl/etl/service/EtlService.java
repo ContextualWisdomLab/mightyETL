@@ -196,6 +196,7 @@ public class EtlService {
             throw new EtlRequestException(EtlRequestError.INVALID_JSON);
         }
         requireActiveTransaction();
+        enforcePayloadLimit(data);
 
         String idempotencyKeyHash = sha256(
                 validatedScope.length() + ":" + validatedScope + ":" + validatedKey
