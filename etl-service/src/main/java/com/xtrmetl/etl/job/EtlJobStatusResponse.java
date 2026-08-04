@@ -1,5 +1,6 @@
 package com.xtrmetl.etl.job;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import org.springframework.lang.Nullable;
 
@@ -10,20 +11,24 @@ import java.util.UUID;
 /**
  * Client-visible status representation for one owner-scoped durable ETL job.
  *
+ * <p>Timestamps are explicitly serialized as ISO-8601 strings. The wire contract therefore does
+ * not depend on an application-wide Jackson timestamp setting or on the HTTP adapter used by an
+ * embedded integration.</p>
+ *
  * @param jobRecordId opaque durable job identifier
  * @param jobStatus current stable lifecycle state
  * @param attemptCount number of worker claims recorded for this job
  * @param failureCode stable terminal failure code, omitted before failure
- * @param createdAt creation timestamp
- * @param updatedAt most recent state-change timestamp
+ * @param createdAt creation timestamp serialized as an ISO-8601 string
+ * @param updatedAt most recent state-change timestamp serialized as an ISO-8601 string
  */
 public record EtlJobStatusResponse(
         UUID jobRecordId,
         EtlJobStatus jobStatus,
         int attemptCount,
         @JsonInclude(JsonInclude.Include.NON_NULL) @Nullable String failureCode,
-        Instant createdAt,
-        Instant updatedAt
+        @JsonFormat(shape = JsonFormat.Shape.STRING) Instant createdAt,
+        @JsonFormat(shape = JsonFormat.Shape.STRING) Instant updatedAt
 ) {
 
     /**
