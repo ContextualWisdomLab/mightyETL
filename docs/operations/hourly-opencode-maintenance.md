@@ -33,7 +33,7 @@ Never place the key in repository variables, source files, workflow output, issu
 | OpenCode provider/model | `nvidia/qwen/qwen3-coder-480b-a35b-instruct` |
 | OpenCode agent | Repository `default_agent`, with OpenCode 1.18.13 falling back to `build` |
 | Checkout action | `actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0` |
-| OpenCode process timeout | 45 minutes, terminated with `TERM` |
+| OpenCode process timeout | `TERM` after 45 minutes, then `KILL` after a 30-second grace period |
 | GitHub job timeout | 50 minutes |
 | Session sharing | disabled |
 | Overlapping runs | disabled; an active run is not cancelled |
@@ -53,7 +53,7 @@ Before starting OpenCode, the workflow therefore:
 3. derives a Basic authorization header in memory from `x-access-token:${GITHUB_TOKEN}` without printing it;
 4. stores that header only in the checked-out repository's local Git configuration;
 5. sets the local commit author to `opencode-agent[bot]`;
-6. installs an `EXIT` trap that removes the authorization header after success, failure, or timeout.
+6. installs an `EXIT` trap that removes the authorization header after success, failure, graceful timeout, or forced process termination.
 
 The local author identity contains no credential. The authorization header is short-lived on the ephemeral runner and is not committed. The agent still receives `GITHUB_TOKEN` because OpenCode uses it for GitHub API operations such as pull-request creation. No OIDC or fallback model credential is introduced.
 
@@ -111,7 +111,7 @@ The agent must not:
 | Git bootstrap fails | Job fails before OpenCode starts | Inspect local Git configuration commands and retain `persist-credentials: false` |
 | Exact OpenCode version unavailable or mismatched | Installation step fails | Investigate npm availability and supply-chain status before changing the pin |
 | NVIDIA API unavailable or model rejected | OpenCode step fails | Check NVIDIA service health and model availability; retain the current PR state |
-| Process exceeds 45 minutes | `timeout` sends `TERM`, the credential-cleanup trap runs, and the step fails | Inspect the incomplete feature branch or PR; reduce slice size if needed |
+| Process exceeds 45 minutes | `timeout` sends `TERM`, escalates to `KILL` after 30 seconds if necessary, the credential-cleanup trap runs, and the step fails | Inspect the incomplete feature branch or PR; reduce slice size if needed |
 | GitHub job exceeds 50 minutes | GitHub cancels the job | Investigate runner or process shutdown behavior and verify the ephemeral runner was destroyed |
 | Tests or security checks fail | Pull request remains unmergeable | Fix the current exact head; never weaken the gate |
 | Token permission denied | Operation fails visibly | Add no permission until the exact denied operation is justified and documented |
@@ -137,6 +137,7 @@ Before merging a workflow change, verify the exact current head has:
 - no new secret reference other than `NVIDIA_NIM_API_KEY`;
 - no mutable OpenCode package or action reference;
 - `persist-credentials: false` plus explicit local direct-token Git bootstrap and `EXIT` cleanup;
+- bounded `TERM` timeout with deterministic `KILL` escalation;
 - no ineffective `AGENT` environment claim for raw OpenCode 1.18.13;
 - no review-agent credential or workflow change.
 
