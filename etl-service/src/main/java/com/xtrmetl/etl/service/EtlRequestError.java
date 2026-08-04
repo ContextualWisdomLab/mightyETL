@@ -88,7 +88,7 @@ public enum EtlRequestError {
 
     /** A durable job submission key already identifies different JSON text for this principal. */
     JOB_SUBMISSION_KEY_REUSED(
-            HttpStatus.CONFLICT,
+            HttpStatus.UNPROCESSABLE_ENTITY,
             "etl_job_submission_key_reused",
             "urn:mightyetl:problem:etl-job-submission-key-reused",
             "ETL job submission key reused",
