@@ -116,7 +116,7 @@ public class EtlJobController {
     @GetMapping("/{jobRecordId}")
     @Observed(name = "etl.jobs.status", contextualName = "etl-job-status")
     public ResponseEntity<EtlJobStatusResponse> status(
-            @PathVariable UUID jobRecordId,
+            @PathVariable("jobRecordId") UUID jobRecordId,
             @Nullable Principal principal
     ) {
         if (principal == null) {
