@@ -21,6 +21,8 @@ import java.util.stream.Stream;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -40,6 +42,7 @@ class EtlControllerTest {
     private static final String SYNTHETIC_SECRET = "synthetic-secret-password";
 
     private EtlService etlService;
+    private EtlController controller;
     private MockMvc mockMvc;
 
     @BeforeEach
@@ -49,7 +52,7 @@ class EtlControllerTest {
                 new TargetConnectorRegistry(),
                 new ConnectorProperties()
         );
-        EtlController controller = new EtlController(etlService, dispatcher);
+        controller = new EtlController(etlService, dispatcher);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new EtlApiProblemHandler())
                 .build();
@@ -107,6 +110,19 @@ class EtlControllerTest {
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.errorCode").value("etl_invalid_record"));
+    }
+
+    @Test
+    void wrapsOnlyUnexpectedServiceFailuresAtTheEtlInvocationBoundary() {
+        IllegalStateException cause = new IllegalStateException(SYNTHETIC_SECRET);
+        when(etlService.processData("[]")).thenThrow(cause);
+
+        EtlUnexpectedException exception = assertThrows(
+                EtlUnexpectedException.class,
+                () -> controller.processData("[]")
+        );
+
+        assertSame(cause, exception.getCause());
     }
 
     @Test
