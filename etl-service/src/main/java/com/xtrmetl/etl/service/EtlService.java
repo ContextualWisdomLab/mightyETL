@@ -22,6 +22,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -39,6 +40,10 @@ public class EtlService {
     private static final int MAX_AMOUNT_PRECISION = 38;
     private static final int MAX_AMOUNT_ABSOLUTE_SCALE = 18;
     private static final int MAX_RECORD_ID_CODE_POINTS = 256;
+    private static final Pattern OUTER_IDENTIFIER_WHITESPACE = Pattern.compile(
+            "^\\s|\\s$",
+            Pattern.UNICODE_CHARACTER_CLASS
+    );
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
@@ -160,8 +165,10 @@ public class EtlService {
         String id = idNode.asText();
         int codePointCount = id.codePointCount(0, id.length());
         boolean hasUnsafeCodePoint = id.codePoints().anyMatch(EtlService::isUnsafeIdentifierCodePoint);
+        boolean hasOuterUnicodeWhitespace = OUTER_IDENTIFIER_WHITESPACE.matcher(id).find();
         if (id.isBlank()
                 || !id.equals(id.strip())
+                || hasOuterUnicodeWhitespace
                 || codePointCount > MAX_RECORD_ID_CODE_POINTS
                 || hasUnsafeCodePoint) {
             throw invalidIdentifier(index);
