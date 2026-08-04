@@ -9,6 +9,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.io.IOException;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 
@@ -58,11 +59,24 @@ class CdcServiceTest {
     }
 
     @Test
-    void isRunningReflectsEngineTask() {
+    void isRunningReflectsEngineTask() throws InterruptedException {
+        CountDownLatch engineStarted = new CountDownLatch(1);
+        CountDownLatch allowEngineExit = new CountDownLatch(1);
+        doAnswer(invocation -> {
+            engineStarted.countDown();
+            allowEngineExit.await();
+            return null;
+        }).when(debeziumEngine).run();
+
         assertFalse(cdcService.isRunning());
-        cdcService.start();
-        assertTrue(cdcService.isRunning());
-        cdcService.shutdown();
+        try {
+            cdcService.start();
+            assertTrue(engineStarted.await(5, TimeUnit.SECONDS));
+            assertTrue(cdcService.isRunning());
+        } finally {
+            allowEngineExit.countDown();
+            cdcService.shutdown();
+        }
         assertFalse(cdcService.isRunning());
     }
 
