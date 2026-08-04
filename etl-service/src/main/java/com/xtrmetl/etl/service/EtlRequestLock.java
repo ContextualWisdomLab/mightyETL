@@ -1,19 +1,22 @@
 package com.xtrmetl.etl.service;
 
 /**
- * Serializes idempotency decisions for one scoped client key inside the current transaction.
+ * Attempts to serialize one scoped idempotency decision inside the current transaction.
  *
- * <p>Implementations must block competing transactions that use the same full SHA-256 key hash.
- * The lock must remain effective until the surrounding transaction completes so the ledger lookup,
- * ETL writes, and ledger insert form one race-free decision.</p>
+ * <p>Implementations must return immediately. A successful acquisition must remain effective until
+ * the surrounding transaction completes so ledger lookup, ETL writes, and ledger insertion form
+ * one race-free decision. A failed acquisition reports that a competing transaction currently owns
+ * the same lock and must not perform ledger or target work.</p>
  */
 @FunctionalInterface
 public interface EtlRequestLock {
 
     /**
-     * Acquires the transaction-lifetime lock for one scoped idempotency key hash.
+     * Attempts to acquire the transaction-lifetime lock for one scoped idempotency key hash.
      *
      * @param idempotencyKeyHash lowercase 64-character SHA-256 hash
+     * @return {@code true} when the current transaction acquired the lock; {@code false} when a
+     *         competing transaction already owns it
      */
-    void lock(String idempotencyKeyHash);
+    boolean tryLock(String idempotencyKeyHash);
 }

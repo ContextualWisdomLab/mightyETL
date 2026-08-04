@@ -25,6 +25,7 @@ class EtlProblemDetailsDocumentationTest {
             "etl_invalid_idempotency_key",
             "etl_idempotency_principal_required",
             "etl_idempotency_key_reused",
+            "etl_idempotency_request_in_progress",
             "etl_target_unavailable",
             "etl_target_failure",
             "etl_internal_error"
@@ -66,6 +67,18 @@ class EtlProblemDetailsDocumentationTest {
     }
 
     @Test
+    void idempotencyRunbookDocumentsImmediateConcurrentConflictSemantics() throws IOException {
+        String runbook = read("docs/etl/idempotent-retries.md").replaceAll("\\s+", " ");
+
+        assertTrue(runbook.contains("409 | `etl_idempotency_request_in_progress`"));
+        assertTrue(runbook.contains("pg_try_advisory_xact_lock"));
+        assertTrue(runbook.contains("returns immediately instead of waiting"));
+        assertTrue(runbook.contains("does not emit `Retry-After`"));
+        assertTrue(runbook.contains("bounded exponential backoff and jitter"));
+        assertTrue(runbook.contains("rare 64-bit advisory-prefix collision"));
+    }
+
+    @Test
     void publicServiceDocumentationUsesTheCurrentStructuredFieldsStandard() throws IOException {
         String serviceSource = read(
                 "etl-service/src/main/java/com/xtrmetl/etl/service/EtlService.java"
@@ -91,7 +104,7 @@ class EtlProblemDetailsDocumentationTest {
 
         assertTrue(readme.contains("docs/api/problem-details.md"));
         assertTrue(readme.contains("application/problem+json"));
-        assertTrue(readme.contains("400/413/422"));
+        assertTrue(readme.contains("400/409/413/422"));
         assertTrue(readme.contains("503"));
         assertTrue(readme.contains("Do not automatically retry `500`"));
     }
@@ -104,6 +117,8 @@ class EtlProblemDetailsDocumentationTest {
         assertTrue(changelog.contains("stable `errorCode`"));
         assertTrue(changelog.contains("internal exception text"));
         assertTrue(changelog.contains("docs/api/problem-details.md"));
+        assertTrue(changelog.contains("etl_idempotency_request_in_progress"));
+        assertTrue(changelog.contains("pg_try_advisory_xact_lock"));
     }
 
     private static String read(String relativePath) throws IOException {

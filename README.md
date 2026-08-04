@@ -221,7 +221,9 @@ Processes and transforms bounded JSON batches with configurable business rules.
 
 - Successful processing remains `200 text/plain`.
 - Failures use RFC 9457 `application/problem+json` with a stable snake_case `errorCode`.
-- `400/413/422` responses are deterministic client failures and should be corrected rather than blindly retried.
+- The client-visible validation and conflict surface includes `400/409/413/422` responses.
+- Correct deterministic `400/413/422` request failures instead of blindly retrying them.
+- `409 etl_idempotency_request_in_progress` is an immediate same-key conflict; retry the same semantic key and identical JSON text with bounded exponential backoff and jitter.
 - `503` represents a transient target failure and may be retried with bounded exponential backoff and jitter.
 - Do not automatically retry `500` responses; route them to operator investigation.
 - See [docs/api/problem-details.md](docs/api/problem-details.md) for the complete status, type URI, non-leakage, and retry contract.
@@ -612,6 +614,7 @@ For issues, questions, or contributions:
 
 - CDC for PostgreSQL
 - Bounded, prevalidated, transaction-scoped PostgreSQL ETL batches
+- Durable principal-scoped idempotency keys with completed-response replay and immediate concurrent-request conflicts
 - RFC 9457 ETL problem details with stable machine codes
 - JWT authentication
 - Microservices architecture
@@ -621,7 +624,7 @@ For issues, questions, or contributions:
 
 - Multi-database / any-to-any CDC (source SPI; see `docs/cdc/any-to-any-cdc.md`)
 - Databricks / Snowflake / Qlik Sense loaders (target SPI; see `docs/connectors/`)
-- Asynchronous ingestion jobs, idempotency keys, and durable retry/DLQ semantics
+- Asynchronous ingestion jobs and durable dead-letter handling
 - Web UI for configuration
 - Custom transformation functions
 - Data quality validation

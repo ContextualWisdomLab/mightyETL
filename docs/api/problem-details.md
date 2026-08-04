@@ -35,6 +35,7 @@ The response never includes internal exception text, nested causes, SQL statemen
 | 422 | `etl_invalid_record` | `urn:mightyetl:problem:etl-invalid-record` | A record, identifier, normalized output key, or semantic transform input violates the ETL contract | Correct the record content before retrying. |
 | 400 | `etl_invalid_idempotency_key` | `urn:mightyetl:problem:etl-invalid-idempotency-key` | The header is neither a supported quoted RFC 9651 String nor a compatible legacy raw value, or its semantic key is outside the bounded safe profile | Generate a 16-to-128-character high-entropy key using the documented character set and send the preferred quoted representation. |
 | 401 | `etl_idempotency_principal_required` | `urn:mightyetl:problem:etl-idempotency-principal-required` | A keyed request reached the controller without an authenticated principal namespace | Authenticate and resend the request with the same JSON text and semantic key. |
+| 409 | `etl_idempotency_request_in_progress` | `urn:mightyetl:problem:etl-idempotency-request-in-progress` | Another transaction is still processing the same principal-scoped semantic key | Retry the same key and identical JSON text with bounded exponential backoff and jitter. No `Retry-After` is emitted because completion time is unknown. |
 | 422 | `etl_idempotency_key_reused` | `urn:mightyetl:problem:etl-idempotency-key-reused` | The same principal-scoped semantic key already committed a different payload digest | Do not retry with that semantic key; use the original JSON text or generate a new key for a new logical batch. |
 | 503 | `etl_target_unavailable` | `urn:mightyetl:problem:etl-target-unavailable` | The target failed with a transient data-access condition after the configured retry policy | Retry with bounded exponential backoff and jitter. For keyed requests, preserve the same semantic key and identical JSON text. |
 | 500 | `etl_target_failure` | `urn:mightyetl:problem:etl-target-failure` | The target rejected work with a non-transient data-access failure | Stop automatic retries and involve an operator. |
@@ -68,10 +69,11 @@ RFC 9457 standardizes error representation; it does not make retries idempotent.
 
 - `400`, `413`, and record-validation `422` responses are deterministic request failures. Correct or split the request; blind retries repeat the same rejection.
 - `etl_idempotency_key_reused` is also deterministic. A new logical payload requires a new semantic key.
+- `etl_idempotency_request_in_progress` means no request correction is required. Retry the same semantic key and identical JSON text with bounded exponential backoff and jitter.
 - `503` represents a transient target failure. Retry only with a bounded attempt count, exponential backoff, and jitter.
 - `500` requires operator investigation. Do not automatically retry `500` responses.
 
-An unkeyed retry repeats the whole accepted transaction and can duplicate business effects after an ambiguous transport failure. A keyed retry is principal-scoped and durable: preserve the same semantic key and identical decoded JSON text to replay the prior committed response without another target write. The preferred quoted RFC 9651 representation and the retained legacy raw representation normalize to the same semantic key. See [`docs/etl/idempotent-retries.md`](../etl/idempotent-retries.md) for the complete key, migration, concurrency, and retention contract.
+An unkeyed retry repeats the whole accepted transaction and can duplicate business effects after an ambiguous transport failure. A keyed retry is principal-scoped and durable: preserve the same semantic key and identical decoded JSON text to replay the prior committed response without another target write. The preferred quoted RFC 9651 representation and the retained legacy raw representation normalize to the same semantic key. Concurrent same-key requests use PostgreSQL `pg_try_advisory_xact_lock` and receive an immediate 409 instead of waiting. See [`docs/etl/idempotent-retries.md`](../etl/idempotent-retries.md) for the complete key, migration, concurrency, and retention contract.
 
 ## Compatibility
 

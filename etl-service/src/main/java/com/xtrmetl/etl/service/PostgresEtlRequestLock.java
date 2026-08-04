@@ -6,18 +6,18 @@ import org.springframework.stereotype.Component;
 import java.util.Objects;
 
 /**
- * Uses a PostgreSQL transaction-level advisory lock to serialize one idempotency key.
+ * Uses a PostgreSQL transaction-level try-advisory lock for one idempotency key.
  *
  * <p>The first 64 bits of the full SHA-256 key hash select an application-defined advisory lock.
- * A rare prefix collision can only serialize unrelated requests; correctness still relies on the
- * full 256-bit hash stored as the ledger primary key. PostgreSQL releases the advisory lock
+ * A rare prefix collision can reject an unrelated concurrent request, but correctness still relies
+ * on the full 256-bit hash stored as the ledger primary key. PostgreSQL releases an acquired lock
  * automatically when the surrounding transaction commits or rolls back.</p>
  */
 @Component
 public class PostgresEtlRequestLock implements EtlRequestLock {
 
     private static final int ADVISORY_HASH_HEX_LENGTH = 16;
-    private static final String LOCK_SQL = "SELECT pg_advisory_xact_lock(?)";
+    private static final String LOCK_SQL = "SELECT pg_try_advisory_xact_lock(?)";
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -31,12 +31,13 @@ public class PostgresEtlRequestLock implements EtlRequestLock {
     }
 
     /**
-     * Waits for the transaction-level advisory lock derived from the scoped key hash.
+     * Attempts the transaction-level advisory lock derived from the scoped key hash.
      *
      * @param idempotencyKeyHash lowercase 64-character SHA-256 hash
+     * @return {@code true} when acquired; {@code false} when another transaction owns the lock
      */
     @Override
-    public void lock(String idempotencyKeyHash) {
+    public boolean tryLock(String idempotencyKeyHash) {
         String hash = Objects.requireNonNull(
                 idempotencyKeyHash,
                 "idempotencyKeyHash must not be null"
@@ -49,6 +50,10 @@ public class PostgresEtlRequestLock implements EtlRequestLock {
                 hash.substring(0, ADVISORY_HASH_HEX_LENGTH),
                 16
         );
-        jdbcTemplate.query(LOCK_SQL, resultSet -> null, advisoryKey);
+        Boolean acquired = jdbcTemplate.queryForObject(LOCK_SQL, Boolean.class, advisoryKey);
+        if (acquired == null) {
+            throw new IllegalStateException("PostgreSQL advisory lock query returned null");
+        }
+        return acquired;
     }
 }

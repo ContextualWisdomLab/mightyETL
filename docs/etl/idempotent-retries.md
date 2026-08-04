@@ -75,7 +75,12 @@ Idempotency-Replayed: true
 | ---: | --- | --- |
 | 400 | `etl_invalid_idempotency_key` | The field is neither a valid quoted Structured Field String nor a supported legacy raw value, or its semantic value is outside the bounded safe profile. |
 | 401 | `etl_idempotency_principal_required` | A keyed request reached the ETL controller without a principal; default unauthenticated HTTP requests are normally rejected earlier by Spring Security. |
+| 409 | `etl_idempotency_request_in_progress` | Another transaction currently owns the same principal-scoped semantic key. The request returns immediately instead of waiting. |
 | 422 | `etl_idempotency_key_reused` | The same principal-scoped semantic key already committed a different payload digest. |
+
+A `409` response requires no request correction. Retry the same semantic key and identical JSON text
+with bounded exponential backoff and jitter. mightyETL does not emit `Retry-After`, because it cannot
+predict when the owning transaction will commit or roll back.
 
 Existing ETL admission errors also apply to keyed requests. In particular, an oversized UTF-8
 payload returns `413 etl_payload_too_large` before request-lock or ledger access.
@@ -94,12 +99,13 @@ principal name, or request payload.
 For a new key, mightyETL performs this sequence in one retryable Spring transaction:
 
 1. parse and normalize the key representation, validate the principal namespace, and enforce the configured UTF-8 payload bound before lock or ledger access;
-2. acquire a PostgreSQL transaction-level advisory lock derived from the scoped key hash;
-3. inspect `etl_idempotency_records` for a prior committed result;
-4. prevalidate and transform the complete ETL batch;
-5. write all accepted target rows;
-6. insert the durable response ledger row; and
-7. commit both target rows and ledger together.
+2. call PostgreSQL `pg_try_advisory_xact_lock` with the lock identifier derived from the scoped key hash;
+3. return `409 etl_idempotency_request_in_progress` immediately if another transaction owns the lock;
+4. inspect `etl_idempotency_records` for a prior committed result;
+5. prevalidate and transform the complete ETL batch;
+6. write all accepted target rows;
+7. insert the durable response ledger row; and
+8. commit both target rows and ledger together.
 
 Java callers must invoke the idempotent method through the Spring-managed service proxy or establish
 an explicit transaction boundary before invocation. Direct construction and same-class
@@ -107,13 +113,14 @@ self-invocation do not activate Spring's annotation advice. mightyETL therefore 
 request-lock or JDBC access when no actual transaction is active, rather than silently weakening the
 atomicity and lock-lifetime guarantees.
 
-Competing requests with the same principal-scoped key wait for the same transaction lock. After the
-first commit, the waiter observes and replays the ledger row. A rollback releases the advisory lock
-and leaves neither target rows nor a false success ledger entry.
+The first request that acquires the transaction lock proceeds. A simultaneous request for the same
+principal-scoped semantic key receives an immediate 409 without ledger lookup or target writes. A
+retry after the first transaction commits acquires the lock and replays the stored response. A
+rollback releases the lock and leaves neither target rows nor a false success ledger entry.
 
-A 64-bit prefix selects the advisory lock, while the full 256-bit hash remains the ledger primary
-key. A rare advisory-prefix collision can delay an unrelated request but cannot make it replay the
-wrong response.
+A rare 64-bit advisory-prefix collision can cause an unrelated concurrent request to receive a false
+409, but it cannot make that request replay or overwrite the wrong ledger record because the full
+256-bit hash remains the ledger primary key.
 
 ## Schema migration
 
@@ -171,10 +178,10 @@ a new request and therefore can produce a second write.
   HTTP Fields; it obsoletes RFC 8941.
 - The expired IETF HTTPAPI working-group draft for `Idempotency-Key` describes the field as a
   Structured Field Item whose value is a String, along with client-generated unique keys, payload
-  fingerprints, conflict handling, and defenses against injection and cross-client data leakage. It
-  is used as design evidence, not represented as a published RFC.
-- PostgreSQL documents `pg_advisory_xact_lock` as an exclusive transaction-level advisory lock that
-  waits when necessary and is released at transaction completion.
+  fingerprints, `409 Conflict` for a concurrent retry, and defenses against injection and
+  cross-client data leakage. It is used as design evidence, not represented as a published RFC.
+- PostgreSQL documents `pg_try_advisory_xact_lock` as an immediate Boolean transaction-level lock
+  attempt; an acquired lock is released automatically at transaction completion.
 
 ### References
 

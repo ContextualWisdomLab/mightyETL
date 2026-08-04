@@ -101,6 +101,38 @@ class EtlRequestExceptionTest {
                         URI.create("urn:mightyetl:problem:etl-invalid-record"),
                         "Invalid ETL record",
                         "One or more ETL records violate the request contract."
+                ),
+                Arguments.of(
+                        EtlRequestError.INVALID_IDEMPOTENCY_KEY,
+                        HttpStatus.BAD_REQUEST,
+                        "etl_invalid_idempotency_key",
+                        URI.create("urn:mightyetl:problem:etl-invalid-idempotency-key"),
+                        "Invalid ETL idempotency key",
+                        "Idempotency-Key must be a quoted Structured Field String or a supported legacy raw value containing 16 to 128 safe ASCII characters."
+                ),
+                Arguments.of(
+                        EtlRequestError.IDEMPOTENCY_PRINCIPAL_REQUIRED,
+                        HttpStatus.UNAUTHORIZED,
+                        "etl_idempotency_principal_required",
+                        URI.create("urn:mightyetl:problem:etl-idempotency-principal-required"),
+                        "ETL idempotency authentication required",
+                        "An authenticated principal is required when Idempotency-Key is supplied."
+                ),
+                Arguments.of(
+                        EtlRequestError.IDEMPOTENCY_KEY_REUSED,
+                        HttpStatus.UNPROCESSABLE_ENTITY,
+                        "etl_idempotency_key_reused",
+                        URI.create("urn:mightyetl:problem:etl-idempotency-key-reused"),
+                        "ETL idempotency key reused",
+                        "The Idempotency-Key was already used with a different request payload."
+                ),
+                Arguments.of(
+                        EtlRequestError.IDEMPOTENCY_REQUEST_IN_PROGRESS,
+                        HttpStatus.CONFLICT,
+                        "etl_idempotency_request_in_progress",
+                        URI.create("urn:mightyetl:problem:etl-idempotency-request-in-progress"),
+                        "ETL idempotency request in progress",
+                        "A request with the same principal-scoped Idempotency-Key is still being processed."
                 )
         );
     }
