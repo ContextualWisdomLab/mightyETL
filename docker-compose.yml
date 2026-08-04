@@ -117,8 +117,12 @@ services:
       PGDATABASE: ${POSTGRES_DB:-xtrmetl}
       PGUSER: ${POSTGRES_USER:-xtrmetl}
       PGPASSWORD: ${POSTGRES_PASSWORD:-xtrmetl}
-      # The known local init schema predates Flyway; baseline at 0 so V1 still executes.
+      # The known local init schema predates Flyway; baseline at 0 so all migrations execute.
       FLYWAY_BASELINE_ON_MIGRATE: "true"
+      ETL_JOB_ENABLED: ${ETL_JOB_ENABLED:-true}
+      ETL_JOB_POLL_DELAY_MS: ${ETL_JOB_POLL_DELAY_MS:-1000}
+      ETL_JOB_LEASE_DURATION_SECONDS: ${ETL_JOB_LEASE_DURATION_SECONDS:-300}
+      ETL_JOB_MAX_ATTEMPTS: ${ETL_JOB_MAX_ATTEMPTS:-5}
       EUREKA_HOST: eureka-server
       ZIPKIN_HOST: zipkin
     ports:
