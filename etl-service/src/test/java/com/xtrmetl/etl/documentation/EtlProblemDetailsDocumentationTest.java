@@ -21,6 +21,9 @@ class EtlProblemDetailsDocumentationTest {
             "etl_batch_too_large",
             "etl_invalid_json",
             "etl_invalid_record",
+            "etl_invalid_idempotency_key",
+            "etl_idempotency_principal_required",
+            "etl_idempotency_key_reused",
             "etl_target_unavailable",
             "etl_target_failure",
             "etl_internal_error"
@@ -36,6 +39,8 @@ class EtlProblemDetailsDocumentationTest {
         assertTrue(runbook.contains("Successful `POST /api/etl/process` responses remain"));
         assertTrue(runbook.contains("never includes internal exception text"));
         assertTrue(runbook.contains("does not make retries idempotent"));
+        assertTrue(runbook.contains("Idempotency-Replayed"));
+        assertTrue(runbook.contains("docs/etl/idempotent-retries.md"));
         for (String errorCode : ERROR_CODES) {
             assertTrue(runbook.contains(errorCode), "Missing problem code: " + errorCode);
         }
