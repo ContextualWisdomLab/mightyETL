@@ -1,6 +1,7 @@
 package com.xtrmetl.etl.job;
 
 import com.xtrmetl.etl.controller.EtlApiProblemHandler;
+import com.xtrmetl.etl.controller.EtlJobController;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
