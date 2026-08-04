@@ -27,12 +27,27 @@ class EtlJobMigrationDocumentationTest {
         assertTrue(migration.contains("principal_scope_hash"));
         assertTrue(migration.contains("submission_key_hash"));
         assertTrue(migration.contains("request_digest"));
-        assertTrue(migration.contains("request_payload"));
+        assertTrue(migration.contains("request_payload TEXT,"));
         assertTrue(migration.contains("CONSTRAINT etl_job_submission_scope_unique"));
         assertTrue(migration.contains("UNIQUE (principal_scope_hash, submission_key_hash)"));
         assertTrue(migration.contains("etl_job_status_created_index"));
         assertFalse(migration.contains("principal_name"));
         assertFalse(migration.contains("idempotency_key TEXT"));
+    }
+
+    @Test
+    void migrationReservesStableWorkerStatesAndRequiresTerminalPayloadClearing() throws IOException {
+        String migration = read(
+                "etl-service/src/main/resources/db/migration/V2__create_etl_job_records.sql"
+        );
+
+        assertTrue(migration.contains("'PENDING', 'RUNNING', 'SUCCEEDED', 'FAILED'"));
+        assertFalse(migration.contains("'PROCESSING'"));
+        assertTrue(migration.contains("CONSTRAINT etl_job_payload_lifecycle_check"));
+        assertTrue(migration.contains("job_status IN ('PENDING', 'RUNNING')"));
+        assertTrue(migration.contains("request_payload IS NOT NULL"));
+        assertTrue(migration.contains("job_status IN ('SUCCEEDED', 'FAILED')"));
+        assertTrue(migration.contains("request_payload IS NULL"));
     }
 
     @Test
@@ -46,6 +61,8 @@ class EtlJobMigrationDocumentationTest {
         assertTrue(runbook.contains("does not execute jobs yet"));
         assertTrue(runbook.contains("request payload"));
         assertTrue(runbook.contains("worker and lease-fencing slice"));
+        assertTrue(runbook.contains("Cache-Control: no-store"));
+        assertTrue(runbook.contains("422 etl_job_submission_key_reused"));
     }
 
     private static String read(String relativePath) throws IOException {
