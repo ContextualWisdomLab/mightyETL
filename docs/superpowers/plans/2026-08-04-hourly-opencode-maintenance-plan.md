@@ -4,9 +4,9 @@
 
 **Goal:** Add a fail-closed hourly OpenCode development agent that uses `NVIDIA_NIM_API_KEY` without changing the independent review agent or deterministic merge workflow.
 
-**Architecture:** A new scheduled GitHub Actions workflow runs OpenCode from the protected default branch, uses a pinned NVIDIA model and exact OpenCode version, and may only prepare feature-branch pull requests. Existing review, CI, security, and hourly merge-disposition automation remain independent and authoritative. Direct `GITHUB_TOKEN` mode retains `persist-credentials: false` and adds a repository-local, short-lived Git authorization header because OpenCode 1.18.13 skips its own Git setup in that mode.
+**Architecture:** A new scheduled GitHub Actions workflow runs OpenCode from the protected default branch, uses a pinned NVIDIA model and exact OpenCode version, and may only prepare feature-branch pull requests. Existing review, CI, security, and hourly merge-disposition automation remain independent and authoritative. Direct `GITHUB_TOKEN` mode retains `persist-credentials: false` and adds a repository-local, short-lived Git authorization header because OpenCode 1.18.13 skips its own Git setup in that mode. A bounded `TERM` timeout escalates to `KILL` after 30 seconds so cleanup completes before the workflow-level timeout.
 
-**Tech Stack:** GitHub Actions, OpenCode 1.18.13, NVIDIA NIM, bash, Maven, JUnit 5.
+**Tech Stack:** GitHub Actions, OpenCode 1.18.13, NVIDIA NIM, GNU Coreutils `timeout`, bash, Maven, JUnit 5.
 
 ## Global Constraints
 
@@ -15,6 +15,7 @@
 - Never configure GitHub Copilot, Anthropic, or OpenAI credentials as fallbacks.
 - Pin third-party workflow sources and executable package versions immutably.
 - Keep checkout credential persistence disabled; bootstrap only a repository-local direct-token authorization header and remove it through an `EXIT` trap.
+- Bound OpenCode with `TERM` after 45 minutes, force `KILL` after a 30-second grace period, and retain a 50-minute GitHub job timeout.
 - Do not claim that raw OpenCode 1.18.13 consumes an `AGENT` environment variable; it uses repository `default_agent` configuration or its `build` fallback.
 - The scheduled agent may open or update a pull request, but may never approve, merge, bypass protection, or push to `develop` or `main`.
 - Preserve standalone operation and modular CWL service compatibility.
@@ -32,7 +33,7 @@
 
 - [ ] **Step 1: Write the failing test**
 
-Create a JUnit 5 class that first asserts the workflow file exists, then verifies the schedule, concurrency, timeout, immutable checkout SHA, `persist-credentials: false`, exact `opencode-ai@1.18.13` installation, NVIDIA-only credential mapping, explicit NVIDIA Qwen3 Coder model, private sharing, direct GitHub token mode, least-privilege permissions, no `id-token`, and prompt prohibitions.
+Create a JUnit 5 class that first asserts the workflow file exists, then verifies the schedule, concurrency, workflow timeout, graceful process timeout with deterministic forced termination, immutable checkout SHA, `persist-credentials: false`, exact `opencode-ai@1.18.13` installation, NVIDIA-only credential mapping, explicit NVIDIA Qwen3 Coder model, private sharing, direct GitHub token mode, least-privilege permissions, no `id-token`, and prompt prohibitions.
 
 Add a focused direct-token contract that requires a local GitHub authorization header, local bot author identity, credential cleanup through an `EXIT` trap, and removal of the ineffective `AGENT: build` environment claim.
 
@@ -48,12 +49,15 @@ Expected initially: FAIL at the explicit existence assertion because `.github/wo
 
 After discovering the direct-token gap, expected regression RED: FAIL because the workflow has `persist-credentials: false` and `USE_GITHUB_TOKEN=true` without the local authorization header, author identity, and cleanup contract required for OpenCode 1.18.13 infrastructure-managed commits and pushes.
 
+After reviewing timeout behavior, expected regression RED: FAIL until the 45-minute `TERM` timeout includes a bounded 30-second `KILL` escalation.
+
 - [ ] **Step 3: Commit the failing contract**
 
 ```bash
 git add etl-service/src/test/java/com/xtrmetl/etl/documentation/HourlyOpenCodeMaintenanceWorkflowTest.java
 git commit -m "test(ci): define hourly OpenCode maintenance contract"
 git commit -am "test(ci): require direct-token git bootstrap"
+git commit -am "test(ci): require forced OpenCode termination"
 ```
 
 ### Task 2: Implement the pinned NVIDIA OpenCode workflow
@@ -67,7 +71,7 @@ git commit -am "test(ci): require direct-token git bootstrap"
 
 - [ ] **Step 1: Add the minimal workflow**
 
-Configure `schedule` at `43 * * * *`, `workflow_dispatch`, serialized concurrency, `timeout-minutes: 50`, minimal permissions, a full-SHA checkout with disabled persisted credentials, exact npm installation, exact version verification, and `timeout --signal=TERM 45m opencode github run`.
+Configure `schedule` at `43 * * * *`, `workflow_dispatch`, serialized concurrency, `timeout-minutes: 50`, minimal permissions, a full-SHA checkout with disabled persisted credentials, exact npm installation, exact version verification, and `timeout --signal=TERM --kill-after=30s 45m opencode github run`.
 
 Set only the OpenCode environment variables that raw OpenCode 1.18.13 consumes:
 
@@ -118,6 +122,7 @@ Expected: PASS with no skipped tests.
 git add .github/workflows/hourly-opencode-maintenance.yml
 git commit -m "ci: schedule NVIDIA OpenCode maintenance agent"
 git commit -am "fix(ci): bootstrap OpenCode direct-token git access"
+git commit -am "fix(ci): force termination after OpenCode timeout"
 ```
 
 ### Task 3: Document operations and release notes
@@ -129,15 +134,15 @@ git commit -am "fix(ci): bootstrap OpenCode direct-token git access"
 
 **Interfaces:**
 - Consumes: behavior and constraints from the workflow and OpenCode 1.18.13 primary source.
-- Produces: beginner-readable activation, failure, rollback, credential-lifecycle, security, and evidence documentation.
+- Produces: beginner-readable activation, failure, rollback, credential-lifecycle, timeout-escalation, security, and evidence documentation.
 
 - [ ] **Step 1: Add the operator document**
 
-Document the secret name, provider alias, exact model and version, schedule, permissions, branch/PR lifecycle, direct-token Git bootstrap, credential cleanup, repository/default agent behavior, separation from review and merge agents, failure modes, rollback procedure, and APA 7 references to OpenCode, NVIDIA, and GitHub primary documentation.
+Document the secret name, provider alias, exact model and version, schedule, permissions, branch/PR lifecycle, direct-token Git bootstrap, credential cleanup, bounded `TERM`/`KILL` behavior, repository/default agent behavior, separation from review and merge agents, failure modes, rollback procedure, and APA 7 references to OpenCode, NVIDIA, and GitHub primary documentation.
 
 - [ ] **Step 2: Update the design and `CHANGELOG.md`**
 
-Record why direct-token mode requires an explicit local Git bootstrap while checkout credential persistence remains disabled. Add an Unreleased entry describing the separate pinned OpenCode/NVIDIA maintenance workflow and its review-agent/merge-agent isolation.
+Record why direct-token mode requires an explicit local Git bootstrap while checkout credential persistence remains disabled, and why a force-kill grace period is needed before the workflow hard timeout. Add an Unreleased entry describing the separate pinned OpenCode/NVIDIA maintenance workflow and its review-agent/merge-agent isolation.
 
 - [ ] **Step 3: Run the full reactor tests**
 
