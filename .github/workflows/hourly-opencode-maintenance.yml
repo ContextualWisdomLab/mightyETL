@@ -1,0 +1,70 @@
+name: Hourly OpenCode maintenance
+
+on:
+  schedule:
+    - cron: "43 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: hourly-opencode-maintenance
+  cancel-in-progress: false
+
+permissions:
+  actions: read
+  checks: read
+  contents: write
+  issues: write
+  pull-requests: write
+  security-events: read
+  statuses: read
+
+jobs:
+  maintain-repository:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - name: Checkout protected default-branch source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install pinned OpenCode CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --global opencode-ai@1.18.13 --no-audit --no-fund
+          test "$(opencode --version)" = "1.18.13"
+
+      - name: Run bounded NVIDIA OpenCode maintenance
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_NIM_API_KEY }}
+          MODEL: nvidia/qwen/qwen3-coder-480b-a35b-instruct
+          AGENT: build
+          SHARE: "false"
+          USE_GITHUB_TOKEN: "true"
+          PROMPT: |
+            Maintain ContextualWisdomLab/mightyETL toward defensible commercial and acquisition readiness.
+
+            Start every run by inspecting every open pull request and its exact current head. Review unresolved human, CodeRabbit, GitHub Advanced Security, Dependabot, and automated feedback. Inspect required checks, statuses, and workflow outcomes. Treat queued, pending, skipped-required, stale-head, cancelled, absent, or unsuccessful gates as not passing. Distinguish valid current findings from stale, duplicate, incorrect, or superseded feedback. Resolve only threads that the current exact head actually addresses.
+
+            If a development pull request is open, work only on the dependency-eligible exact current head of that pull request. Do not create a second development pull request while another development pull request is open. Implement valid fixes test-first, rerun relevant tests, update authoritative documentation and CHANGELOG.md, and update the existing feature branch and pull request. Close only clearly superseded duplicate pull requests with a precise reason.
+
+            If no development pull request is open, inspect open issues, roadmap, architecture, security, privacy, reliability, observability, accessibility, packaging, interoperability, deployment, data governance, operational workflows, release evidence, and buyer-visible gaps. Select exactly one highest-impact bounded vertical slice. Prefer durable ETL execution, idempotency, replay, dead-letter handling, schema contracts, connector reliability, target warehouse support, tenancy, auditability, SLO evidence, and operator controls. Prefer issue #120 while its durable lease-fenced worker gap remains open and dependency-ready.
+
+            Preserve standalone operation and modular MSA compatibility with ContextualWisdomLab/.github, naruon, and other CWL services. Database objects must contain at least two descriptive words and use snake_case by default. Public production APIs require complete beginner-readable documentation. Added production statements and branches require deterministic coverage. Use current authoritative standards, primary technical documentation, and peer-reviewed evidence where material, with APA 7th references in repository documentation.
+
+            Never approve or merge a pull request. Never push directly to develop or main. Do not bypass branch protection, independent approval, security gates, repository policy, required checks, or test coverage. Do not publish a release unless a separate release-authorized workflow and every acceptance gate explicitly permit it.
+
+            Do not alter the existing review agent, its workflow, its provider configuration, or its credential flow. Do not change any review-agent secret name. Do not inspect, print, echo, summarize, or expose secret values. Do not modify .github/workflows/ or CODEOWNERS unless an open issue explicitly labeled automation-maintenance authorizes that exact bounded automation change; even then, prepare a pull request and leave approval and merge to an independent gate.
+
+            Use the repository-scoped GitHub token only for the minimum branch, pull-request, issue, check, status, and security-read operations required by this run. Keep the working tree and pull-request description truthful about tests, skipped coverage, remaining risks, and release readiness. Leave one reviewable feature branch and pull request; never represent pending external gates as completed.
+        run: |
+          set -euo pipefail
+          if [[ -z "${NVIDIA_API_KEY}" ]]; then
+            echo "NVIDIA_NIM_API_KEY is required for scheduled OpenCode maintenance" >&2
+            exit 1
+          fi
+          timeout --signal=TERM 45m opencode github run
