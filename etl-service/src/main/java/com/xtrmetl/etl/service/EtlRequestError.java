@@ -68,6 +68,24 @@ public enum EtlRequestError {
             "An authenticated principal is required when Idempotency-Key is supplied."
     ),
 
+    /** An asynchronous job resource has no authenticated principal namespace. */
+    JOB_PRINCIPAL_REQUIRED(
+            HttpStatus.UNAUTHORIZED,
+            "etl_job_principal_required",
+            "urn:mightyetl:problem:etl-job-principal-required",
+            "ETL job authentication required",
+            "An authenticated principal is required for ETL job resources."
+    ),
+
+    /** The requested job is missing or is not owned by the authenticated principal. */
+    JOB_NOT_FOUND(
+            HttpStatus.NOT_FOUND,
+            "etl_job_not_found",
+            "urn:mightyetl:problem:etl-job-not-found",
+            "ETL job not found",
+            "The requested ETL job was not found."
+    ),
+
     /** A scoped idempotency key was already committed for a different request payload. */
     IDEMPOTENCY_KEY_REUSED(
             HttpStatus.UNPROCESSABLE_ENTITY,
