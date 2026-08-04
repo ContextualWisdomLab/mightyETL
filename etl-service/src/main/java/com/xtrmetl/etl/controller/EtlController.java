@@ -3,6 +3,7 @@ package com.xtrmetl.etl.controller;
 import com.xtrmetl.etl.connector.TargetConnectorDispatcher;
 import com.xtrmetl.etl.service.EtlService;
 import io.micrometer.observation.annotation.Observed;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -11,9 +12,15 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
+/**
+ * Exposes the synchronous ETL processing and target-connector discovery endpoints.
+ *
+ * <p>The controller owns successful response shaping only. {@link EtlApiProblemHandler} maps
+ * request, target, and unexpected failures to the stable RFC 9457 API contract.</p>
+ */
 @RestController
 @RequestMapping("/api/etl")
 public class EtlController {
@@ -21,25 +28,39 @@ public class EtlController {
     private final EtlService etlService;
     private final TargetConnectorDispatcher connectorDispatcher;
 
+    /**
+     * Creates the ETL HTTP adapter.
+     *
+     * @param etlService bounded transactional ETL service
+     * @param connectorDispatcher target connector catalog and lifecycle dispatcher
+     */
     public EtlController(EtlService etlService, TargetConnectorDispatcher connectorDispatcher) {
-        this.etlService = etlService;
-        this.connectorDispatcher = connectorDispatcher;
-    }
-
-    @PostMapping("/process")
-    @Observed(name = "etl.process", contextualName = "etl-processing")
-    public ResponseEntity<String> processData(@RequestBody String jsonInput) {
-        try {
-            String result = etlService.processData(jsonInput);
-            return ResponseEntity.ok(result);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Error processing data: " + e.getMessage());
-        }
+        this.etlService = Objects.requireNonNull(etlService, "etlService must not be null");
+        this.connectorDispatcher = Objects.requireNonNull(
+                connectorDispatcher,
+                "connectorDispatcher must not be null"
+        );
     }
 
     /**
-     * Catalog of target connector scaffolds (Databricks / Snowflake / Qlik) and enable flags.
-     * Primary load path remains PostgreSQL via {@code /process}.
+     * Processes one bounded JSON-array request and returns record results in input order.
+     *
+     * @param jsonInput UTF-8 JSON array request body
+     * @return existing newline-delimited plain-text success response
+     */
+    @PostMapping(value = "/process", produces = MediaType.TEXT_PLAIN_VALUE)
+    @Observed(name = "etl.process", contextualName = "etl-processing")
+    public ResponseEntity<String> processData(@RequestBody String jsonInput) {
+        return ResponseEntity.ok(etlService.processData(jsonInput));
+    }
+
+    /**
+     * Returns target connector capabilities and runtime state without configuration secrets.
+     *
+     * <p>Primary load path remains PostgreSQL through {@code /process}; external warehouse and BI
+     * connectors retain their documented support status.</p>
+     *
+     * @return operator-safe target connector catalog
      */
     @GetMapping("/connectors")
     @Observed(name = "etl.connectors", contextualName = "etl-connectors")
