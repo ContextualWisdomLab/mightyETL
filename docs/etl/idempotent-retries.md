@@ -15,7 +15,12 @@ Send all of the following:
 
 - the same authenticated principal;
 - the same semantic `Idempotency-Key` value; and
-- the byte-for-byte same JSON request body.
+- the same decoded JSON text.
+
+The controller receives request content as a Java string, validates its UTF-8 size, and fingerprints
+that string after UTF-8 encoding. Clients should therefore resend identical JSON text. Whitespace,
+member order, or Unicode-normalization changes are treated as a different payload even when a JSON
+consumer might consider the documents semantically equivalent.
 
 The ETL service currently resolves its principal through its implemented Spring Security HTTP Basic
 configuration. A deployment may place the service behind a gateway, but that gateway must preserve
@@ -82,9 +87,9 @@ Authentication or authorization failures rejected earlier remain governed by the
 ## Transaction and concurrency guarantees
 
 The normalized semantic client key is namespaced by the authenticated principal and then SHA-256
-hashed. The request body is independently SHA-256 hashed. The database stores the hashes and
-successful response body; it does not store the raw header field, client key, principal name, or
-request payload.
+hashed. The decoded JSON text is independently encoded as UTF-8 and SHA-256 hashed. The database
+stores the hashes and successful response body; it does not store the raw header field, client key,
+principal name, or request payload.
 
 For a new key, mightyETL performs this sequence in one retryable Spring transaction:
 
