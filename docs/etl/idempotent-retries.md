@@ -98,6 +98,13 @@ upgraded startup. The configured baseline version is `0`, so migration `V1` stil
 the setting to `false` after the Flyway history has been established. The default is fail-closed to
 avoid silently baselining the wrong database.
 
+The repository's local Compose database is a known exception because
+`docker/postgres/init/01_schema.sql` intentionally creates the legacy bootstrap tables before the ETL
+service starts. The local Compose stack sets `FLYWAY_BASELINE_ON_MIGRATE=true` for that service only;
+the application baseline version remains `0`, so migration `V1` executes instead of being marked as
+already applied. This local compatibility setting is not a recommendation to enable automatic
+baselining for an unverified production database.
+
 Rollback of the application does not require dropping the ledger table; older code ignores it. If a
 reviewed data-retention decision requires destructive removal, stop keyed writes, retain any needed
 audit evidence, and apply:
