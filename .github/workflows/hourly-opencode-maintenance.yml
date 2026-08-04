@@ -42,7 +42,6 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_NIM_API_KEY }}
           MODEL: nvidia/qwen/qwen3-coder-480b-a35b-instruct
-          AGENT: build
           SHARE: "false"
           USE_GITHUB_TOKEN: "true"
           PROMPT: |
@@ -67,4 +66,26 @@ jobs:
             echo "NVIDIA_NIM_API_KEY is required for scheduled OpenCode maintenance" >&2
             exit 1
           fi
+          if [[ -z "${GITHUB_TOKEN}" ]]; then
+            echo "The repository-scoped GITHUB_TOKEN is required for scheduled maintenance" >&2
+            exit 1
+          fi
+
+          # OpenCode 1.18.13 skips its internal Git credential and author setup in
+          # USE_GITHUB_TOKEN mode. Bootstrap a repository-local header explicitly while
+          # preserving checkout's persist-credentials: false supply-chain boundary.
+          git_config_key="http.https://github.com/.extraheader"
+          cleanup_git_credentials() {
+            git config --local --unset-all "${git_config_key}" >/dev/null 2>&1 || true
+          }
+          trap cleanup_git_credentials EXIT
+          cleanup_git_credentials
+          github_basic_auth="$(
+            printf 'x-access-token:%s' "${GITHUB_TOKEN}" | base64 | tr -d '\r\n'
+          )"
+          git config --local "${git_config_key}" "AUTHORIZATION: basic ${github_basic_auth}"
+          unset github_basic_auth
+          git config --local user.name "opencode-agent[bot]"
+          git config --local user.email "opencode-agent[bot]@users.noreply.github.com"
+
           timeout --signal=TERM 45m opencode github run
