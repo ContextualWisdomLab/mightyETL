@@ -26,6 +26,10 @@ xtrmetl:
   etl:
     max-payload-bytes: ${ETL_MAX_PAYLOAD_BYTES:1048576}
     max-batch-records: ${ETL_MAX_BATCH_RECORDS:1000}
+    jobs:
+      # Intake persists validated payloads but does not execute them in this bounded slice.
+      # Keep disabled until an operator explicitly accepts the temporary retention boundary.
+      intake-enabled: ${ETL_JOB_INTAKE_ENABLED:false}
   # Warehouse/BI targets: SPI + config binding + validation + catalog; writes remain SCAFFOLD.
   connectors:
     databricks:
