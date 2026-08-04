@@ -88,4 +88,4 @@ jobs:
           git config --local user.name "opencode-agent[bot]"
           git config --local user.email "opencode-agent[bot]@users.noreply.github.com"
 
-          timeout --signal=TERM 45m opencode github run
+          timeout --signal=TERM --kill-after=30s 45m opencode github run
