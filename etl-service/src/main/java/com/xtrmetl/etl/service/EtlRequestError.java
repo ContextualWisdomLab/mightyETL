@@ -75,6 +75,15 @@ public enum EtlRequestError {
             "urn:mightyetl:problem:etl-idempotency-key-reused",
             "ETL idempotency key reused",
             "The Idempotency-Key was already used with a different request payload."
+    ),
+
+    /** Another transaction is still processing the same principal-scoped idempotency key. */
+    IDEMPOTENCY_REQUEST_IN_PROGRESS(
+            HttpStatus.CONFLICT,
+            "etl_idempotency_request_in_progress",
+            "urn:mightyetl:problem:etl-idempotency-request-in-progress",
+            "ETL idempotency request in progress",
+            "A request with the same principal-scoped Idempotency-Key is still being processed."
     );
 
     private final HttpStatus status;
