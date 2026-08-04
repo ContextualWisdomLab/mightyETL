@@ -8,11 +8,11 @@ yet. Execution, PostgreSQL `FOR UPDATE SKIP LOCKED` claiming, lease fencing, bou
 terminal payload clearing, and crash recovery belong to the following worker and lease-fencing slice.
 
 The incomplete intake surface is disabled by default. It is absent unless an operator explicitly
-sets the preferred `mightyetl.etl.jobs.intake-enabled=true` property or its supported legacy alias
-`xtrmetl.etl.jobs.intake-enabled=true`. Enabling it accepts the temporary boundary that submitted
+sets the preferred `mightyetl.etl.jobs.intake-enabled=true` property, its supported legacy alias
+`xtrmetl.etl.jobs.intake-enabled=true`, or `ETL_JOB_INTAKE_ENABLED=true`. When both full namespaces
+are supplied, `mightyetl.*` wins. Enabling intake accepts the temporary boundary that submitted
 payloads remain retained in `PENDING` jobs until the worker and terminal payload-clearing slice is
-implemented. Deployments that cannot accept that retention boundary must leave both properties unset
-or set the chosen property to `false`.
+implemented. Deployments that cannot accept that retention boundary must leave the setting false.
 
 The existing synchronous `POST /api/etl/process` endpoint remains unchanged.
 
@@ -74,12 +74,13 @@ Authorization: Basic <credentials>
 ```
 
 The service hashes the current authenticated principal and queries by both principal scope and job
-identifier. A missing identifier and an identifier owned by another principal both return
-`404 etl_job_not_found`; callers cannot use this endpoint to probe another tenant's job existence.
+identifier. A malformed or missing identifier and an identifier owned by another principal all
+return `404 etl_job_not_found`; callers cannot use this endpoint to probe another tenant's job
+existence.
 
 The response excludes the request payload, raw principal, raw submission key, and all internal
-hashes. Before worker execution is implemented, newly accepted jobs remain `PENDING` with an
-`attemptCount` of zero.
+hashes. Timestamps are explicit ISO-8601 strings. Before worker execution is implemented, newly
+accepted jobs remain `PENDING` with an `attemptCount` of zero.
 
 ## Validation and persistence
 
@@ -109,13 +110,11 @@ encryption, backup, and retention policy accordingly.
 ## Operational boundary
 
 This slice deliberately does not advertise job completion or background execution. The controller is
-disabled by default; `mightyetl.etl.jobs.intake-enabled=true` is preferred and
-`xtrmetl.etl.jobs.intake-enabled=true` remains a compatibility alias. Setting either property to
-`true` is an explicit operator opt-in to durable intake without execution. Deployments that need
-completed asynchronous processing must wait for the worker and lease-fencing slice. The next slice
-must claim jobs safely across replicas, fence stale lease owners, commit target effects and terminal
-success atomically, reclaim expired leases, bound attempts, publish stable failure codes, and clear
-the stored request payload at terminal state.
+disabled by default; setting an activation property to `true` is an explicit operator opt-in to
+durable intake without execution. Deployments that need completed asynchronous processing must wait
+for the worker and lease-fencing slice. The next slice must claim jobs safely across replicas, fence
+stale lease owners, commit target effects and terminal success atomically, reclaim expired leases,
+bound attempts, publish stable failure codes, and clear the stored request payload at terminal state.
 
 ## Standards basis
 
