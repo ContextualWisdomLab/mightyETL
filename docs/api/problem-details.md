@@ -64,6 +64,8 @@ The fixed detail deliberately does not reveal which internal parser, validation 
 
 ## Retry guidance
 
+RFC 9457 standardizes error representation; it does not make retries idempotent. Retry safety depends on the operation's semantics and, for ambiguous ETL outcomes, whether the client supplied a valid principal-scoped idempotency key.
+
 - `400`, `413`, and record-validation `422` responses are deterministic request failures. Correct or split the request; blind retries repeat the same rejection.
 - `etl_idempotency_key_reused` is also deterministic. A new logical payload requires a new key.
 - `503` represents a transient target failure. Retry only with a bounded attempt count, exponential backoff, and jitter.
