@@ -157,6 +157,18 @@ class EtlServiceBatchSafetyTest {
     }
 
     @Test
+    void rejectsIdentifiersContainingUnicodeFormatControlsBeforeJdbc() {
+        EtlService service = service();
+
+        assertThrows(RuntimeException.class,
+                () -> service.processData("[{\"id\":\"record_alpha\\u202Egpj.exe\"}]"));
+        assertThrows(RuntimeException.class,
+                () -> service.processData("[{\"id\":\"record_alpha\\u200Bhidden\"}]"));
+
+        verifyNoInteractions(jdbcTemplate);
+    }
+
+    @Test
     void rejectsIdentifiersLongerThanTheSupportedResponseBoundary() {
         EtlService service = service();
         String identifier = "record_" + "a".repeat(250);
