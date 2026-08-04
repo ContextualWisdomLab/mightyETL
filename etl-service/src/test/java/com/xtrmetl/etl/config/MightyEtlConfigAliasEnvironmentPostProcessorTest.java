@@ -36,6 +36,16 @@ class MightyEtlConfigAliasEnvironmentPostProcessorTest {
     }
 
     @Test
+    void mirrorsModernDurableIntakeFlagToTheLegacyControllerCondition() {
+        MockEnvironment env = new MockEnvironment();
+        env.setProperty("mightyetl.etl.jobs.intake-enabled", "true");
+
+        Map<String, Object> aliases = MightyEtlConfigAliasEnvironmentPostProcessor.buildAliases(env);
+
+        assertEquals("true", aliases.get("xtrmetl.etl.jobs.intake-enabled"));
+    }
+
+    @Test
     void mirrorsLegacyBatchLimitForModernTooling() {
         MockEnvironment env = new MockEnvironment();
         env.setProperty("xtrmetl.etl.max-batch-records", "100");
