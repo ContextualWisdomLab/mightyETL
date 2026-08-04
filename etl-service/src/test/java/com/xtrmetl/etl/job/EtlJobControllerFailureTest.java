@@ -49,38 +49,29 @@ class EtlJobControllerFailureTest {
         when(etlJobService.submit(anyString(), anyString(), anyString()))
                 .thenThrow(new EtlRequestException(EtlRequestError.JOB_SUBMISSION_KEY_REUSED));
 
-        mockMvc.perform(post(JOBS_PATH)
-                        .principal(PRINCIPAL)
-                        .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("[{\"id\":\"record_alpha\"}]"))
+        performSubmission()
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.errorCode").value("etl_job_submission_key_reused"));
     }
 
     @Test
-    void mapsSubmissionDatabaseAndUnexpectedFailuresWithoutLeakingMessages() throws Exception {
+    void mapsSubmissionDatabaseFailuresWithoutLeakingMessages() throws Exception {
         DataAccessException databaseFailure = new DataAccessException("secret database detail") { };
         when(etlJobService.submit(anyString(), anyString(), anyString()))
                 .thenThrow(databaseFailure);
 
-        mockMvc.perform(post(JOBS_PATH)
-                        .principal(PRINCIPAL)
-                        .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("[{\"id\":\"record_alpha\"}]"))
+        performSubmission()
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.errorCode").value("etl_target_failure"))
                 .andExpect(jsonPath("$.detail").value("The ETL target could not process the request."));
+    }
 
+    @Test
+    void mapsSubmissionUnexpectedFailuresWithoutLeakingMessages() throws Exception {
         when(etlJobService.submit(anyString(), anyString(), anyString()))
                 .thenThrow(new IllegalStateException("secret runtime detail"));
 
-        mockMvc.perform(post(JOBS_PATH)
-                        .principal(PRINCIPAL)
-                        .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("[{\"id\":\"record_alpha\"}]"))
+        performSubmission()
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.errorCode").value("etl_internal_error"))
                 .andExpect(jsonPath("$.detail").value("The ETL request could not be processed."));
@@ -91,26 +82,41 @@ class EtlJobControllerFailureTest {
         when(etlJobService.findOwned(any(UUID.class), anyString()))
                 .thenThrow(new EtlRequestException(EtlRequestError.JOB_NOT_FOUND));
 
-        mockMvc.perform(get(JOBS_PATH + "/" + UUID.randomUUID()).principal(PRINCIPAL))
+        performStatus()
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.errorCode").value("etl_job_not_found"));
     }
 
     @Test
-    void mapsStatusDatabaseAndUnexpectedFailuresWithoutLeakingMessages() throws Exception {
+    void mapsStatusDatabaseFailuresWithoutLeakingMessages() throws Exception {
         DataAccessException databaseFailure = new DataAccessException("secret database detail") { };
         when(etlJobService.findOwned(any(UUID.class), anyString()))
                 .thenThrow(databaseFailure);
 
-        mockMvc.perform(get(JOBS_PATH + "/" + UUID.randomUUID()).principal(PRINCIPAL))
+        performStatus()
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.errorCode").value("etl_target_failure"));
+    }
 
+    @Test
+    void mapsStatusUnexpectedFailuresWithoutLeakingMessages() throws Exception {
         when(etlJobService.findOwned(any(UUID.class), anyString()))
                 .thenThrow(new IllegalArgumentException("secret runtime detail"));
 
-        mockMvc.perform(get(JOBS_PATH + "/" + UUID.randomUUID()).principal(PRINCIPAL))
+        performStatus()
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.errorCode").value("etl_internal_error"));
+    }
+
+    private org.springframework.test.web.servlet.ResultActions performSubmission() throws Exception {
+        return mockMvc.perform(post(JOBS_PATH)
+                .principal(PRINCIPAL)
+                .header("Idempotency-Key", IDEMPOTENCY_KEY)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("[{\"id\":\"record_alpha\"}]"));
+    }
+
+    private org.springframework.test.web.servlet.ResultActions performStatus() throws Exception {
+        return mockMvc.perform(get(JOBS_PATH + "/" + UUID.randomUUID()).principal(PRINCIPAL));
     }
 }
