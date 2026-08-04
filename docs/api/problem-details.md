@@ -33,10 +33,10 @@ The response never includes internal exception text, nested causes, SQL statemen
 | 413 | `etl_batch_too_large` | `urn:mightyetl:problem:etl-batch-too-large` | Record count exceeds `max-batch-records` | Split the array into smaller requests. |
 | 400 | `etl_invalid_json` | `urn:mightyetl:problem:etl-invalid-json` | Body is absent, malformed, has an exact duplicate JSON field, or is not a top-level array | Correct the JSON document before retrying. |
 | 422 | `etl_invalid_record` | `urn:mightyetl:problem:etl-invalid-record` | A record, identifier, normalized output key, or semantic transform input violates the ETL contract | Correct the record content before retrying. |
-| 400 | `etl_invalid_idempotency_key` | `urn:mightyetl:problem:etl-invalid-idempotency-key` | `Idempotency-Key` is outside the supported bounded safe-ASCII profile | Generate a new 16-to-128-character high-entropy key using the documented character set. |
-| 401 | `etl_idempotency_principal_required` | `urn:mightyetl:problem:etl-idempotency-principal-required` | A keyed request reached the controller without an authenticated principal namespace | Authenticate and resend the request with the same body and key. |
-| 422 | `etl_idempotency_key_reused` | `urn:mightyetl:problem:etl-idempotency-key-reused` | The same principal-scoped key already committed a different payload digest | Do not retry with that key; use the original payload or generate a new key for a new logical batch. |
-| 503 | `etl_target_unavailable` | `urn:mightyetl:problem:etl-target-unavailable` | The target failed with a transient data-access condition after the configured retry policy | Retry with bounded exponential backoff and jitter. For keyed requests, preserve the same key and byte-identical body. |
+| 400 | `etl_invalid_idempotency_key` | `urn:mightyetl:problem:etl-invalid-idempotency-key` | The header is neither a supported quoted RFC 9651 String nor a compatible legacy raw value, or its semantic key is outside the bounded safe profile | Generate a 16-to-128-character high-entropy key using the documented character set and send the preferred quoted representation. |
+| 401 | `etl_idempotency_principal_required` | `urn:mightyetl:problem:etl-idempotency-principal-required` | A keyed request reached the controller without an authenticated principal namespace | Authenticate and resend the request with the same JSON text and semantic key. |
+| 422 | `etl_idempotency_key_reused` | `urn:mightyetl:problem:etl-idempotency-key-reused` | The same principal-scoped semantic key already committed a different payload digest | Do not retry with that semantic key; use the original JSON text or generate a new key for a new logical batch. |
+| 503 | `etl_target_unavailable` | `urn:mightyetl:problem:etl-target-unavailable` | The target failed with a transient data-access condition after the configured retry policy | Retry with bounded exponential backoff and jitter. For keyed requests, preserve the same semantic key and identical JSON text. |
 | 500 | `etl_target_failure` | `urn:mightyetl:problem:etl-target-failure` | The target rejected work with a non-transient data-access failure | Stop automatic retries and involve an operator. |
 | 500 | `etl_internal_error` | `urn:mightyetl:problem:etl-internal-error` | An unexpected application failure occurred | Stop automatic retries and involve an operator. |
 
@@ -67,11 +67,11 @@ The fixed detail deliberately does not reveal which internal parser, validation 
 RFC 9457 standardizes error representation; it does not make retries idempotent. Retry safety depends on the operation's semantics and, for ambiguous ETL outcomes, whether the client supplied a valid principal-scoped idempotency key.
 
 - `400`, `413`, and record-validation `422` responses are deterministic request failures. Correct or split the request; blind retries repeat the same rejection.
-- `etl_idempotency_key_reused` is also deterministic. A new logical payload requires a new key.
+- `etl_idempotency_key_reused` is also deterministic. A new logical payload requires a new semantic key.
 - `503` represents a transient target failure. Retry only with a bounded attempt count, exponential backoff, and jitter.
 - `500` requires operator investigation. Do not automatically retry `500` responses.
 
-An unkeyed retry repeats the whole accepted transaction and can duplicate business effects after an ambiguous transport failure. A keyed retry is principal-scoped and durable: preserve the exact key and byte-identical payload to replay the prior committed response without another target write. See [`docs/etl/idempotent-retries.md`](../etl/idempotent-retries.md) for the complete key, migration, concurrency, and retention contract.
+An unkeyed retry repeats the whole accepted transaction and can duplicate business effects after an ambiguous transport failure. A keyed retry is principal-scoped and durable: preserve the same semantic key and identical decoded JSON text to replay the prior committed response without another target write. The preferred quoted RFC 9651 representation and the retained legacy raw representation normalize to the same semantic key. See [`docs/etl/idempotent-retries.md`](../etl/idempotent-retries.md) for the complete key, migration, concurrency, and retention contract.
 
 ## Compatibility
 
