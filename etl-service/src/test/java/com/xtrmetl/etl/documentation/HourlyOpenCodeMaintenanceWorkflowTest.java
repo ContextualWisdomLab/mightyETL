@@ -101,23 +101,25 @@ class HourlyOpenCodeMaintenanceWorkflowTest {
      *
      * <p>OpenCode 1.18.13 intentionally skips its internal Git credential and author setup when
      * {@code USE_GITHUB_TOKEN=true}. Because checkout credentials remain disabled, the workflow
-     * must install a local, short-lived authorization header and local author identity before
-     * starting OpenCode, then remove the authorization header even when the process fails or
-     * times out.</p>
+     * must install a repository-local GitHub CLI credential helper and local author identity
+     * before starting OpenCode, then remove the helper even when the process fails or times out.
+     * The helper reads the short-lived token from {@code GH_TOKEN}; no encoded token is written
+     * to Git configuration.</p>
      */
     @Test
     void bootstrapsAndRemovesDirectTokenGitCredentials() {
+        assertTrue(workflow.contains("GH_TOKEN: ${{ github.token }}"));
         assertTrue(workflow.contains(
-                "git_config_key=\"http.https://github.com/.extraheader\""
+                "git_credential_key=\"credential.https://github.com.helper\""
         ));
         assertTrue(workflow.contains("cleanup_git_credentials()"));
         assertTrue(workflow.contains("trap cleanup_git_credentials EXIT"));
         assertTrue(workflow.contains(
-                "printf 'x-access-token:%s' \"${GITHUB_TOKEN}\""
+                "git config --local --add \"${git_credential_key}\" \"\""
         ));
         assertTrue(workflow.contains(
-                "git config --local \"${git_config_key}\" "
-                        + "\"AUTHORIZATION: basic ${github_basic_auth}\""
+                "git config --local --add \"${git_credential_key}\" "
+                        + "\"!gh auth git-credential\""
         ));
         assertTrue(workflow.contains(
                 "git config --local user.name \"opencode-agent[bot]\""
@@ -126,7 +128,7 @@ class HourlyOpenCodeMaintenanceWorkflowTest {
                 "git config --local user.email "
                         + "\"opencode-agent[bot]@users.noreply.github.com\""
         ));
-        assertTrue(workflow.contains("unset github_basic_auth"));
+        assertFalse(workflow.contains("AUTHORIZATION: basic"));
         assertFalse(workflow.contains("AGENT: build"));
     }
 
