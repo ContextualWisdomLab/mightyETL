@@ -149,6 +149,8 @@ Anomaly. (2026). *GitHub integration*. OpenCode. https://opencode.ai/docs/github
 
 Anomaly. (2026). *Providers*. OpenCode. https://opencode.ai/docs/providers/
 
+Free Software Foundation. (2026). *timeout: Run a command with a time limit*. GNU Coreutils 9.11. https://www.gnu.org/software/coreutils/manual/html_node/timeout-invocation.html
+
 GitHub, Inc. (2026). *Automatic token authentication*. GitHub Docs. https://docs.github.com/en/actions/security-for-github-actions/security-guides/automatic-token-authentication
 
 GitHub, Inc. (2026). *Events that trigger workflows*. GitHub Docs. https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows
