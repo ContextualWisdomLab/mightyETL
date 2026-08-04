@@ -48,6 +48,33 @@ public enum EtlRequestError {
             "urn:mightyetl:problem:etl-invalid-record",
             "Invalid ETL record",
             "One or more ETL records violate the request contract."
+    ),
+
+    /** The optional Idempotency-Key does not satisfy mightyETL's bounded safe profile. */
+    INVALID_IDEMPOTENCY_KEY(
+            HttpStatus.BAD_REQUEST,
+            "etl_invalid_idempotency_key",
+            "urn:mightyetl:problem:etl-invalid-idempotency-key",
+            "Invalid ETL idempotency key",
+            "Idempotency-Key must be a quoted Structured Field String or a supported legacy raw value containing 16 to 128 safe ASCII characters."
+    ),
+
+    /** An idempotency-protected request has no authenticated principal namespace. */
+    IDEMPOTENCY_PRINCIPAL_REQUIRED(
+            HttpStatus.UNAUTHORIZED,
+            "etl_idempotency_principal_required",
+            "urn:mightyetl:problem:etl-idempotency-principal-required",
+            "ETL idempotency authentication required",
+            "An authenticated principal is required when Idempotency-Key is supplied."
+    ),
+
+    /** A scoped idempotency key was already committed for a different request payload. */
+    IDEMPOTENCY_KEY_REUSED(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "etl_idempotency_key_reused",
+            "urn:mightyetl:problem:etl-idempotency-key-reused",
+            "ETL idempotency key reused",
+            "The Idempotency-Key was already used with a different request payload."
     );
 
     private final HttpStatus status;

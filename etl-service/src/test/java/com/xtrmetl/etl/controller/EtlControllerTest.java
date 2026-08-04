@@ -3,6 +3,7 @@ package com.xtrmetl.etl.controller;
 import com.xtrmetl.etl.connector.ConnectorProperties;
 import com.xtrmetl.etl.connector.TargetConnectorDispatcher;
 import com.xtrmetl.etl.connector.TargetConnectorRegistry;
+import com.xtrmetl.etl.service.EtlIdempotencyResult;
 import com.xtrmetl.etl.service.EtlRequestError;
 import com.xtrmetl.etl.service.EtlRequestException;
 import com.xtrmetl.etl.service.EtlService;
@@ -17,6 +18,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.security.Principal;
 import java.util.stream.Stream;
 
 import static org.hamcrest.Matchers.containsString;
@@ -26,10 +28,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -40,6 +44,7 @@ class EtlControllerTest {
 
     private static final String PROCESS_PATH = "/api/etl/process";
     private static final String SYNTHETIC_SECRET = "synthetic-secret-password";
+    private static final String IDEMPOTENCY_KEY = "550e8400-e29b-41d4-a716-446655440000";
 
     private EtlService etlService;
     private EtlController controller;
@@ -71,6 +76,56 @@ class EtlControllerTest {
                 .andExpect(content().string("Processed: record_alpha"));
 
         verify(etlService).processData(request);
+    }
+
+    @Test
+    void processesTheFirstKeyedRequestAndMarksItAsNotReplayed() throws Exception {
+        String request = "[{\"id\":\"record_alpha\"}]";
+        Principal principal = () -> "tenant_alpha";
+        when(etlService.processDataIdempotently(request, IDEMPOTENCY_KEY, "tenant_alpha"))
+                .thenReturn(new EtlIdempotencyResult("Processed: record_alpha", false));
+
+        mockMvc.perform(post(PROCESS_PATH)
+                        .principal(principal)
+                        .header("Idempotency-Key", IDEMPOTENCY_KEY)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(request))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_PLAIN))
+                .andExpect(header().string(EtlController.IDEMPOTENCY_REPLAYED_HEADER, "false"))
+                .andExpect(content().string("Processed: record_alpha"));
+
+        verify(etlService).processDataIdempotently(request, IDEMPOTENCY_KEY, "tenant_alpha");
+    }
+
+    @Test
+    void replaysACommittedKeyedRequestAndMarksTheResponse() throws Exception {
+        String request = "[{\"id\":\"record_alpha\"}]";
+        Principal principal = () -> "tenant_alpha";
+        when(etlService.processDataIdempotently(request, IDEMPOTENCY_KEY, "tenant_alpha"))
+                .thenReturn(new EtlIdempotencyResult("Processed: record_alpha", true));
+
+        mockMvc.perform(post(PROCESS_PATH)
+                        .principal(principal)
+                        .header("Idempotency-Key", IDEMPOTENCY_KEY)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(request))
+                .andExpect(status().isOk())
+                .andExpect(header().string(EtlController.IDEMPOTENCY_REPLAYED_HEADER, "true"))
+                .andExpect(content().string("Processed: record_alpha"));
+    }
+
+    @Test
+    void requiresAnAuthenticatedPrincipalForAKeyedRequest() throws Exception {
+        mockMvc.perform(post(PROCESS_PATH)
+                        .header("Idempotency-Key", IDEMPOTENCY_KEY)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("[{\"id\":\"record_alpha\"}]"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.errorCode").value("etl_idempotency_principal_required"));
+
+        verifyNoInteractions(etlService);
     }
 
     @ParameterizedTest
