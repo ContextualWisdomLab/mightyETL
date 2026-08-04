@@ -12,6 +12,7 @@ import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -166,13 +167,16 @@ public class EtlService {
      *
      * <p>The target writes and ledger insert share one transaction. A target or ledger failure
      * therefore leaves neither a partial batch nor a false successful replay record. Transient
-     * database failures retry the complete transaction rather than only one statement.</p>
+     * database failures retry the complete transaction rather than only one statement. The method
+     * fails closed before lock or JDBC access when called without an active Spring transaction,
+     * which prevents direct construction or self-invocation from silently weakening durability.</p>
      *
      * @param data UTF-8 JSON array payload
      * @param idempotencyKey client-generated safe ASCII key containing 16 to 128 characters
      * @param principalScope authenticated principal name used only to isolate the key namespace
      * @return response body and whether it was replayed from the durable ledger
      * @throws EtlRequestException when the key, principal, payload, or record contract is invalid
+     * @throws IllegalStateException when no actual transaction is active for the idempotent work
      * @throws org.springframework.dao.DataAccessException when the target database rejects work
      */
     @Retryable(
@@ -191,6 +195,7 @@ public class EtlService {
         if (data == null) {
             throw new EtlRequestException(EtlRequestError.INVALID_JSON);
         }
+        requireActiveTransaction();
 
         String idempotencyKeyHash = sha256(
                 validatedScope.length() + ":" + validatedScope + ":" + validatedKey
@@ -266,6 +271,14 @@ public class EtlService {
             throw new EtlRequestException(EtlRequestError.IDEMPOTENCY_PRINCIPAL_REQUIRED);
         }
         return principalScope;
+    }
+
+    private static void requireActiveTransaction() {
+        if (!TransactionSynchronizationManager.isActualTransactionActive()) {
+            throw new IllegalStateException(
+                    "Idempotent ETL processing requires an active transaction"
+            );
+        }
     }
 
     private static String sha256(String value) {
