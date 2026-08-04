@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xtrmetl.etl.service.EtlBatchProperties;
 import com.xtrmetl.etl.service.EtlRequestError;
 import com.xtrmetl.etl.service.EtlRequestException;
+import com.xtrmetl.etl.service.EtlRequestLock;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -205,12 +206,18 @@ class EtlJobServiceIntegrationTest {
         }
 
         @Bean
+        EtlRequestLock etlRequestLock() {
+            return idempotencyKeyHash -> true;
+        }
+
+        @Bean
         EtlJobService etlJobService(
                 JdbcTemplate jdbcTemplate,
                 ObjectMapper objectMapper,
-                EtlBatchProperties properties
+                EtlBatchProperties properties,
+                EtlRequestLock requestLock
         ) {
-            return new EtlJobService(jdbcTemplate, objectMapper, properties);
+            return new EtlJobService(jdbcTemplate, objectMapper, properties, requestLock);
         }
     }
 }
