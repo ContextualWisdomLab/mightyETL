@@ -70,7 +70,7 @@ class EtlProblemDetailsDocumentationTest {
     void idempotencyRunbookDocumentsImmediateConcurrentConflictSemantics() throws IOException {
         String runbook = read("docs/etl/idempotent-retries.md").replaceAll("\\s+", " ");
 
-        assertTrue(runbook.contains("409 `etl_idempotency_request_in_progress`"));
+        assertTrue(runbook.contains("409 | `etl_idempotency_request_in_progress`"));
         assertTrue(runbook.contains("pg_try_advisory_xact_lock"));
         assertTrue(runbook.contains("returns immediately instead of waiting"));
         assertTrue(runbook.contains("does not emit `Retry-After`"));
