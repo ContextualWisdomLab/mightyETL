@@ -17,15 +17,20 @@ Send all of the following:
 - the same `Idempotency-Key` value; and
 - the byte-for-byte same JSON request body.
 
+The ETL service currently resolves its principal through its implemented Spring Security HTTP Basic
+configuration. A deployment may place the service behind a gateway, but that gateway must preserve
+or establish downstream authentication that the ETL service itself can verify. Gateway-only Reactor
+security context is not a downstream service principal and must not be treated as one.
+
 mightyETL accepts a deliberately narrow key profile: 16 to 128 characters from
 `A-Z`, `a-z`, `0-9`, `.`, `_`, `:`, and `-`. UUIDs satisfy this profile. Generate high-entropy,
 unguessable keys and use a new key for every logically new batch.
 
-Example:
+Example for the authentication mechanism implemented by the ETL service:
 
 ```http
 POST /api/etl/process HTTP/1.1
-Authorization: Bearer <token>
+Authorization: Basic <credentials>
 Content-Type: application/json
 Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000
 
