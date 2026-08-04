@@ -45,13 +45,19 @@ public class EtlController {
     /**
      * Processes one bounded JSON-array request and returns record results in input order.
      *
+     * <p>The mapping does not constrain response negotiation to the successful representation.
+     * This allows callers that accept only {@code application/problem+json} to receive typed
+     * failure responses before a successful text body is selected.</p>
+     *
      * @param jsonInput UTF-8 JSON array request body
      * @return existing newline-delimited plain-text success response
      */
-    @PostMapping(value = "/process", produces = MediaType.TEXT_PLAIN_VALUE)
+    @PostMapping("/process")
     @Observed(name = "etl.process", contextualName = "etl-processing")
     public ResponseEntity<String> processData(@RequestBody String jsonInput) {
-        return ResponseEntity.ok(etlService.processData(jsonInput));
+        return ResponseEntity.ok()
+                .contentType(MediaType.TEXT_PLAIN)
+                .body(etlService.processData(jsonInput));
     }
 
     /**
