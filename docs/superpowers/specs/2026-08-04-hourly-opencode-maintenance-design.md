@@ -69,7 +69,7 @@ The deterministic hourly disposition workflow remains responsible for exact-head
 - A missing `NVIDIA_NIM_API_KEY`, missing `GITHUB_TOKEN`, unavailable NVIDIA endpoint, OpenCode installation mismatch, Git bootstrap failure, timeout, test failure, or GitHub permission denial fails the scheduled job visibly.
 - No fallback provider or Copilot credential is configured.
 - Concurrency is serialized with `cancel-in-progress: false`, preventing overlapping maintenance runs from racing.
-- At 45 minutes, the process receives `TERM`; if it remains alive after 30 seconds, `timeout` sends `KILL` so the shell can complete its credential-cleanup trap before the 50-minute workflow limit.
+- At 45 minutes, the process receives `TERM`; if it remains alive after 30 seconds, GNU `timeout` sends `KILL` so the shell can complete its credential-cleanup trap before the 50-minute workflow limit.
 - The workflow does not publish a release or merge partial work.
 
 ## Verification
@@ -93,6 +93,8 @@ Anomaly. (2026). *GitHub handler (Version 1.18.13)* [Source code]. GitHub. https
 Anomaly. (2026). *GitHub integration*. OpenCode. https://opencode.ai/docs/github/
 
 Anomaly. (2026). *Providers*. OpenCode. https://opencode.ai/docs/providers/
+
+Free Software Foundation. (2026). *timeout: Run a command with a time limit*. GNU Coreutils 9.11. https://www.gnu.org/software/coreutils/manual/html_node/timeout-invocation.html
 
 GitHub, Inc. (2026). *Automatic token authentication*. GitHub Docs. https://docs.github.com/en/actions/security-for-github-actions/security-guides/automatic-token-authentication
 
