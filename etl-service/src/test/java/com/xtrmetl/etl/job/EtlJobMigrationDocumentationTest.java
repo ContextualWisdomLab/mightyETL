@@ -63,6 +63,9 @@ class EtlJobMigrationDocumentationTest {
         assertTrue(runbook.contains("worker and lease-fencing slice"));
         assertTrue(runbook.contains("Cache-Control: no-store"));
         assertTrue(runbook.contains("422 etl_job_submission_key_reused"));
+        assertTrue(runbook.contains("disabled by default"));
+        assertTrue(runbook.contains("mightyetl.etl.jobs.intake-enabled=true"));
+        assertTrue(runbook.contains("xtrmetl.etl.jobs.intake-enabled=true"));
     }
 
     private static String read(String relativePath) throws IOException {
