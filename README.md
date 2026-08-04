@@ -23,7 +23,7 @@ mightyETL provides enterprise-grade capabilities for:
 | CDC capture | **PostgreSQL → Kafka** (Debezium embedded) | Ops: `GET /api/cdc/status`, slot lag, `cdcEngine` health — [ops-and-reliability](docs/cdc/ops-and-reliability.md) |
 | CDC replica apply | **Optional** Postgres JDBC | Tables with `(id, data)` shape (`xtrmetl.replica.tables`) |
 | Any-to-any CDC | **Scaffold** | Source/target SPI + factory; MySQL/SQL Server **not live** |
-| ETL load | **PostgreSQL** via `POST /api/etl/process` | Bounded, fully prevalidated, transaction-scoped request batches — [runbook](docs/etl/bounded-atomic-batches.md) |
+| ETL load | **PostgreSQL** via `POST /api/etl/process` | Bounded, fully prevalidated, transaction-scoped request batches — [runbook](docs/etl/bounded-atomic-batches.md); RFC 9457 errors — [problem details](docs/api/problem-details.md) |
 | Databricks / Snowflake / Qlik | **Scaffold** (not production) | SPI + YAML binding + required-key validation + catalog; `write()` always refused — [docs/connectors/](docs/connectors/) |
 | Progress tracker | [docs/mightyETL-product-upgrade-progress.md](docs/mightyETL-product-upgrade-progress.md) | |
 
@@ -216,6 +216,15 @@ Processes and transforms bounded JSON batches with configurable business rules.
 - `EMAIL` fields: locale-independent lowercase
 - `AMOUNT` fields: `BigDecimal` with two decimal places and `HALF_UP` rounding
 - All other field values are preserved without comma/colon splitting
+
+**Error Contract:**
+
+- Successful processing remains `200 text/plain`.
+- Failures use RFC 9457 `application/problem+json` with a stable snake_case `errorCode`.
+- `400/413/422` responses are deterministic client failures and should be corrected rather than blindly retried.
+- `503` represents a transient target failure and may be retried with bounded exponential backoff and jitter.
+- Do not automatically retry `500` responses; route them to operator investigation.
+- See [docs/api/problem-details.md](docs/api/problem-details.md) for the complete status, type URI, non-leakage, and retry contract.
 
 ### Zuul Gateway (Port 8080)
 
@@ -595,6 +604,7 @@ For issues, questions, or contributions:
 - Contact the development team
 - Refer to [PRD.md](PRD.md) for detailed requirements
 - Use [docs/etl/bounded-atomic-batches.md](docs/etl/bounded-atomic-batches.md) for ETL admission and rollback operations
+- Use [docs/api/problem-details.md](docs/api/problem-details.md) for ETL error codes and retry guidance
 
 ## 🗺️ Roadmap
 
@@ -602,6 +612,7 @@ For issues, questions, or contributions:
 
 - CDC for PostgreSQL
 - Bounded, prevalidated, transaction-scoped PostgreSQL ETL batches
+- RFC 9457 ETL problem details with stable machine codes
 - JWT authentication
 - Microservices architecture
 - Distributed tracing
@@ -622,6 +633,7 @@ For issues, questions, or contributions:
 - **[PRD.md](PRD.md)** - Complete Product Requirements Document
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - System architecture
 - **[docs/etl/bounded-atomic-batches.md](docs/etl/bounded-atomic-batches.md)** - ETL admission, deterministic transformation, and rollback contract
+- **[docs/api/problem-details.md](docs/api/problem-details.md)** - RFC 9457 ETL error response and retry contract
 - **[docs/connectors/](docs/connectors/)** - Target connector scaffolds (Qlik, Databricks, Snowflake)
 - **[docs/cdc/any-to-any-cdc.md](docs/cdc/any-to-any-cdc.md)** - Any-to-any CDC design and limitations
 - **[docs/rebrand-name-matrix.md](docs/rebrand-name-matrix.md)** - mightyETL vs legacy xtrmETL identifiers
@@ -630,5 +642,5 @@ For issues, questions, or contributions:
 ---
 
 **Version**: 1.0.0  
-**Last Updated**: 2026-08-03  
+**Last Updated**: 2026-08-04  
 **Status**: Active Development
