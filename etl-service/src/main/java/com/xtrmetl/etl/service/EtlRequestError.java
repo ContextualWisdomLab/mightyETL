@@ -84,6 +84,33 @@ public enum EtlRequestError {
             "urn:mightyetl:problem:etl-idempotency-request-in-progress",
             "ETL idempotency request in progress",
             "A request with the same principal-scoped Idempotency-Key is still being processed."
+    ),
+
+    /** A durable job submission key already identifies different JSON text for this principal. */
+    JOB_SUBMISSION_KEY_REUSED(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "etl_job_submission_key_reused",
+            "urn:mightyetl:problem:etl-job-submission-key-reused",
+            "ETL job submission key reused",
+            "The Idempotency-Key already identifies a different durable ETL job payload."
+    ),
+
+    /** Another transaction is currently creating the same principal-scoped durable job. */
+    JOB_SUBMISSION_IN_PROGRESS(
+            HttpStatus.CONFLICT,
+            "etl_job_submission_in_progress",
+            "urn:mightyetl:problem:etl-job-submission-in-progress",
+            "ETL job submission in progress",
+            "A durable ETL job with the same principal-scoped Idempotency-Key is being created."
+    ),
+
+    /** The requested job does not exist in the authenticated principal's namespace. */
+    JOB_NOT_FOUND(
+            HttpStatus.NOT_FOUND,
+            "etl_job_not_found",
+            "urn:mightyetl:problem:etl-job-not-found",
+            "ETL job not found",
+            "The requested ETL job was not found."
     );
 
     private final HttpStatus status;
