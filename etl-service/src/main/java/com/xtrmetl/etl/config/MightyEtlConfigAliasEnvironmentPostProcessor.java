@@ -27,6 +27,7 @@ public class MightyEtlConfigAliasEnvironmentPostProcessor implements Environment
     static final List<String> RELATIVE_KEYS = List.of(
             "etl.max-payload-bytes",
             "etl.max-batch-records",
+            "etl.jobs.intake-enabled",
             "connectors.databricks.enabled",
             "connectors.snowflake.enabled",
             "connectors.qlik-sense.enabled"
