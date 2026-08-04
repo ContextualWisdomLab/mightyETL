@@ -44,22 +44,35 @@ class EtlJobModelTest {
 
     @Test
     void retainsValidSnapshotsAndMapsThemToStatusResponses() {
-        EtlJobSnapshot snapshot = new EtlJobSnapshot(
+        EtlJobSnapshot pending = new EtlJobSnapshot(
                 JOB_RECORD_ID,
                 EtlJobStatus.PENDING,
                 0,
                 null,
+                null,
                 CREATED_AT,
                 UPDATED_AT
         );
-        EtlJobStatusResponse response = EtlJobStatusResponse.from(snapshot);
+        EtlJobSnapshot succeeded = new EtlJobSnapshot(
+                JOB_RECORD_ID,
+                EtlJobStatus.SUCCEEDED,
+                1,
+                null,
+                2,
+                CREATED_AT,
+                UPDATED_AT
+        );
+        EtlJobStatusResponse pendingResponse = EtlJobStatusResponse.from(pending);
+        EtlJobStatusResponse successResponse = EtlJobStatusResponse.from(succeeded);
 
-        assertEquals(JOB_RECORD_ID, response.jobRecordId());
-        assertEquals(EtlJobStatus.PENDING, response.jobStatus());
-        assertEquals(0, response.attemptCount());
-        assertNull(response.failureCode());
-        assertEquals(CREATED_AT, response.createdAt());
-        assertEquals(UPDATED_AT, response.updatedAt());
+        assertEquals(JOB_RECORD_ID, pendingResponse.jobRecordId());
+        assertEquals(EtlJobStatus.PENDING, pendingResponse.jobStatus());
+        assertEquals(0, pendingResponse.attemptCount());
+        assertNull(pendingResponse.failureCode());
+        assertNull(pendingResponse.processedRecordCount());
+        assertEquals(CREATED_AT, pendingResponse.createdAt());
+        assertEquals(UPDATED_AT, pendingResponse.updatedAt());
+        assertEquals(2, successResponse.processedRecordCount());
     }
 
     @Test
@@ -86,47 +99,112 @@ class EtlJobModelTest {
         );
         assertThrows(
                 NullPointerException.class,
-                () -> new EtlJobSnapshot(null, EtlJobStatus.PENDING, 0, null, CREATED_AT, UPDATED_AT)
+                () -> new EtlJobSnapshot(
+                        null,
+                        EtlJobStatus.PENDING,
+                        0,
+                        null,
+                        null,
+                        CREATED_AT,
+                        UPDATED_AT
+                )
         );
         assertThrows(
                 NullPointerException.class,
-                () -> new EtlJobSnapshot(JOB_RECORD_ID, null, 0, null, CREATED_AT, UPDATED_AT)
+                () -> new EtlJobSnapshot(
+                        JOB_RECORD_ID,
+                        null,
+                        0,
+                        null,
+                        null,
+                        CREATED_AT,
+                        UPDATED_AT
+                )
         );
         assertThrows(
                 NullPointerException.class,
-                () -> new EtlJobSnapshot(JOB_RECORD_ID, EtlJobStatus.PENDING, 0, null, null, UPDATED_AT)
+                () -> new EtlJobSnapshot(
+                        JOB_RECORD_ID,
+                        EtlJobStatus.PENDING,
+                        0,
+                        null,
+                        null,
+                        null,
+                        UPDATED_AT
+                )
         );
         assertThrows(
                 NullPointerException.class,
-                () -> new EtlJobSnapshot(JOB_RECORD_ID, EtlJobStatus.PENDING, 0, null, CREATED_AT, null)
+                () -> new EtlJobSnapshot(
+                        JOB_RECORD_ID,
+                        EtlJobStatus.PENDING,
+                        0,
+                        null,
+                        null,
+                        CREATED_AT,
+                        null
+                )
         );
         assertThrows(
                 NullPointerException.class,
-                () -> new EtlJobStatusResponse(null, EtlJobStatus.PENDING, 0, null, CREATED_AT, UPDATED_AT)
+                () -> new EtlJobStatusResponse(
+                        null,
+                        EtlJobStatus.PENDING,
+                        0,
+                        null,
+                        null,
+                        CREATED_AT,
+                        UPDATED_AT
+                )
         );
         assertThrows(
                 NullPointerException.class,
-                () -> new EtlJobStatusResponse(JOB_RECORD_ID, null, 0, null, CREATED_AT, UPDATED_AT)
+                () -> new EtlJobStatusResponse(
+                        JOB_RECORD_ID,
+                        null,
+                        0,
+                        null,
+                        null,
+                        CREATED_AT,
+                        UPDATED_AT
+                )
         );
         assertThrows(
                 NullPointerException.class,
-                () -> new EtlJobStatusResponse(JOB_RECORD_ID, EtlJobStatus.PENDING, 0, null, null, UPDATED_AT)
+                () -> new EtlJobStatusResponse(
+                        JOB_RECORD_ID,
+                        EtlJobStatus.PENDING,
+                        0,
+                        null,
+                        null,
+                        null,
+                        UPDATED_AT
+                )
         );
         assertThrows(
                 NullPointerException.class,
-                () -> new EtlJobStatusResponse(JOB_RECORD_ID, EtlJobStatus.PENDING, 0, null, CREATED_AT, null)
+                () -> new EtlJobStatusResponse(
+                        JOB_RECORD_ID,
+                        EtlJobStatus.PENDING,
+                        0,
+                        null,
+                        null,
+                        CREATED_AT,
+                        null
+                )
         );
         assertThrows(NullPointerException.class, () -> EtlJobStatusResponse.from(null));
     }
 
     @Test
-    void rejectsNegativeAttemptCounts() {
+    void rejectsNegativeAttemptAndProcessedRecordCounts() {
         assertThrows(
                 IllegalArgumentException.class,
                 () -> new EtlJobSnapshot(
                         JOB_RECORD_ID,
                         EtlJobStatus.PENDING,
                         -1,
+                        null,
                         null,
                         CREATED_AT,
                         UPDATED_AT
@@ -139,6 +217,31 @@ class EtlJobModelTest {
                         EtlJobStatus.PENDING,
                         -1,
                         null,
+                        null,
+                        CREATED_AT,
+                        UPDATED_AT
+                )
+        );
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new EtlJobSnapshot(
+                        JOB_RECORD_ID,
+                        EtlJobStatus.SUCCEEDED,
+                        1,
+                        null,
+                        -1,
+                        CREATED_AT,
+                        UPDATED_AT
+                )
+        );
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new EtlJobStatusResponse(
+                        JOB_RECORD_ID,
+                        EtlJobStatus.SUCCEEDED,
+                        1,
+                        null,
+                        -1,
                         CREATED_AT,
                         UPDATED_AT
                 )
