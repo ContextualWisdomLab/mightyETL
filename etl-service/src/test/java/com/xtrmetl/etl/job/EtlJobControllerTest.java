@@ -58,6 +58,7 @@ class EtlJobControllerTest {
                         .content(request))
                 .andExpect(status().isAccepted())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(header().string(
                         "Location",
                         "/api/etl/jobs/cf4f083f-8c90-4f34-a8b6-b53761de44ef"
@@ -85,6 +86,7 @@ class EtlJobControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(request))
                 .andExpect(status().isAccepted())
+                .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(header().string("Idempotency-Replayed", "true"))
                 .andExpect(jsonPath("$.jobRecordId").value(jobRecordId.toString()));
     }
@@ -96,6 +98,7 @@ class EtlJobControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("[]"))
                 .andExpect(status().isUnauthorized())
+                .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.errorCode").value("etl_idempotency_principal_required"));
 
         mockMvc.perform(post(JOBS_PATH)
@@ -103,6 +106,7 @@ class EtlJobControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("[]"))
                 .andExpect(status().isBadRequest())
+                .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.errorCode").value("etl_invalid_idempotency_key"));
 
         verifyNoInteractions(etlJobService);
@@ -125,6 +129,7 @@ class EtlJobControllerTest {
 
         mockMvc.perform(get(JOBS_PATH + "/" + jobRecordId).principal(PRINCIPAL))
                 .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.jobRecordId").value(jobRecordId.toString()))
                 .andExpect(jsonPath("$.jobStatus").value("PENDING"))
                 .andExpect(jsonPath("$.attemptCount").value(0))
@@ -144,6 +149,7 @@ class EtlJobControllerTest {
 
         mockMvc.perform(get(JOBS_PATH + "/" + jobRecordId))
                 .andExpect(status().isUnauthorized())
+                .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.errorCode").value("etl_idempotency_principal_required"));
 
         verifyNoInteractions(etlJobService);
