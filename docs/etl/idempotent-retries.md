@@ -76,6 +76,12 @@ For a new key, mightyETL performs this sequence in one retryable Spring transact
 5. insert the durable response ledger row; and
 6. commit both target rows and ledger together.
 
+Java callers must invoke the idempotent method through the Spring-managed service proxy or establish
+an explicit transaction boundary before invocation. Direct construction and same-class
+self-invocation do not activate Spring's annotation advice. mightyETL therefore fails closed before
+request-lock or JDBC access when no actual transaction is active, rather than silently weakening the
+atomicity and lock-lifetime guarantees.
+
 Competing requests with the same principal-scoped key wait for the same transaction lock. After the
 first commit, the waiter observes and replays the ledger row. A rollback releases the advisory lock
 and leaves neither target rows nor a false success ledger entry.
