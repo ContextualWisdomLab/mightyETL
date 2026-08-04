@@ -17,14 +17,17 @@ import java.util.UUID;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Covers typed data-access and unexpected failures at both durable job controller boundaries.
+ * Covers typed data-access, malformed resource identifiers, and unexpected failures at both
+ * durable job controller boundaries.
  */
 class EtlJobControllerFailureTest {
 
@@ -50,7 +53,8 @@ class EtlJobControllerFailureTest {
                 .thenThrow(new EtlRequestException(EtlRequestError.JOB_SUBMISSION_KEY_REUSED));
 
         performSubmission()
-                .andExpect(status().isConflict())
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.errorCode").value("etl_job_submission_key_reused"));
     }
 
@@ -62,6 +66,7 @@ class EtlJobControllerFailureTest {
 
         performSubmission()
                 .andExpect(status().isInternalServerError())
+                .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.errorCode").value("etl_target_failure"))
                 .andExpect(jsonPath("$.detail").value("The ETL target could not process the request."));
     }
@@ -73,6 +78,7 @@ class EtlJobControllerFailureTest {
 
         performSubmission()
                 .andExpect(status().isInternalServerError())
+                .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.errorCode").value("etl_internal_error"))
                 .andExpect(jsonPath("$.detail").value("The ETL request could not be processed."));
     }
@@ -84,7 +90,18 @@ class EtlJobControllerFailureTest {
 
         performStatus()
                 .andExpect(status().isNotFound())
+                .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.errorCode").value("etl_job_not_found"));
+    }
+
+    @Test
+    void treatsMalformedJobIdentifiersAsTheSameOwnerSafeNotFoundProblem() throws Exception {
+        mockMvc.perform(get(JOBS_PATH + "/not-a-uuid").principal(PRINCIPAL))
+                .andExpect(status().isNotFound())
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.errorCode").value("etl_job_not_found"));
+
+        verifyNoInteractions(etlJobService);
     }
 
     @Test
@@ -95,6 +112,7 @@ class EtlJobControllerFailureTest {
 
         performStatus()
                 .andExpect(status().isInternalServerError())
+                .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.errorCode").value("etl_target_failure"));
     }
 
@@ -105,6 +123,7 @@ class EtlJobControllerFailureTest {
 
         performStatus()
                 .andExpect(status().isInternalServerError())
+                .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.errorCode").value("etl_internal_error"));
     }
 
