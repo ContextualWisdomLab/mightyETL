@@ -4,9 +4,10 @@
 
 `POST /api/etl/jobs` creates a durable, authenticated-principal-scoped ETL job resource. A separate
 lease-fenced worker claims accepted jobs across replicas, replays or writes the durable response
-ledger, writes target rows, and commits terminal state atomically.
+ledger, writes target rows, and commits terminal state atomically. Authenticated operators can also
+list recent jobs in their own principal namespace through deterministic keyset pagination.
 
-Both capabilities are fail-closed:
+Both intake and execution capabilities are fail-closed:
 
 ```text
 mightyetl.etl.jobs.intake-enabled=false
@@ -57,6 +58,56 @@ same job identifier and `Idempotency-Replayed: true`. Reusing one principal-scop
 JSON returns `422 etl_job_submission_key_reused`. A concurrent creation attempt that cannot acquire
 the transaction-level submission lock returns `409 etl_job_submission_in_progress`.
 
+## List owned jobs
+
+```http
+GET /api/etl/jobs?limit=50 HTTP/1.1
+Authorization: Basic <credentials>
+```
+
+The endpoint returns only jobs owned by the same authenticated principal. It orders rows by
+`created_at DESC, job_record_id DESC`; the UUID is a deterministic tie-breaker when jobs share one
+database timestamp. The default page size is 50 and the accepted canonical range is 1 through 100.
+Values such as `0`, `101`, `01`, signed values, whitespace-padded values, and non-decimal text fail
+with `400 etl_invalid_job_page_limit` before table access.
+
+The service fetches one additional row beyond the requested page size. That row is not returned; it
+only proves that another page exists. When a following page is available, the body includes an opaque
+URL-safe cursor and the response advertises the same target through RFC 8288 Web Linking:
+
+```http
+HTTP/1.1 200 OK
+Cache-Control: no-store
+Link: </api/etl/jobs?limit=50&cursor=eyJvcGFxdWUiOiJleGFtcGxlIn0>; rel="next"
+Content-Type: application/json
+
+{
+  "jobs": [
+    {
+      "jobRecordId": "cf4f083f-8c90-4f34-a8b6-b53761de44ef",
+      "jobStatus": "SUCCEEDED",
+      "attemptCount": 1,
+      "createdAt": "2026-08-05T01:00:00Z",
+      "updatedAt": "2026-08-05T01:00:05Z"
+    }
+  ],
+  "nextCursor": "eyJvcGFxdWUiOiJleGFtcGxlIn0"
+}
+```
+
+The actual cursor is a canonical unpadded Base64 URL encoding of the last returned creation timestamp
+and job identifier. Clients must treat it as opaque. Each following query still binds the current
+principal hash and applies a strict tuple boundary equivalent to “older timestamp, or the same
+timestamp with a lower UUID.” Cursor contents never grant authority and reveal no payload, principal,
+submission key, or hash. Malformed, oversized, incomplete, non-canonical, or stale-format cursors fail
+closed with `400 etl_invalid_job_page_cursor` before database access. A terminal or empty page omits
+both `nextCursor` and the `Link` header.
+
+Pagination guarantees no duplicates or omissions while traversing an unchanged dataset. Concurrent
+insertions are visible according to their ordering position and do not convert a cursor into a
+snapshot transaction. Consumers needing a legally frozen audit set must export from an explicit
+transactional or warehouse snapshot rather than treating this operational list as one.
+
 ## Read job status
 
 ```http
@@ -68,16 +119,21 @@ The query binds the current principal hash and job identifier. A malformed, miss
 identifier returns the same `404 etl_job_not_found`, preventing tenant-existence probing.
 
 The representation exposes only the opaque job identifier, stable lifecycle state, bounded attempt
-count, stable failure code where applicable, status URL, and timestamps. It excludes request payload,
-raw principal, raw submission key, internal hashes, lease identifiers, SQL, and response-ledger data.
+count, stable failure code where applicable, and timestamps. It excludes request payload, raw
+principal, raw submission key, internal hashes, lease identifiers, SQL, and response-ledger data.
 
 ## Lifecycle and distribution
 
 Flyway migrations create descriptive multi-word `snake_case` objects:
 
 - `V2__create_etl_job_records.sql` creates `etl_job_records` and the submission uniqueness contract;
-- `V3__add_etl_job_lease_fencing.sql` adds `lease_claim_id`, `lease_owner_id`,
-  `lease_expires_at`, lifecycle constraints, and `etl_job_claim_eligibility_index`.
+- `V3__add_etl_job_lease_fencing.sql` transactionally adds `lease_claim_id`, `lease_owner_id`,
+  `lease_expires_at`, legacy-data repair, and lifecycle constraints;
+- `V4__add_etl_job_claim_eligibility_index.sql` concurrently adds
+  `etl_job_claim_eligibility_index` for oldest eligible queue-like claims without blocking writers;
+- `V5__add_etl_job_owner_pagination_index.sql` concurrently adds
+  `etl_job_owner_pagination_index` on `principal_scope_hash`, `created_at DESC`, and
+  `job_record_id DESC` for the exact owner-scoped ordering contract.
 
 The stable lifecycle is `PENDING`, `RUNNING`, `SUCCEEDED`, and `FAILED`.
 
@@ -125,18 +181,64 @@ failure, attempts exhaustion, and non-retryable failure clear the payload in the
 transition. Apply least privilege, encryption, backup, restore, and retention controls while data is
 retained.
 
-Metrics and ordinary logs must not include payloads, principals, client keys, hashes, job or lease
-identifiers, SQL, exception messages, or unbounded error classes. Operational procedures and metric
-contracts are authoritative in `docs/operations/durable-job-worker.md`.
+List and status representations exclude payloads, raw principals, raw keys, hashes, lease identifiers,
+SQL, and exception messages. Metrics and ordinary logs must not include those values or unbounded
+error classes. Operational procedures and metric contracts are authoritative in
+`docs/operations/durable-job-worker.md`. Claim-index deployment and invalid-index recovery are
+specified in `docs/operations/durable-job-claim-index-rollout.md`.
+
+## Migration and rollback
+
+Apply Flyway migrations in version order. V3 remains transactional so lease columns, legacy-data
+repair, and lifecycle constraints commit together. V4 and V5 are isolated additive index migrations.
+Both use PostgreSQL `CREATE INDEX CONCURRENTLY` so inserts, updates, and deletes remain available while
+the indexes are built. Their matching `.sql.conf` files contain `executeInTransaction=false` because
+PostgreSQL rejects concurrent index creation inside a transaction block. The application also sets
+`spring.flyway.postgresql.transactional-lock=false`, selecting Flyway's PostgreSQL session-lock mode
+required for concurrent index DDL.
+
+Concurrent index creation performs more work and can wait for transactions that could affect an
+index. Measure duration, I/O, replication lag, and transaction age in a representative staging
+environment, then schedule production rollout with explicit monitoring. If a build fails, PostgreSQL
+can leave an invalid index. Inspect catalog validity rather than treating a matching object name or
+schema-history row as usable evidence. The claim-index recovery procedure is documented separately;
+the same fail-closed catalog inspection, concurrent removal, root-cause correction, approved Flyway
+repair, and unchanged migration replay applies to the pagination index.
+
+Application rollback is compatible with either additional index because older binaries ignore them.
+After rolling back every binary that depends on the relevant access path, run the database-only
+rollback outside a transaction block:
+
+```sql
+DROP INDEX CONCURRENTLY etl_job_owner_pagination_index;
+DROP INDEX CONCURRENTLY etl_job_claim_eligibility_index;
+```
+
+Dropping the pagination index while the list endpoint is active preserves query correctness but can
+cause an unacceptable owner-list scan cost. Dropping the claim index while workers are active can
+cause expensive claim scans and contention. Do not remove either index until its traffic is withdrawn
+and an execution-plan review confirms the rollback boundary.
 
 ## Standards basis
 
 - RFC 9110 Section 15.3.3 defines `202 Accepted` as noncommittal and recommends a current-status
   representation and status monitor.
+- RFC 8288 defines the Web Linking model and the HTTP `Link` header used for the optional next-page
+  relationship.
 - RFC 9457 supplies deterministic problem-details representations.
 - RFC 9651 defines the accepted Structured Fields String syntax.
+- PostgreSQL 18 requires explicit `ORDER BY` for guaranteed result ordering and recommends a unique
+  ordering when `LIMIT` is used.
+- PostgreSQL 18 documents that equality constraints on leading multicolumn B-tree keys plus a range
+  constraint on the next key efficiently limit the scanned index portion.
+- PostgreSQL 18 documents that ordinary index construction blocks writes, while concurrent index
+  construction preserves writes with additional scans, waits, and invalid-index recovery caveats.
 - PostgreSQL 18 documents `SKIP LOCKED` as unsuitable for a general consistent view but useful for
   avoiding contention among multiple consumers of a queue-like table.
+- Flyway script configuration supports a migration-matched `.sql.conf` file and the
+  `executeInTransaction=false` override required for non-transactional PostgreSQL DDL.
+- Flyway's PostgreSQL integration documents session-level migration locking for statements such as
+  `CREATE INDEX CONCURRENTLY`.
 - Spring fixed-delay scheduling measures each delay from completion of the preceding invocation.
 - OpenTelemetry SQL/PostgreSQL semantic conventions define stable database telemetry fields; raw
   query text and parameters remain privacy-sensitive opt-in data.
@@ -145,6 +247,9 @@ contracts are authoritative in `docs/operations/durable-job-worker.md`.
 
 Fielding, R., Nottingham, M., & Reschke, J. (2022). *HTTP semantics* (RFC 9110). RFC Editor.
 https://www.rfc-editor.org/rfc/rfc9110
+
+Nottingham, M. (2017). *Web linking* (RFC 8288). RFC Editor.
+https://doi.org/10.17487/RFC8288
 
 Nottingham, M., & Wilde, E. (2023). *Problem details for HTTP APIs* (RFC 9457). RFC Editor.
 https://www.rfc-editor.org/rfc/rfc9457
@@ -156,8 +261,14 @@ OpenTelemetry Authors. (2026). *OpenTelemetry semantic conventions 1.43.0: Seman
 SQL databases client operations*. Cloud Native Computing Foundation.
 https://opentelemetry.io/docs/specs/semconv/db/sql/
 
-PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: SELECT*.
-https://www.postgresql.org/docs/18/sql-select.html
+PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: CREATE INDEX*.
+https://www.postgresql.org/docs/18/sql-createindex.html
 
-Spring Authors. (2026). *Task execution and scheduling*. Broadcom.
-https://docs.spring.io/spring-framework/reference/integration/scheduling.html
+PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: Introduction to indexes*.
+https://www.postgresql.org/docs/18/indexes-intro.html
+
+Redgate Software. (2026). *Flyway PostgreSQL transactional lock setting*.
+https://documentation.red-gate.com/fd/flyway-postgresql-transactional-lock-setting-277579114.html
+
+Redgate Software. (2026). *Flyway script configuration*.
+https://documentation.red-gate.com/flyway/reference/script-configuration
