@@ -51,6 +51,48 @@ class EtlJobMigrationDocumentationTest {
     }
 
     @Test
+    void paginationMigrationUsesTheOwnerAndCompleteStableOrderingKey() throws IOException {
+        String migration = read(
+                "etl-service/src/main/resources/db/migration/"
+                        + "V5__add_etl_job_owner_pagination_index.sql"
+        ).replaceAll("\\s+", " ");
+
+        assertTrue(migration.contains(
+                "CREATE INDEX CONCURRENTLY etl_job_owner_pagination_index"
+        ));
+        assertTrue(migration.contains(
+                "ON etl_job_records ( principal_scope_hash, created_at DESC, job_record_id DESC )"
+        ));
+        assertFalse(migration.contains(" OFFSET "));
+        assertFalse(migration.contains("principal_name"));
+    }
+
+    @Test
+    void paginationIndexMigrationDoesNotBlockProductionWriters() throws IOException {
+        String migrationPath = "etl-service/src/main/resources/db/migration/"
+                + "V5__add_etl_job_owner_pagination_index.sql";
+        String configurationPath = migrationPath + ".conf";
+        String migration = read(migrationPath).replaceAll("\\s+", " ");
+        Path configuration = projectRoot().resolve(configurationPath);
+        String configurationText = Files.exists(configuration)
+                ? Files.readString(configuration, StandardCharsets.UTF_8).trim()
+                : "";
+
+        assertTrue(
+                migration.contains("CREATE INDEX CONCURRENTLY etl_job_owner_pagination_index"),
+                "the production pagination index must not block concurrent inserts or updates"
+        );
+        assertTrue(
+                Files.exists(configuration),
+                "Flyway requires a per-script configuration for non-transactional PostgreSQL DDL"
+        );
+        assertTrue(
+                configurationText.contains("executeInTransaction=false"),
+                "CREATE INDEX CONCURRENTLY cannot run inside Flyway's default transaction"
+        );
+    }
+
+    @Test
     void runbookDocumentsAcceptedSemanticsOwnershipAndLeaseFencedExecution() throws IOException {
         String runbook = read("docs/etl/durable-job-intake.md").replaceAll("\\s+", " ");
 
@@ -70,10 +112,34 @@ class EtlJobMigrationDocumentationTest {
         assertTrue(runbook.contains("xtrmetl.*"));
     }
 
+    @Test
+    void runbookDocumentsOwnerScopedKeysetPaginationAndRollback() throws IOException {
+        String runbook = read("docs/etl/durable-job-intake.md").replaceAll("\\s+", " ");
+
+        assertTrue(runbook.contains("GET /api/etl/jobs?limit=50"));
+        assertTrue(runbook.contains("created_at DESC, job_record_id DESC"));
+        assertTrue(runbook.contains("strict tuple boundary"));
+        assertTrue(runbook.contains("Link: <"));
+        assertTrue(runbook.contains("rel=\"next\""));
+        assertTrue(runbook.contains("etl_invalid_job_page_limit"));
+        assertTrue(runbook.contains("etl_invalid_job_page_cursor"));
+        assertTrue(runbook.contains("V5__add_etl_job_owner_pagination_index.sql"));
+        assertTrue(runbook.contains("executeInTransaction=false"));
+        assertTrue(runbook.contains(
+                "DROP INDEX CONCURRENTLY etl_job_owner_pagination_index"
+        ));
+        assertTrue(runbook.contains("RFC 8288"));
+    }
+
     private static String read(String relativePath) throws IOException {
         return Files.readString(projectRoot().resolve(relativePath), StandardCharsets.UTF_8);
     }
 
+    /**
+     * Finds the reactor root from either repository-root or module-local Maven execution.
+     *
+     * @return repository root containing the Maven reactor
+     */
     private static Path projectRoot() {
         Path current = Paths.get(System.getProperty("user.dir")).toAbsolutePath();
         Path lastPomParent = null;
