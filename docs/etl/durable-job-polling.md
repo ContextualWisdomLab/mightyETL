@@ -67,9 +67,9 @@ The worker schedule remains a local execution setting rather than a completion p
 
 ## Entity-tag derivation
 
-The controller first authenticates the caller, parses the opaque UUID, and performs the existing owner-scoped lookup. Only the resulting operator-safe `EtlJobStatusResponse` is eligible for a validator. Every response field is converted to canonical length-prefixed text and then SHA-256 hashed. The hexadecimal digest becomes a weak HTTP entity tag.
+The controller first authenticates the caller, parses the opaque UUID, and performs the existing owner-scoped lookup. Only the resulting operator-safe `EtlJobStatusResponse` is eligible for a validator. Every response field is converted to canonical text and then SHA-256 hashed. The hexadecimal digest becomes a weak HTTP entity tag.
 
-Length prefixes prevent adjacent field values from creating ambiguous input. Hashing keeps even the operator-safe values out of the header. The tag changes when any represented field changes and is deterministic across replicas for the same representation. It is intentionally weak because the contract validates semantic status equivalence rather than byte-for-byte transfer encoding.
+Every non-null value receives a value marker and decimal length prefix before its canonical text. A dedicated null marker is distinct from the value marker and a zero-length value, preserving the wire distinction between an omitted nullable field and an explicitly empty string. These markers and length prefixes prevent adjacent field values from creating ambiguous input. Hashing keeps even the operator-safe values out of the header. The tag changes when any represented field changes and is deterministic across replicas for the same representation. It is intentionally weak because the contract validates semantic status equivalence rather than byte-for-byte transfer encoding.
 
 `Cache-Control: no-store` remains authoritative: intermediaries and clients must not persist the tenant-scoped representation for reuse. The validator supports an explicit authenticated conditional request and does not turn the status endpoint into a publicly cacheable resource.
 
