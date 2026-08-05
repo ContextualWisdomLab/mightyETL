@@ -38,16 +38,19 @@ class EtlJobExecutionServiceIntegrationTest {
 
     private final EtlJobExecutionService executionService;
     private final EtlJobLeaseRepository leaseRepository;
+    private final EtlService etlService;
     private final JdbcTemplate jdbcTemplate;
 
     @Autowired
     EtlJobExecutionServiceIntegrationTest(
             EtlJobExecutionService executionService,
             EtlJobLeaseRepository leaseRepository,
+            EtlService etlService,
             JdbcTemplate jdbcTemplate
     ) {
         this.executionService = executionService;
         this.leaseRepository = leaseRepository;
+        this.etlService = etlService;
         this.jdbcTemplate = jdbcTemplate;
     }
 
@@ -130,7 +133,7 @@ class EtlJobExecutionServiceIntegrationTest {
         );
         assertThrows(
                 NullPointerException.class,
-                () -> new EtlJobExecutionService(executionService.etlService(), null)
+                () -> new EtlJobExecutionService(etlService, null)
         );
         assertThrows(NullPointerException.class, () -> executionService.execute(null));
     }
