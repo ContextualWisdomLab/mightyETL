@@ -93,7 +93,7 @@ Configure `43 * * * *`, manual dispatch, serialized concurrency, 50-minute job t
 
 - [x] **Step 2: Add immutable OpenCode installation**
 
-Download the immutable `v1.18.13` Linux x64 archive over HTTPS, validate its SHA-256, require one regular entry named `opencode`, extract into a private mode-`0700` directory with ownership, archived permissions, and overwrites disabled, reject non-regular or symbolic-link output, and verify version `1.18.13`.
+Download the immutable `v1.18.13` Linux x64 archive over HTTPS, validate its SHA-256, require one regular entry named `opencode`, extract into a private mode-`0700` directory without restoring archive ownership or permissions and with overwrites disabled, reject non-regular or symbolic-link output, and verify version `1.18.13`.
 
 - [x] **Step 3: Add direct-token Git bootstrap**
 
