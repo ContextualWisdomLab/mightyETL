@@ -14,7 +14,7 @@ Create or retain exactly this GitHub Actions repository secret:
 NVIDIA_NIM_API_KEY
 ```
 
-The workflow exposes that value only to the OpenCode process as the provider variable documented by OpenCode:
+The workflow step maps that value to the provider variable documented by OpenCode. Step-level environment variables are visible to the step's Bash shell and every child process it launches, including OpenCode:
 
 ```text
 NVIDIA_API_KEY
