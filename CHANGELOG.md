@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Owner-scoped durable-job status responses now emit deterministic weak SHA-256 `ETag` validators; ordinary and wildcard `If-None-Match` requests return an empty RFC 9110 `304 Not Modified` response only after authenticated owner-safe lookup, while `Cache-Control: no-store` remains unchanged.
 - Active durable-job status responses now emit an RFC 9110 `Retry-After` delay for `PENDING` and `RUNNING` states only when local worker execution is enabled, derived from the bounded worker fixed-delay configuration with upward whole-second rounding; terminal states and intake-only maintenance mode omit the advisory.
 - The durable job pagination index now uses PostgreSQL `CREATE INDEX CONCURRENTLY` with a migration-local Flyway `executeInTransaction=false` companion configuration, preserving production writers and documenting invalid-index recovery and concurrent rollback.
 - Durable job operators can now list only their own jobs through bounded newest-first keyset pagination with canonical opaque cursors, deterministic timestamp-plus-UUID ordering, `Cache-Control: no-store`, and RFC 8288 next-page links without offset drift or cross-tenant existence leakage.
@@ -17,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Durable-worker observability now records one terminal outcome counter and one matching duration sample for every completed poll, including idle polls and database failures while persisting retry or terminal transitions.
 - The hourly pull-request disposition loop now requires at least one non-author approval anchored to the exact current head SHA; stale approvals, comment-only reviews, and the mere absence of requested changes cannot authorize unattended merge.
 - The hourly OpenCode workflow now scopes repository write permissions to its sole maintenance job, replaces the npm installation command with the immutable OpenCode 1.18.13 Linux release archive plus pinned SHA-256 validation, requires exactly one regular-file archive member before private-directory extraction, rejects non-regular or symbolic-link output, and uses a removable repository-local GitHub CLI credential helper instead of storing an encoded authorization header while retaining `persist-credentials: false`.
-- The hourly OpenCode workflow now snapshots same-repository `develop` pull-request heads before the agent runs and uses job-scoped Actions write authority only to authorize approval-required workflow runs for an unchanged exact head; `.github/**` and `CODEOWNERS` changes remain human-authorized, and no review or merge authority is added.
+- The hourly OpenCode workflow now snapshots same-repository `develop` pull-request heads before the agent runs and uses job-scoped Actions write authority only to authorize approval-required pull-request workflow runs for an unchanged exact head; `.github/**` and `CODEOWNERS` changes remain human-authorized, and no review or merge authority is added.
 - The hourly OpenCode workflow now uses the current free NVIDIA `deepseek-ai/deepseek-v4-pro` endpoint for long-context coding and agentic tool use instead of the deprecated Qwen3 Coder free endpoint; model or endpoint rejection fails visibly without a non-NVIDIA, partner-only, or automatic fallback.
 - The managed Jackson component set now uses the patched 2.21.5 BOM, closing CVE-2026-54515, CVE-2026-59889, and GHSA-mhm7-754m-9p8w while keeping core, annotations, datatype, and module artifacts aligned.
 - Durable `POST /api/etl/jobs` submissions now return RFC 9110 `202 Accepted`, a stable job representation, `Location` status-monitor metadata, and explicit replay metadata without changing the synchronous `/api/etl/process` contract.
@@ -33,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Deterministic ordinary, wildcard, changed-state, changed-failure-code, null-versus-empty, and unrelated-response conditional polling tests, complete controller Javadoc, privacy and rollback guidance, and APA 7th standards evidence in `docs/etl/durable-job-polling.md`.
 - Controller-scoped polling advice, deterministic active/terminal lifecycle tests, disabled-worker fail-closed behavior, sub-second rounding coverage, rollback guidance, and APA 7th standards evidence in `docs/etl/durable-job-polling.md`.
 - Owner-scoped durable job list models and HTTP contract, strict cursor and page-limit validation, one-extra-row next-page detection, the descriptive `etl_job_owner_pagination_index`, deterministic tenant-isolation and equal-timestamp tests, migration rollback guidance, and APA 7th standards evidence in `docs/etl/durable-job-intake.md`.
 - A production rollout and invalid-index recovery runbook for the nonblocking durable-job claim index: `docs/operations/durable-job-claim-index-rollout.md`.
@@ -71,6 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Conditional status validators are SHA-256 digests of only the complete owner-authorized operator-safe representation; payloads, raw principals, idempotency keys, internal hashes, leases, SQL, and exception text remain excluded, and wildcard evaluation occurs only after owner-safe lookup.
 - Polling advice exposes only a bounded delay integer and is omitted when local execution is disabled or terminal; it never contains job, lease, principal, key, hash, payload, SQL, exception, target, or queue-depth data.
 - Job-list cursors contain only ordering keys, never authority or sensitive values; every page query independently binds the hashed authenticated principal, malformed and non-canonical cursors fail before database access, and list responses exclude payloads, principals, keys, hashes, lease identifiers, SQL, and exception text.
 - Durable-worker metrics and ordinary logs exclude payloads, raw principals, raw idempotency keys, hashes, job and lease identifiers, SQL, exception messages, and unbounded exception labels.
