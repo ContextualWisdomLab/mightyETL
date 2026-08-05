@@ -23,10 +23,10 @@ import java.util.Optional;
  * <p>The database claim repository, not the scheduler, distributes work across replicas. The
  * worker classifies failures into stable non-sensitive codes, retries only transient database
  * failures while attempts remain, and treats every failed exact-lease transition as stale evidence.
- * Metrics use a fixed outcome vocabulary and never tag payloads, principals, keys, job identifiers,
- * lease identifiers, SQL, exception classes, or exception messages. Every completed poll records
- * one terminal outcome counter and one matching duration sample, including idle polls and database
- * failures while persisting retry or terminal transitions.</p>
+ * Metrics use a fixed terminal-outcome vocabulary and never tag payloads, principals, keys, job
+ * identifiers, lease identifiers, SQL, exception classes, or exception messages. Every completed
+ * poll records exactly one terminal outcome counter and one matching duration sample, including
+ * idle polls and database failures while persisting retry or terminal transitions.</p>
  */
 @Component
 @ConditionalOnBooleanProperty(
@@ -49,14 +49,12 @@ public class EtlJobWorker {
     private static final String METRIC_OUTCOMES = "etl.jobs.worker.outcomes";
     private static final String METRIC_DURATION = "etl.jobs.execution.duration";
     private static final String IDLE_OUTCOME = "idle";
-    private static final String CLAIMED_OUTCOME = "claimed";
     private static final String SUCCEEDED_OUTCOME = "succeeded";
     private static final String RETRIED_OUTCOME = "retried";
     private static final String FAILED_OUTCOME = "failed";
     private static final String STALE_OUTCOME = "stale";
     private static final List<String> FINITE_OUTCOMES = List.of(
             IDLE_OUTCOME,
-            CLAIMED_OUTCOME,
             SUCCEEDED_OUTCOME,
             RETRIED_OUTCOME,
             FAILED_OUTCOME,
@@ -104,7 +102,7 @@ public class EtlJobWorker {
             counters.put(
                     outcome,
                     Counter.builder(METRIC_OUTCOMES)
-                            .description("Durable ETL worker outcomes")
+                            .description("Durable ETL worker terminal outcomes")
                             .tag("outcome", outcome)
                             .register(this.meterRegistry)
             );
@@ -157,7 +155,6 @@ public class EtlJobWorker {
         }
 
         EtlJobLease lease = claimedLease.orElseThrow();
-        increment(CLAIMED_OUTCOME);
         try {
             executionService.execute(lease);
             increment(SUCCEEDED_OUTCOME);
