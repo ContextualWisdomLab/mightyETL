@@ -2,6 +2,8 @@ package com.xtrmetl.etl.job;
 
 import com.xtrmetl.etl.controller.EtlApiProblemHandler;
 import com.xtrmetl.etl.controller.EtlJobController;
+import com.xtrmetl.etl.service.EtlRequestError;
+import com.xtrmetl.etl.service.EtlRequestException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.web.servlet.MockMvc;
@@ -74,6 +76,21 @@ class EtlJobPaginationControllerTest {
     }
 
     @Test
+    void usesTheDocumentedDefaultLimitInTheNextPageLink() throws Exception {
+        when(etlJobService.listOwned("tenant_alpha", null, null))
+                .thenReturn(new EtlJobPage(List.of(snapshot()), "next_cursor"));
+
+        mockMvc.perform(get(JOBS_PATH).principal(PRINCIPAL))
+                .andExpect(status().isOk())
+                .andExpect(header().string(
+                        "Link",
+                        "</api/etl/jobs?limit=50&cursor=next_cursor>; rel=\"next\""
+                ));
+
+        verify(etlJobService).listOwned("tenant_alpha", null, null);
+    }
+
+    @Test
     void omitsTheNextLinkAndCursorForTheTerminalPage() throws Exception {
         when(etlJobService.listOwned("tenant_alpha", null, null))
                 .thenReturn(new EtlJobPage(List.of(), null));
@@ -84,6 +101,37 @@ class EtlJobPaginationControllerTest {
                 .andExpect(header().doesNotExist("Link"))
                 .andExpect(jsonPath("$.jobs.length()").value(0))
                 .andExpect(jsonPath("$.nextCursor").doesNotExist());
+
+        verify(etlJobService).listOwned("tenant_alpha", null, null);
+    }
+
+    @Test
+    void preservesTypedListValidationFailures() throws Exception {
+        when(etlJobService.listOwned("tenant_alpha", null, "0"))
+                .thenThrow(new EtlRequestException(EtlRequestError.INVALID_JOB_PAGE_LIMIT));
+
+        mockMvc.perform(get(JOBS_PATH)
+                        .principal(PRINCIPAL)
+                        .queryParam("limit", "0"))
+                .andExpect(status().isBadRequest())
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.errorCode").value("etl_invalid_job_page_limit"));
+
+        verify(etlJobService).listOwned("tenant_alpha", null, "0");
+    }
+
+    @Test
+    void mapsUnexpectedListFailuresWithoutLeakingMessages() throws Exception {
+        when(etlJobService.listOwned("tenant_alpha", null, null))
+                .thenThrow(new IllegalStateException("secret runtime detail"));
+
+        mockMvc.perform(get(JOBS_PATH).principal(PRINCIPAL))
+                .andExpect(status().isInternalServerError())
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.errorCode").value("etl_internal_error"))
+                .andExpect(jsonPath("$.detail").value(
+                        "The ETL request could not be processed."
+                ));
 
         verify(etlJobService).listOwned("tenant_alpha", null, null);
     }
