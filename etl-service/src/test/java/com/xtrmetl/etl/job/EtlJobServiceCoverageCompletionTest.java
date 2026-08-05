@@ -22,10 +22,11 @@ import static org.mockito.Mockito.verifyNoInteractions;
  * Exercises realistic durable-intake validation boundaries that are easy to miss in ordinary
  * happy-path and persistence tests.
  *
- * <p>The cases model malformed empty request bodies, visually ambiguous Unicode identifiers,
- * identifiers that exceed the documented code-point bound, and separators that can alter how an
- * identifier appears in logs or text tools. Every rejection must happen before transaction, lock,
- * or database work so an invalid client request cannot consume shared persistence capacity.</p>
+ * <p>The cases model malformed empty request bodies, intentionally empty batches, visually
+ * ambiguous Unicode identifiers, identifiers that exceed the documented code-point bound, and
+ * separators that can alter how an identifier appears in logs or text tools. Every rejection must
+ * happen before transaction, lock, or database work so an invalid client request cannot consume
+ * shared persistence capacity.</p>
  */
 class EtlJobServiceCoverageCompletionTest {
 
@@ -50,6 +51,30 @@ class EtlJobServiceCoverageCompletionTest {
         );
 
         assertEquals(EtlRequestError.INVALID_JSON, exception.error());
+        verifyNoInteractions(requestLock, jdbcTemplate);
+    }
+
+    /**
+     * Verifies that a valid empty JSON batch completes record validation and reaches the transaction
+     * boundary without attempting a lock or database operation. Empty batches are distinct from
+     * empty request bodies: they are well-formed arrays containing zero records and therefore
+     * exercise the no-iteration path of whole-batch prevalidation.
+     */
+    @Test
+    void acceptsEmptyBatchThroughValidationBeforeRequiringTransaction() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        EtlRequestLock requestLock = mock(EtlRequestLock.class);
+        EtlJobService service = service(jdbcTemplate, requestLock);
+
+        IllegalStateException exception = assertThrows(
+                IllegalStateException.class,
+                () -> service.submit("[]", IDEMPOTENCY_KEY, PRINCIPAL_SCOPE)
+        );
+
+        assertEquals(
+                "Durable ETL job submission requires an active transaction",
+                exception.getMessage()
+        );
         verifyNoInteractions(requestLock, jdbcTemplate);
     }
 
