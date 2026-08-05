@@ -167,17 +167,19 @@ class HourlyOpenCodeMaintenanceWorkflowTest {
     }
 
     /**
-     * Verifies least-privilege repository access, scopes write authority to the sole maintenance
-     * job, and permits only the Actions write capability needed to authorize exact-head CI that
-     * GitHub deliberately places in approval-required state after a {@code GITHUB_TOKEN} PR update.
+     * Verifies that the OpenCode process never receives Actions write authority.
+     *
+     * <p>The maintenance job owns only branch and pull-request preparation permissions. A separate
+     * job, which never checks out or executes repository code, receives the sole occurrence of
+     * {@code actions: write} needed to authorize approval-required exact-head workflow runs.</p>
      */
     @Test
-    void grantsOnlyRepositoryMaintenanceAndCheckRevalidationPermissions() {
+    void isolatesActionsWriteFromTheAgentProcess() {
         assertTrue(workflow.contains("permissions:\n  contents: read\n\njobs:"));
         assertTrue(workflow.contains(
                 "maintain-repository:\n"
                         + "    permissions:\n"
-                        + "      actions: write\n"
+                        + "      actions: read\n"
                         + "      checks: read\n"
                         + "      contents: write\n"
                         + "      issues: write\n"
@@ -185,6 +187,19 @@ class HourlyOpenCodeMaintenanceWorkflowTest {
                         + "      security-events: read\n"
                         + "      statuses: read"
         ));
+        assertTrue(workflow.contains(
+                "authorize-exact-head-checks:\n"
+                        + "    needs: maintain-repository\n"
+                        + "    if: ${{ always() && !cancelled() }}\n"
+                        + "    permissions:\n"
+                        + "      actions: write\n"
+                        + "      contents: read\n"
+                        + "      pull-requests: read"
+        ));
+        assertEquals(1, countOccurrences(workflow, "actions: write"));
+        assertEquals(1, countOccurrences(workflow, "contents: write"));
+        assertFalse(authorizationJob().contains("actions/checkout@"));
+        assertFalse(authorizationJob().contains("NVIDIA_API_KEY"));
         assertFalse(workflow.contains("id-token:"));
         assertFalse(workflow.contains("security-events: write"));
     }
@@ -195,19 +210,20 @@ class HourlyOpenCodeMaintenanceWorkflowTest {
      * <p>GitHub prevents ordinary events produced with {@code GITHUB_TOKEN} from recursively
      * starting workflows. Current GitHub behavior creates {@code opened}, {@code synchronize}, and
      * {@code reopened} PR runs in an approval-required state instead. The trusted default-branch
-     * scheduler must snapshot heads before the agent, detect only heads changed by this run, refuse
+     * workflow must snapshot heads before the agent, detect only heads changed by this run, refuse
      * every {@code .github} or CODEOWNERS policy change, bind every decision to the still-current
-     * SHA, and authorize only those exact-head runs. This step starts validation; it does not
-     * approve or merge the pull request.</p>
+     * SHA, and authorize only those exact-head runs in a separate non-checkout job. This starts
+     * validation; it does not approve or merge the pull request.</p>
      */
     @Test
     void authorizesExactHeadChecksForAgentChangedPullRequests() {
-        assertTrue(workflow.contains("name: Snapshot open pull-request heads"));
+        assertTrue(workflow.contains("id: snapshot_heads"));
+        assertTrue(workflow.contains("open_pr_heads_before: ${{ steps.snapshot_heads.outputs.open_pr_heads }}"));
         assertTrue(workflow.contains("open-pr-heads-before.json"));
+        assertTrue(workflow.contains("BEFORE_HEADS: ${{ needs.maintain-repository.outputs.open_pr_heads_before }}"));
         assertTrue(workflow.contains(
                 "name: Authorize exact-head checks for agent-updated pull requests"
         ));
-        assertTrue(workflow.contains("if: ${{ always() && !cancelled() }}"));
         assertTrue(workflow.contains("head.repo.full_name == $repo"));
         assertTrue(workflow.contains(".base.ref == \"develop\""));
         assertTrue(workflow.contains("startswith(\".github/\")"));
@@ -241,6 +257,34 @@ class HourlyOpenCodeMaintenanceWorkflowTest {
         assertTrue(workflow.contains("automation-maintenance"));
         assertTrue(workflow.contains("Do not create a second development pull request"));
         assertTrue(workflow.contains("Do not print, echo, summarize, or expose secret values"));
+    }
+
+    /**
+     * Returns the text of the isolated workflow-run authorization job.
+     *
+     * @return workflow suffix beginning at the authorization job
+     */
+    private static String authorizationJob() {
+        int jobStart = workflow.indexOf("  authorize-exact-head-checks:");
+        assertTrue(jobStart >= 0, "The isolated exact-head authorization job must exist");
+        return workflow.substring(jobStart);
+    }
+
+    /**
+     * Counts non-overlapping occurrences of one literal fragment.
+     *
+     * @param text complete text to inspect
+     * @param fragment non-empty literal fragment
+     * @return number of non-overlapping occurrences
+     */
+    private static int countOccurrences(String text, String fragment) {
+        int count = 0;
+        int cursor = 0;
+        while ((cursor = text.indexOf(fragment, cursor)) >= 0) {
+            count++;
+            cursor += fragment.length();
+        }
+        return count;
     }
 
     /**
