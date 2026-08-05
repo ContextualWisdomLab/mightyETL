@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Durable asynchronous ETL jobs now progress from `PENDING` through lease-fenced execution to `SUCCEEDED` or `FAILED`; PostgreSQL owns cross-replica claiming, stale workers cannot commit target or lifecycle effects, and intake and execution remain independently fail-closed.
+- Durable-worker observability now records one terminal outcome counter and one matching duration sample for every completed poll, including idle polls and database failures while persisting retry or terminal transitions.
 - The hourly pull-request disposition loop now requires at least one non-author approval anchored to the exact current head SHA; stale approvals, comment-only reviews, and the mere absence of requested changes cannot authorize unattended merge.
 - The hourly OpenCode workflow now scopes repository write permissions to its sole maintenance job, replaces the npm installation command with the immutable OpenCode 1.18.13 Linux release archive plus pinned SHA-256 validation, requires exactly one regular-file archive member before private-directory extraction, rejects non-regular or symbolic-link output, and uses a removable repository-local GitHub CLI credential helper instead of storing an encoded authorization header while retaining `persist-credentials: false`.
 - The hourly OpenCode workflow now uses the current free NVIDIA `deepseek-ai/deepseek-v4-pro` endpoint for long-context coding and agentic tool use instead of the deprecated Qwen3 Coder free endpoint; model or endpoint rejection fails visibly without a non-NVIDIA, partner-only, or automatic fallback.
@@ -36,7 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Principal-scoped durable asynchronous ETL job intake and owner-scoped status resources, Flyway `etl_job_records` migration, deterministic replay/conflict coverage, and the authoritative lifecycle contract in `docs/etl/durable-job-intake.md`.
 - Durable idempotency ledger migration, PostgreSQL transaction advisory-lock adapter, deterministic concurrency/rollback coverage, and the operator/client contract `docs/etl/idempotent-retries.md`.
 - ETL problem-details client and operator contract: `docs/api/problem-details.md`.
-- Operator-configurable ETL admission limits under `mightyetl.etl.*` / `xtrmetl.etl.*`, backed by `ETL_MAX_PAYLOAD_BYTES` and `ETL_MAX_BATCH_RECORDS` environment variables with hard safety ceilings.
+- Operator-configurable ETL admission limits under `mightyetl.etl.*` / `xtrmetl.*`, backed by `ETL_MAX_PAYLOAD_BYTES` and `ETL_MAX_BATCH_RECORDS` environment variables with hard safety ceilings.
 - ETL transaction rollback integration coverage and the operator runbook `docs/etl/bounded-atomic-batches.md`.
 - Connector scaffolds (contracts + docs only): Qlik Sense, Databricks, Snowflake under `docs/connectors/` and `etl-service` SPI stubs.
 - Any-to-any CDC design notes and source SPI scaffold: `docs/cdc/any-to-any-cdc.md`, `cdc-service` SPI stubs.
