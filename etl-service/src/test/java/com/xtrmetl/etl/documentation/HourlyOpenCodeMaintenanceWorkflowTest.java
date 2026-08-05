@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>The scheduled agent is allowed to prepare feature-branch pull requests. It is not a reviewer
  * or merger. These tests make that separation visible to beginners and prevent a later workflow
  * edit from silently adding a fallback provider, mutable tool version, protected-branch push,
- * self-approval path, workflow-code auto-approval, or unvalidated agent-generated head.</p>
+ * self-approval path, policy-code auto-authorization, or unvalidated agent-generated head.</p>
  */
 class HourlyOpenCodeMaintenanceWorkflowTest {
 
@@ -196,8 +196,9 @@ class HourlyOpenCodeMaintenanceWorkflowTest {
      * starting workflows. Current GitHub behavior creates {@code opened}, {@code synchronize}, and
      * {@code reopened} PR runs in an approval-required state instead. The trusted default-branch
      * scheduler must snapshot heads before the agent, detect only heads changed by this run, refuse
-     * workflow or CODEOWNERS changes, bind every decision to the still-current SHA, and authorize
-     * only those exact-head runs. This step starts validation; it does not approve or merge the PR.</p>
+     * every {@code .github} or CODEOWNERS policy change, bind every decision to the still-current
+     * SHA, and authorize only those exact-head runs. This step starts validation; it does not
+     * approve or merge the pull request.</p>
      */
     @Test
     void authorizesExactHeadChecksForAgentChangedPullRequests() {
@@ -209,10 +210,12 @@ class HourlyOpenCodeMaintenanceWorkflowTest {
         assertTrue(workflow.contains("if: ${{ always() && !cancelled() }}"));
         assertTrue(workflow.contains("head.repo.full_name == $repo"));
         assertTrue(workflow.contains(".base.ref == \"develop\""));
-        assertTrue(workflow.contains(".github/workflows/"));
+        assertTrue(workflow.contains("startswith(\".github/\")"));
         assertTrue(workflow.contains("CODEOWNERS"));
-        assertTrue(workflow.contains("head_sha=${head_sha}"));
+        assertTrue(workflow.contains("head_sha=${expected_head}"));
         assertTrue(workflow.contains("event=pull_request"));
+        assertTrue(workflow.contains("--arg expected_head \"${expected_head}\""));
+        assertTrue(workflow.contains(".head_sha == $expected_head"));
         assertTrue(workflow.contains("/actions/runs/${run_id}/approve"));
         assertTrue(workflow.contains("current_head"));
         assertTrue(workflow.contains("expected_head"));
