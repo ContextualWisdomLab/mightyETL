@@ -41,6 +41,3 @@ ALTER TABLE etl_job_records
             AND failure_code IS NULL
         )
     );
-
-CREATE INDEX etl_job_claim_eligibility_index
-    ON etl_job_records (job_status, lease_expires_at, created_at, job_record_id);
