@@ -14,10 +14,10 @@ import static org.mockito.Mockito.verifyNoInteractions;
  * Verifies that durable idempotency preserves its transaction and admission-control boundaries.
  *
  * <p>Spring applies {@code @Transactional} through a proxy. A directly constructed service does
- * not receive that proxy, so allowing the idempotent method to continue would release a PostgreSQL
- * transaction advisory lock too early and could separate target writes from the response ledger.
- * The production method therefore has to fail before lock or database access when no transaction
- * is active.</p>
+ * not receive that proxy, so allowing an idempotent or durable-worker entry point to continue
+ * would release PostgreSQL transaction locks too early and could separate target writes from the
+ * response ledger. Transaction-scoped entry points therefore fail before database access when no
+ * actual transaction is active.</p>
  *
  * <p>Keyed requests must also enforce key and payload admission before computing their durable
  * decision through the request lock or ledger. This preserves the same zero-database-work boundary
@@ -50,6 +50,34 @@ class EtlServiceIdempotencyTransactionBoundaryTest {
 
         assertEquals(
                 "Idempotent ETL processing requires an active transaction",
+                exception.getMessage()
+        );
+        verifyNoInteractions(requestLock, jdbcTemplate);
+    }
+
+    /**
+     * Proves the durable-worker ETL entry point cannot silently execute outside its lease transaction.
+     */
+    @Test
+    void refusesDurableWorkerProcessingWithoutAnActiveTransactionBeforeDatabaseWork() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        EtlRequestLock requestLock = mock(EtlRequestLock.class);
+        EtlService etlService = new EtlService(
+                jdbcTemplate,
+                new ObjectMapper(),
+                new EtlBatchProperties(),
+                requestLock
+        );
+
+        IllegalStateException exception = assertThrows(
+                IllegalStateException.class,
+                () -> etlService.processDataInExistingTransaction(
+                        "[{\"id\":\"record_alpha\"}]"
+                )
+        );
+
+        assertEquals(
+                "Durable ETL execution requires an active transaction",
                 exception.getMessage()
         );
         verifyNoInteractions(requestLock, jdbcTemplate);
