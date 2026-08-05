@@ -2,6 +2,8 @@ package com.xtrmetl.etl.job;
 
 import com.xtrmetl.etl.controller.EtlApiProblemHandler;
 import com.xtrmetl.etl.controller.EtlJobController;
+import com.xtrmetl.etl.service.EtlRequestError;
+import com.xtrmetl.etl.service.EtlRequestException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
@@ -130,6 +132,22 @@ class EtlJobConditionalStatusTest {
                 .andExpect(status().isNotModified())
                 .andExpect(header().string(HttpHeaders.ETAG, startsWith("W/\"")))
                 .andExpect(content().string(""));
+
+        verify(etlJobService).findOwned(JOB_RECORD_ID, "tenant_alpha");
+    }
+
+    @Test
+    void wildcardDoesNotBypassTheOwnerSafeNotFoundBoundary() throws Exception {
+        when(etlJobService.findOwned(JOB_RECORD_ID, "tenant_alpha"))
+                .thenThrow(new EtlRequestException(EtlRequestError.JOB_NOT_FOUND));
+
+        mockMvc.perform(statusRequest().header(HttpHeaders.IF_NONE_MATCH, "*"))
+                .andExpect(status().isNotFound())
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+                .andExpect(header().doesNotExist(HttpHeaders.ETAG))
+                .andExpect(jsonPath("$.errorCode").value("etl_job_not_found"));
+
+        verify(etlJobService).findOwned(JOB_RECORD_ID, "tenant_alpha");
     }
 
     @Test
