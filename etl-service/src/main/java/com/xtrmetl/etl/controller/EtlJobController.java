@@ -15,6 +15,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProp
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.lang.Nullable;
@@ -181,12 +182,15 @@ public class EtlJobController {
      * Returns one status resource only within the authenticated principal namespace.
      *
      * <p>The response includes a weak {@code ETag} derived from every operator-visible status
-     * field. Spring MVC applies RFC 9110 weak comparison to {@code If-None-Match}; a matching GET
-     * returns {@code 304 Not Modified} with no representation body. Authentication and owner-safe
-     * lookup still occur before the validator is produced, and {@code Cache-Control: no-store}
-     * remains in force.</p>
+     * field. Spring MVC applies RFC 9110 weak comparison to ordinary {@code If-None-Match} entity
+     * tags. The controller handles the RFC wildcard after the existing owner-safe lookup because
+     * Spring Framework 6.2.19 does not treat {@code If-None-Match: *} as a match for safe methods.
+     * Either matching form returns {@code 304 Not Modified} with no representation body.
+     * Authentication and owner-safe lookup still occur before validation, and
+     * {@code Cache-Control: no-store} remains in force.</p>
      *
      * @param jobRecordIdText opaque durable job identifier text
+     * @param ifNoneMatch optional conditional request field
      * @param principal authenticated principal namespace
      * @return operator-safe status representation or an empty not-modified response
      */
@@ -194,6 +198,8 @@ public class EtlJobController {
     @Observed(name = "etl.jobs.status", contextualName = "etl-job-status")
     public ResponseEntity<EtlJobStatusResponse> status(
             @PathVariable("jobRecordId") String jobRecordIdText,
+            @RequestHeader(value = HttpHeaders.IF_NONE_MATCH, required = false)
+            @Nullable String ifNoneMatch,
             @Nullable Principal principal
     ) {
         if (principal == null) {
@@ -210,9 +216,16 @@ public class EtlJobController {
             throw new EtlUnexpectedException(exception);
         }
         EtlJobStatusResponse responseBody = EtlJobStatusResponse.from(snapshot);
+        String entityTag = statusEntityTag(responseBody);
+        if ("*".equals(Objects.toString(ifNoneMatch, "").trim())) {
+            return ResponseEntity.status(HttpStatus.NOT_MODIFIED)
+                    .cacheControl(CacheControl.noStore())
+                    .eTag(entityTag)
+                    .build();
+        }
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
-                .eTag(statusEntityTag(responseBody))
+                .eTag(entityTag)
                 .body(responseBody);
     }
 
