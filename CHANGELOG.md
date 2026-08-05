@@ -9,12 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The durable-job claim eligibility index now builds in a separate PostgreSQL `CREATE INDEX CONCURRENTLY` migration with Flyway non-transactional script configuration and session-level PostgreSQL migration locking, preserving normal job writes during rollout while keeping lease columns and constraints transactional.
+- Durable asynchronous ETL jobs now progress from `PENDING` through lease-fenced execution to `SUCCEEDED` or `FAILED`; PostgreSQL owns cross-replica claiming, stale workers cannot commit target or lifecycle effects, and intake and execution remain independently fail-closed.
+- Durable-worker observability now records one terminal outcome counter and one matching duration sample for every completed poll, including idle polls and database failures while persisting retry or terminal transitions.
 - The hourly pull-request disposition loop now requires at least one non-author approval anchored to the exact current head SHA; stale approvals, comment-only reviews, and the mere absence of requested changes cannot authorize unattended merge.
 - The hourly OpenCode workflow now scopes repository write permissions to its sole maintenance job, replaces the npm installation command with the immutable OpenCode 1.18.13 Linux release archive plus pinned SHA-256 validation, requires exactly one regular-file archive member before private-directory extraction, rejects non-regular or symbolic-link output, and uses a removable repository-local GitHub CLI credential helper instead of storing an encoded authorization header while retaining `persist-credentials: false`.
 - The hourly OpenCode workflow now snapshots same-repository `develop` pull-request heads before the agent runs and uses job-scoped Actions write authority only to authorize approval-required workflow runs for an unchanged exact head; `.github/**` and `CODEOWNERS` changes remain human-authorized, and no review or merge authority is added.
 - The hourly OpenCode workflow now uses the current free NVIDIA `deepseek-ai/deepseek-v4-pro` endpoint for long-context coding and agentic tool use instead of the deprecated Qwen3 Coder free endpoint; model or endpoint rejection fails visibly without a non-NVIDIA, partner-only, or automatic fallback.
 - The managed Jackson component set now uses the patched 2.21.5 BOM, closing CVE-2026-54515, CVE-2026-59889, and GHSA-mhm7-754m-9p8w while keeping core, annotations, datatype, and module artifacts aligned.
-- Durable `POST /api/etl/jobs` submissions now return RFC 9110 `202 Accepted`, a stable pending-job representation, `Location` status-monitor metadata, and explicit replay metadata without changing the synchronous `/api/etl/process` contract. The incomplete intake controller is fail-closed and requires explicit `xtrmetl.etl.jobs.intake-enabled=true` operator opt-in until worker execution and terminal payload clearing are implemented.
+- Durable `POST /api/etl/jobs` submissions now return RFC 9110 `202 Accepted`, a stable job representation, `Location` status-monitor metadata, and explicit replay metadata without changing the synchronous `/api/etl/process` contract.
 - Concurrent requests using the same authenticated-principal-scoped semantic idempotency key now return immediate RFC 9457 `409 etl_idempotency_request_in_progress` responses through PostgreSQL `pg_try_advisory_xact_lock`; retries after completion still replay the committed response.
 - `POST /api/etl/process` now supports optional authenticated-principal-scoped `Idempotency-Key` retries with atomic target writes, durable response replay, payload-conflict rejection, and explicit replay response metadata.
 - `Idempotency-Key` now prefers the quoted RFC 9651 Structured Field String representation while retaining and normalizing the legacy raw representation to the same durable ledger key.
@@ -27,11 +30,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A production rollout and invalid-index recovery runbook for the nonblocking durable-job claim index: `docs/operations/durable-job-claim-index-rollout.md`.
+- PostgreSQL `FOR UPDATE SKIP LOCKED` durable-job claiming, per-process and per-claim lease fencing, expiry reclaim, bounded attempts, exact-live-lease transitions, terminal payload clearing, stable failure codes, and finite-cardinality worker metrics.
+- Hashed durable execution identity and domain-separated reuse of `etl_idempotency_records`, coupling response replay or creation, target writes, and terminal `SUCCEEDED` in one transaction without retaining or reconstructing raw principals or raw client idempotency keys.
+- Deterministic migration, concurrency, expiry, exhaustion, response-replay, integrity, stale-lease rollback, privacy, configuration-boundary, and operator-recovery tests plus `docs/operations/durable-job-worker.md`.
 - A separate fail-closed hourly OpenCode maintenance workflow pinned to OpenCode 1.18.13 and `nvidia/deepseek-ai/deepseek-v4-pro`, using only the existing `NVIDIA_NIM_API_KEY` through OpenCode's `NVIDIA_API_KEY` provider variable while preserving the independent review agent and deterministic merge-disposition workflow.
 - Exact-head workflow-run authorization doctoring evidence for the repository-token recursion boundary, before/after SHA snapshots, policy-path exclusion, time-of-check/time-of-use validation, least privilege, test-first regression evidence, and rollback in `docs/doctoring/github-token-exact-head-check-authorization-evidence.md`.
 - Supply-chain doctoring evidence for checksum binding, exact archive-member and entry-type validation, private extraction, post-extraction file checks, test-first regression evidence, and rollback in `docs/doctoring/opencode-archive-extraction-evidence.md`.
 - NVIDIA model-selection doctoring evidence for endpoint availability, deprecated-endpoint rejection, capability and context evidence, no-fallback semantics, test-first regression evidence, and replacement procedure in `docs/doctoring/nvidia-opencode-model-selection-evidence.md`.
-- Principal-scoped durable asynchronous ETL job intake and owner-scoped status resources, Flyway `etl_job_records` migration, deterministic replay/conflict coverage, and the explicit worker boundary in `docs/etl/durable-job-intake.md`.
+- Principal-scoped durable asynchronous ETL job intake and owner-scoped status resources, Flyway `etl_job_records` migration, deterministic replay/conflict coverage, and the authoritative lifecycle contract in `docs/etl/durable-job-intake.md`.
 - Durable idempotency ledger migration, PostgreSQL transaction advisory-lock adapter, deterministic concurrency/rollback coverage, and the operator/client contract `docs/etl/idempotent-retries.md`.
 - ETL problem-details client and operator contract: `docs/api/problem-details.md`.
 - Operator-configurable ETL admission limits under `mightyetl.etl.*` / `xtrmetl.etl.*`, backed by `ETL_MAX_PAYLOAD_BYTES` and `ETL_MAX_BATCH_RECORDS` environment variables with hard safety ceilings.
@@ -56,6 +63,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Scaffold CDC sources: `mysql-debezium`, `sqlserver-debezium` (discovery only).
 - Root POM `<name>mightyETL</name>` (artifactId remains `xtrmETL`).
 - README honest “Supported today” matrix; compose file product-name header.
+
+### Security
+
+- Durable-worker metrics and ordinary logs exclude payloads, raw principals, raw idempotency keys, hashes, job and lease identifiers, SQL, exception messages, and unbounded exception labels.
+- Retained payload or response-ledger identity conflicts fail closed with `etl_job_integrity_failure`; an expired or superseded lease rolls back target, ledger, and terminal-state effects.
 
 ### Added (historical)
 
