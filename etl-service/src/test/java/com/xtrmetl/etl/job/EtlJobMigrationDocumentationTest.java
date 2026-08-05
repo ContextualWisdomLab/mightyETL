@@ -66,6 +66,31 @@ class EtlJobMigrationDocumentationTest {
     }
 
     @Test
+    void paginationIndexMigrationDoesNotBlockProductionWriters() throws IOException {
+        String migrationPath = "etl-service/src/main/resources/db/migration/"
+                + "V4__add_etl_job_owner_pagination_index.sql";
+        String configurationPath = migrationPath + ".conf";
+        String migration = read(migrationPath).replaceAll("\\s+", " ");
+        Path configuration = projectRoot().resolve(configurationPath);
+        String configurationText = Files.exists(configuration)
+                ? Files.readString(configuration, StandardCharsets.UTF_8).trim()
+                : "";
+
+        assertTrue(
+                migration.contains("CREATE INDEX CONCURRENTLY etl_job_owner_pagination_index"),
+                "the production pagination index must not block concurrent inserts or updates"
+        );
+        assertTrue(
+                Files.exists(configuration),
+                "Flyway requires a per-script configuration for non-transactional PostgreSQL DDL"
+        );
+        assertTrue(
+                configurationText.contains("executeInTransaction=false"),
+                "CREATE INDEX CONCURRENTLY cannot run inside Flyway's default transaction"
+        );
+    }
+
+    @Test
     void runbookDocumentsAcceptedSemanticsOwnershipAndLeaseFencedExecution() throws IOException {
         String runbook = read("docs/etl/durable-job-intake.md").replaceAll("\\s+", " ");
 
