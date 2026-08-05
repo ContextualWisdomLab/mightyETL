@@ -131,10 +131,26 @@ class EtlJobExecutionServiceIntegrationTest {
 
         assertThrows(StaleEtlJobLeaseException.class, () -> executionService.execute(lease));
 
-        assertEquals(0, tableCount("processed_data"));
-        assertEquals(0, tableCount("etl_idempotency_records"));
-        assertEquals("RUNNING", jobStatus(jobRecordId));
-        assertEquals(1, retainedPayloadCount(jobRecordId));
+        assertUncommittedDurableEffects(jobRecordId);
+    }
+
+    @Test
+    void rollsBackLedgerAndTargetRowsWhenTheLeaseExpiredBeforeExecution() {
+        UUID jobRecordId = insertPendingJob();
+        EtlJobLease lease = leaseRepository.claimNext(
+                OWNER_ID,
+                Duration.ofMinutes(5),
+                3
+        ).orElseThrow();
+        jdbcTemplate.update(
+                "UPDATE etl_job_records SET lease_expires_at = ? WHERE job_record_id = ?",
+                Instant.now().minusSeconds(1),
+                jobRecordId
+        );
+
+        assertThrows(StaleEtlJobLeaseException.class, () -> executionService.execute(lease));
+
+        assertUncommittedDurableEffects(jobRecordId);
     }
 
     @Test
@@ -148,6 +164,13 @@ class EtlJobExecutionServiceIntegrationTest {
                 () -> new EtlJobExecutionService(idempotencyService, null)
         );
         assertThrows(NullPointerException.class, () -> executionService.execute(null));
+    }
+
+    private void assertUncommittedDurableEffects(UUID jobRecordId) {
+        assertEquals(0, tableCount("processed_data"));
+        assertEquals(0, tableCount("etl_idempotency_records"));
+        assertEquals("RUNNING", jobStatus(jobRecordId));
+        assertEquals(1, retainedPayloadCount(jobRecordId));
     }
 
     private UUID insertPendingJob() {
