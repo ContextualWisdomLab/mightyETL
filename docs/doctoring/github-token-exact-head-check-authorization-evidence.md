@@ -23,6 +23,11 @@ Without a bounded authorization step, a scheduled OpenCode run could push a vali
 the new exact head without CI, SAST, SBOM, dependency, or security execution. That would break the
 required review → fix → exact-head revalidation loop even though the source change itself was valid.
 
+A second timing problem also matters: GitHub materializes the several pull-request workflows
+asynchronously. Stopping as soon as the first run appears can authorize CI while a later Security Scan
+or SAST run remains approval-required indefinitely. The authorization job must therefore observe the
+complete named workflow set, authorizing newly visible waiting runs on every discovery pass.
+
 ## Split-job authority model
 
 The workflow separates mutable development from run authorization:
@@ -50,6 +55,24 @@ This prevents generated code, repository scripts, or the OpenCode process from u
 permission. The sole privileged job consumes only GitHub API metadata and a compact JSON map of pull
 request numbers to commit SHAs produced before the agent starts.
 
+## Required workflow set
+
+For a direct pull request to `develop`, exact-head validation is incomplete until all of these
+pull-request workflows have materialized:
+
+```text
+CI
+Dependency Review
+SBOM (CycloneDX)
+SAST Semgrep
+Security Scan
+```
+
+These are workflow names, not conclusions. Their presence proves only that validation was created for
+the head. Every run and named check must still complete successfully through the ordinary repository
+policy before merge. A workflow rename or required-workflow change must update the contract test,
+this evidence document, and the authorization list in one reviewed change.
+
 ## Fail-closed authorization algorithm
 
 The protected default-branch workflow performs the following steps:
@@ -64,17 +87,22 @@ The protected default-branch workflow performs the following steps:
 6. Refuse automatic run authorization when the pull request changes any path below `.github/` or
    any `CODEOWNERS` file. Those policy changes require explicit human authorization.
 7. Read the still-current pull-request head and require it to equal the selected expected SHA.
-8. Discover only `pull_request` workflow runs whose `head_sha` equals that expected SHA.
-9. Fail visibly when no exact-head run materializes.
-10. Re-read the pull-request head immediately before authorization and reject a moved head.
-11. Approve only exact-head runs in `action_required` or `waiting` state.
-12. Leave check execution, review, mergeability, branch protection, and expected-head merge
+8. Repeatedly discover only `pull_request` workflow runs whose `head_sha` equals that expected SHA.
+9. On each discovery pass, authorize every exact-head run still in `action_required` or `waiting`
+   state.
+10. Compare the unique observed workflow names with the complete required workflow set.
+11. Continue bounded discovery until every required workflow has materialized or the discovery
+    window expires.
+12. Fail visibly when no run appears or any required workflow remains absent.
+13. Re-read the pull-request head immediately before declaring authorization complete and reject a
+    moved head.
+14. Leave check execution, review, mergeability, branch protection, and expected-head merge
     disposition to their existing independent gates.
 
 The isolated job runs even when OpenCode fails, provided the workflow was not cancelled. This covers
 a partial agent session that pushed a branch before later failing. If the pre-run snapshot is absent,
-run discovery fails, the head moves, a policy file changed, no run appears, or GitHub rejects
-authorization, the workflow fails instead of reporting successful revalidation.
+run discovery fails, the head moves, a policy file changed, the named workflow set is incomplete, or
+GitHub rejects authorization, the workflow fails instead of reporting successful revalidation.
 
 ## Authority and credential boundary
 
@@ -107,9 +135,11 @@ implemented them:
 - authorization through the workflow-run endpoint only;
 - continued absence of pull-request approval and merge operations.
 
-The production workflow then implemented those contracts with job outputs, `gh api`, canonical JSON
-processing through `jq`, and an exact SHA passed as a jq argument rather than interpolated into jq
-source.
+`HourlyOpenCodeRequiredWorkflowAuthorizationTest` then required the complete five-workflow set,
+repeated bounded discovery, repeated waiting-run authorization, observed/missing workflow evidence,
+and explicit failure when the set remains incomplete. Production implemented those contracts with
+job outputs, `gh api`, canonical JSON processing through `jq`, and exact SHA and workflow-name arrays
+passed as data rather than interpolated into jq source.
 
 ## Verification checklist
 
@@ -124,8 +154,9 @@ Reviewers must verify on the exact current pull-request head that:
 - `.github/**` and all `CODEOWNERS` paths are excluded from automatic authorization;
 - both current-head reads equal the expected head;
 - run discovery filters `event=pull_request` and the exact head SHA;
-- only waiting or action-required runs reach the approval endpoint;
-- absent runs and authorization failures make the workflow fail;
+- waiting or action-required runs are authorized on every discovery pass;
+- CI, Dependency Review, SBOM, SAST, and Security Scan all materialize before success is reported;
+- absent runs, missing named workflows, and authorization failures make the workflow fail;
 - no review approval, merge, protected-branch push, or secret fallback was added;
 - every authorized run must still complete successfully before merge disposition can proceed.
 
@@ -137,8 +168,9 @@ agent able to push changes with `GITHUB_TOKEN`, because that recreates unvalidat
 
 Do not move `actions: write` back into the OpenCode job. A replacement based on a GitHub App may
 remove the isolated authorization job only after its installation permissions, recursive-trigger
-behavior, actor identity, secret lifecycle, exact-head workflow evidence, and independent review
-boundary are documented and tested through a separate pull request.
+behavior, actor identity, secret lifecycle, exact-head workflow evidence, complete required-run
+materialization, and independent review boundary are documented and tested through a separate pull
+request.
 
 ## References — APA 7th
 
