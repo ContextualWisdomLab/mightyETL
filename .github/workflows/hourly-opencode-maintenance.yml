@@ -59,6 +59,12 @@ jobs:
             exit 1
           fi
 
+          archive_entry_metadata="$(LC_ALL=C tar --list --verbose --numeric-owner --gzip --file "${archive}")"
+          if [[ "${archive_entry_metadata:0:1}" != "-" ]]; then
+            echo "OpenCode archive member is not a regular file" >&2
+            exit 1
+          fi
+
           rm -rf "${install_dir}"
           install -d -m 0700 "${install_dir}"
           tar --extract --gzip --no-same-owner --no-same-permissions \
