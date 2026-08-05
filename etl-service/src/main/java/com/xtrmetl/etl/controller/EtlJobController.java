@@ -232,11 +232,12 @@ public class EtlJobController {
     /**
      * Builds an opaque weak validator from the complete status representation.
      *
-     * <p>Each field is length-prefixed before SHA-256 hashing, so adjacent values cannot create
-     * ambiguous material. The digest prevents the response header from exposing even the
-     * operator-safe values themselves. Payloads, principals, idempotency keys, lease identifiers,
-     * SQL text, and exception text are not part of the response model and therefore cannot enter
-     * this tag.</p>
+     * <p>Each non-null field is marked and length-prefixed before SHA-256 hashing, while a
+     * dedicated marker represents {@code null}. This prevents adjacent-value ambiguity and keeps
+     * an omitted nullable JSON field distinct from an explicitly empty string. The digest prevents
+     * the response header from exposing even the operator-safe values themselves. Payloads,
+     * principals, idempotency keys, lease identifiers, SQL text, and exception text are not part of
+     * the response model and therefore cannot enter this tag.</p>
      *
      * @param responseBody complete owner-authorized status representation
      * @return syntactically valid weak HTTP entity tag
@@ -256,14 +257,17 @@ public class EtlJobController {
     }
 
     /**
-     * Encodes one possibly-null value without delimiter ambiguity.
+     * Encodes one possibly-null value without delimiter or null/empty ambiguity.
      *
      * @param value representation field value
-     * @return decimal character length, a colon, and the canonical text value
+     * @return a null marker or a value marker followed by length-prefixed canonical text
      */
     private static String canonicalField(@Nullable Object value) {
-        String canonicalValue = Objects.toString(value, "");
-        return canonicalValue.length() + ":" + canonicalValue;
+        if (value == null) {
+            return "N;";
+        }
+        String canonicalValue = value.toString();
+        return "V" + canonicalValue.length() + ":" + canonicalValue;
     }
 
     private static UUID parseJobRecordId(String jobRecordIdText) {
