@@ -116,6 +116,7 @@
                             <includes>
                                 <include>com/xtrmetl/etl/job/*.class</include>
                                 <include>com/xtrmetl/etl/controller/EtlJobController*.class</include>
+                                <include>com/xtrmetl/etl/service/Sha256Digest*.class</include>
                             </includes>
                         </configuration>
                     </execution>
@@ -129,6 +130,7 @@
                             <includes>
                                 <include>com/xtrmetl/etl/job/*.class</include>
                                 <include>com/xtrmetl/etl/controller/EtlJobController*.class</include>
+                                <include>com/xtrmetl/etl/service/Sha256Digest*.class</include>
                             </includes>
                             <rules>
                                 <rule>
