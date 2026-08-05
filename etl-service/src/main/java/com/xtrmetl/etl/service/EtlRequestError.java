@@ -104,6 +104,24 @@ public enum EtlRequestError {
             "A durable ETL job with the same principal-scoped Idempotency-Key is being created."
     ),
 
+    /** The durable job page limit is absent from mightyETL's bounded canonical profile. */
+    INVALID_JOB_PAGE_LIMIT(
+            HttpStatus.BAD_REQUEST,
+            "etl_invalid_job_page_limit",
+            "urn:mightyetl:problem:etl-invalid-job-page-limit",
+            "Invalid ETL job page limit",
+            "The job page limit must be a canonical integer from 1 through 100."
+    ),
+
+    /** The durable job cursor is malformed, oversized, incomplete, or non-canonical. */
+    INVALID_JOB_PAGE_CURSOR(
+            HttpStatus.BAD_REQUEST,
+            "etl_invalid_job_page_cursor",
+            "urn:mightyetl:problem:etl-invalid-job-page-cursor",
+            "Invalid ETL job page cursor",
+            "The job page cursor is invalid or no longer follows the supported opaque format."
+    ),
+
     /** The requested job does not exist in the authenticated principal's namespace. */
     JOB_NOT_FOUND(
             HttpStatus.NOT_FOUND,
