@@ -17,6 +17,7 @@ import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseType;
 import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
+import org.springframework.transaction.annotation.Transactional;
 
 import javax.sql.DataSource;
 import java.nio.charset.StandardCharsets;
@@ -89,6 +90,7 @@ class EtlJobIdempotencyServiceIntegrationTest {
     }
 
     @Test
+    @Transactional
     void writesTargetAndLedgerThenReplaysWithoutASecondTargetWrite() {
         EtlJobLease lease = lease(PAYLOAD, sha256(PAYLOAD));
 
@@ -103,6 +105,7 @@ class EtlJobIdempotencyServiceIntegrationTest {
     }
 
     @Test
+    @Transactional
     void rejectsPayloadDigestMismatchBeforeLockOrWrites() {
         EtlJobLease lease = lease(PAYLOAD, "c".repeat(64));
 
@@ -118,6 +121,7 @@ class EtlJobIdempotencyServiceIntegrationTest {
     }
 
     @Test
+    @Transactional
     void rejectsConflictingStoredDigestWithoutAnotherTargetWrite() {
         EtlJobLease lease = lease(PAYLOAD, sha256(PAYLOAD));
         idempotencyService.process(lease);
@@ -133,6 +137,7 @@ class EtlJobIdempotencyServiceIntegrationTest {
     }
 
     @Test
+    @Transactional
     void reportsBusyLedgerAsTransientWithoutWrites() {
         when(requestLock.tryLock(anyString())).thenReturn(false);
         EtlJobLease lease = lease(PAYLOAD, sha256(PAYLOAD));
