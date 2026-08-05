@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The durable-job claim eligibility index now builds in a separate PostgreSQL `CREATE INDEX CONCURRENTLY` migration with Flyway non-transactional script configuration and session-level PostgreSQL migration locking, preserving normal job writes during rollout while keeping lease columns and constraints transactional.
 - Durable asynchronous ETL jobs now progress from `PENDING` through lease-fenced execution to `SUCCEEDED` or `FAILED`; PostgreSQL owns cross-replica claiming, stale workers cannot commit target or lifecycle effects, and intake and execution remain independently fail-closed.
 - Durable-worker observability now records one terminal outcome counter and one matching duration sample for every completed poll, including idle polls and database failures while persisting retry or terminal transitions.
 - The hourly pull-request disposition loop now requires at least one non-author approval anchored to the exact current head SHA; stale approvals, comment-only reviews, and the mere absence of requested changes cannot authorize unattended merge.
@@ -28,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A production rollout and invalid-index recovery runbook for the nonblocking durable-job claim index: `docs/operations/durable-job-claim-index-rollout.md`.
 - PostgreSQL `FOR UPDATE SKIP LOCKED` durable-job claiming, per-process and per-claim lease fencing, expiry reclaim, bounded attempts, exact-live-lease transitions, terminal payload clearing, stable failure codes, and finite-cardinality worker metrics.
 - Hashed durable execution identity and domain-separated reuse of `etl_idempotency_records`, coupling response replay or creation, target writes, and terminal `SUCCEEDED` in one transaction without retaining or reconstructing raw principals or raw client idempotency keys.
 - Deterministic migration, concurrency, expiry, exhaustion, response-replay, integrity, stale-lease rollback, privacy, configuration-boundary, and operator-recovery tests plus `docs/operations/durable-job-worker.md`.
