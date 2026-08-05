@@ -41,6 +41,8 @@ class EtlJobLeaseRepositoryIntegrationTest {
     private static final Duration LEASE_DURATION = Duration.ofMinutes(5);
     private static final String OWNER_ALPHA = "worker-alpha";
     private static final String OWNER_BETA = "worker-beta";
+    private static final String PRINCIPAL_SCOPE_HASH = "a".repeat(64);
+    private static final String REQUEST_DIGEST = "b".repeat(64);
     private static final String PAYLOAD = "[{\"id\":\"record_alpha\"}]";
 
     private final EtlJobLeaseRepository repository;
@@ -93,6 +95,9 @@ class EtlJobLeaseRepositoryIntegrationTest {
 
         assertEquals(olderJobId, lease.jobRecordId());
         assertEquals(OWNER_ALPHA, lease.leaseOwnerId());
+        assertEquals(PRINCIPAL_SCOPE_HASH, lease.principalScopeHash());
+        assertTrue(lease.submissionKeyHash().matches("[0-9a-f]{64}"));
+        assertEquals(REQUEST_DIGEST, lease.requestDigest());
         assertEquals(PAYLOAD, lease.requestPayload());
         assertEquals(2, lease.attemptCount());
         assertNotNull(lease.leaseClaimId());
@@ -255,58 +260,19 @@ class EtlJobLeaseRepositoryIntegrationTest {
 
     @Test
     void rejectsInvalidPublicArgumentsBeforeSqlExecution() {
-        assertThrows(
-                NullPointerException.class,
-                () -> repository.claimNext(null, LEASE_DURATION, 3)
-        );
-        assertThrows(
-                NullPointerException.class,
-                () -> repository.claimNext(OWNER_ALPHA, null, 3)
-        );
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> repository.claimNext("short", LEASE_DURATION, 3)
-        );
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> repository.claimNext(OWNER_ALPHA, Duration.ZERO, 3)
-        );
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> repository.claimNext(OWNER_ALPHA, Duration.ofSeconds(-1), 3)
-        );
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> repository.claimNext(OWNER_ALPHA, LEASE_DURATION, 0)
-        );
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> repository.claimNext(OWNER_ALPHA, LEASE_DURATION, 101)
-        );
-        assertThrows(
-                NullPointerException.class,
-                () -> repository.markSucceeded(null)
-        );
-        assertThrows(
-                NullPointerException.class,
-                () -> repository.releaseForRetry(null, 3)
-        );
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> repository.releaseForRetry(sampleLease(), 0)
-        );
-        assertThrows(
-                NullPointerException.class,
-                () -> repository.markFailed(null, "etl_target_failure")
-        );
-        assertThrows(
-                NullPointerException.class,
-                () -> repository.markFailed(sampleLease(), null)
-        );
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> repository.markFailed(sampleLease(), "UNSAFE FAILURE")
-        );
+        assertThrows(NullPointerException.class, () -> repository.claimNext(null, LEASE_DURATION, 3));
+        assertThrows(NullPointerException.class, () -> repository.claimNext(OWNER_ALPHA, null, 3));
+        assertThrows(IllegalArgumentException.class, () -> repository.claimNext("short", LEASE_DURATION, 3));
+        assertThrows(IllegalArgumentException.class, () -> repository.claimNext(OWNER_ALPHA, Duration.ZERO, 3));
+        assertThrows(IllegalArgumentException.class, () -> repository.claimNext(OWNER_ALPHA, Duration.ofSeconds(-1), 3));
+        assertThrows(IllegalArgumentException.class, () -> repository.claimNext(OWNER_ALPHA, LEASE_DURATION, 0));
+        assertThrows(IllegalArgumentException.class, () -> repository.claimNext(OWNER_ALPHA, LEASE_DURATION, 101));
+        assertThrows(NullPointerException.class, () -> repository.markSucceeded(null));
+        assertThrows(NullPointerException.class, () -> repository.releaseForRetry(null, 3));
+        assertThrows(IllegalArgumentException.class, () -> repository.releaseForRetry(sampleLease(), 0));
+        assertThrows(NullPointerException.class, () -> repository.markFailed(null, "etl_target_failure"));
+        assertThrows(NullPointerException.class, () -> repository.markFailed(sampleLease(), null));
+        assertThrows(IllegalArgumentException.class, () -> repository.markFailed(sampleLease(), "UNSAFE FAILURE"));
     }
 
     private UUID insertPending(Instant createdAt, int attemptCount) {
@@ -320,9 +286,9 @@ class EtlJobLeaseRepositoryIntegrationTest {
                 ) VALUES (?, ?, ?, ?, ?, 'PENDING', ?, ?, ?)
                 """,
                 jobRecordId,
-                "a".repeat(64),
+                PRINCIPAL_SCOPE_HASH,
                 UUID.randomUUID().toString().replace("-", "").repeat(2),
-                "b".repeat(64),
+                REQUEST_DIGEST,
                 PAYLOAD,
                 attemptCount,
                 createdAt,
@@ -365,10 +331,7 @@ class EtlJobLeaseRepositoryIntegrationTest {
 
     private void assertTerminalExhaustion(UUID jobRecordId) {
         assertEquals("FAILED", textColumn(jobRecordId, "job_status"));
-        assertEquals(
-                "etl_worker_attempts_exhausted",
-                textColumn(jobRecordId, "failure_code")
-        );
+        assertEquals("etl_worker_attempts_exhausted", textColumn(jobRecordId, "failure_code"));
         assertNull(textColumn(jobRecordId, "request_payload"));
         assertNull(textColumn(jobRecordId, "lease_owner_id"));
     }
@@ -395,15 +358,16 @@ class EtlJobLeaseRepositoryIntegrationTest {
                 UUID.randomUUID(),
                 UUID.randomUUID(),
                 OWNER_ALPHA,
+                PRINCIPAL_SCOPE_HASH,
+                "e".repeat(64),
+                REQUEST_DIGEST,
                 PAYLOAD,
                 1,
                 Instant.now().plusSeconds(300)
         );
     }
 
-    /**
-     * Minimal transaction-enabled SQL context for durable lease persistence tests.
-     */
+    /** Minimal transaction-enabled SQL context for durable lease persistence tests. */
     @Configuration
     @EnableTransactionManagement
     static class TestConfiguration {
