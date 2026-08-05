@@ -24,7 +24,9 @@ import java.util.Optional;
  * worker classifies failures into stable non-sensitive codes, retries only transient database
  * failures while attempts remain, and treats every failed exact-lease transition as stale evidence.
  * Metrics use a fixed outcome vocabulary and never tag payloads, principals, keys, job identifiers,
- * lease identifiers, SQL, exception classes, or exception messages.</p>
+ * lease identifiers, SQL, exception classes, or exception messages. Every completed poll records
+ * one terminal outcome counter and one matching duration sample, including idle polls and database
+ * failures while persisting retry or terminal transitions.</p>
  */
 @Component
 @ConditionalOnBooleanProperty(
@@ -121,9 +123,10 @@ public class EtlJobWorker {
     /**
      * Claims and handles at most one eligible durable job.
      *
-     * <p>Fixed delay is measured after this invocation completes. A database outage during claim is
-     * converted into a finite failed metric without copying diagnostic text into application logs or
-     * telemetry. Spring invokes the method only when worker activation is explicitly enabled.</p>
+     * <p>Fixed delay is measured after this invocation completes. A database outage during claim or
+     * a database failure while persisting retry or terminal state is converted into a finite failed
+     * outcome without copying diagnostic text into application logs or telemetry. Spring invokes the
+     * method only when worker activation is explicitly enabled.</p>
      */
     @Scheduled(
             fixedDelayString = "${xtrmetl.etl.jobs.worker.fixed-delay-milliseconds:5000}",
@@ -149,6 +152,7 @@ public class EtlJobWorker {
         }
 
         if (claimedLease.isEmpty()) {
+            increment(IDLE_OUTCOME);
             return IDLE_OUTCOME;
         }
 
@@ -183,6 +187,9 @@ public class EtlJobWorker {
             } catch (StaleEtlJobLeaseException exception) {
                 increment(STALE_OUTCOME);
                 return STALE_OUTCOME;
+            } catch (DataAccessException exception) {
+                increment(FAILED_OUTCOME);
+                return FAILED_OUTCOME;
             }
         }
         return markFailedOrStale(lease, TARGET_UNAVAILABLE_FAILURE_CODE);
@@ -196,6 +203,9 @@ public class EtlJobWorker {
         } catch (StaleEtlJobLeaseException exception) {
             increment(STALE_OUTCOME);
             return STALE_OUTCOME;
+        } catch (DataAccessException exception) {
+            increment(FAILED_OUTCOME);
+            return FAILED_OUTCOME;
         }
     }
 
