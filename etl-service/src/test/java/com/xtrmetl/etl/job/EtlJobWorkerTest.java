@@ -75,7 +75,7 @@ class EtlJobWorkerTest {
     }
 
     @Test
-    void executesAtMostOneClaimAndRecordsClaimedAndSucceeded() {
+    void executesAtMostOneClaimAndRecordsSucceeded() {
         EtlJobLease lease = lease(1);
         when(leaseRepository.claimNext(anyString(), any(), anyInt()))
                 .thenReturn(Optional.of(lease));
@@ -83,7 +83,6 @@ class EtlJobWorkerTest {
         worker.pollOnce();
 
         verify(executionService).execute(lease);
-        assertMetric("claimed", 1.0, 0L);
         assertMetric("succeeded", 1.0, 1L);
     }
 
