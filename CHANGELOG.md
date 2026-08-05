@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Active durable-job status responses now emit an RFC 9110 `Retry-After` delay for `PENDING` and `RUNNING` states, derived from the bounded worker fixed-delay configuration with upward whole-second rounding; terminal states omit the advisory.
 - The durable job pagination index now uses PostgreSQL `CREATE INDEX CONCURRENTLY` with a migration-local Flyway `executeInTransaction=false` companion configuration, preserving production writers and documenting invalid-index recovery and concurrent rollback.
 - Durable job operators can now list only their own jobs through bounded newest-first keyset pagination with canonical opaque cursors, deterministic timestamp-plus-UUID ordering, `Cache-Control: no-store`, and RFC 8288 next-page links without offset drift or cross-tenant existence leakage.
 - Durable asynchronous ETL jobs now progress from `PENDING` through lease-fenced execution to `SUCCEEDED` or `FAILED`; PostgreSQL owns cross-replica claiming, stale workers cannot commit target or lifecycle effects, and intake and execution remain independently fail-closed.
@@ -30,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Controller-scoped polling advice, deterministic active/terminal lifecycle tests, sub-second rounding coverage, rollback guidance, and APA 7th standards evidence in `docs/etl/durable-job-polling.md`.
 - Owner-scoped durable job list models and HTTP contract, strict cursor and page-limit validation, one-extra-row next-page detection, the descriptive `etl_job_owner_pagination_index`, deterministic tenant-isolation and equal-timestamp tests, migration rollback guidance, and APA 7th standards evidence in `docs/etl/durable-job-intake.md`.
 - PostgreSQL `FOR UPDATE SKIP LOCKED` durable-job claiming, per-process and per-claim lease fencing, expiry reclaim, bounded attempts, exact-live-lease transitions, terminal payload clearing, stable failure codes, and finite-cardinality worker metrics.
 - Hashed durable execution identity and domain-separated reuse of `etl_idempotency_records`, coupling response replay or creation, target writes, and terminal `SUCCEEDED` in one transaction without retaining or reconstructing raw principals or raw client idempotency keys.
