@@ -34,7 +34,7 @@ class EtlJobPollingAdviceTest {
 
     @Test
     void activeJobsAdvertiseTheRoundedWorkerPollingCadence() {
-        EtlJobWorkerProperties workerProperties = new EtlJobWorkerProperties();
+        EtlJobWorkerProperties workerProperties = enabledWorkerProperties();
         workerProperties.setFixedDelayMilliseconds(1_001L);
         EtlJobPollingAdvice advice = new EtlJobPollingAdvice(workerProperties);
 
@@ -44,7 +44,7 @@ class EtlJobPollingAdviceTest {
 
     @Test
     void subSecondWorkerCadenceAdvertisesAtLeastOneSecond() {
-        EtlJobWorkerProperties workerProperties = new EtlJobWorkerProperties();
+        EtlJobWorkerProperties workerProperties = enabledWorkerProperties();
         workerProperties.setFixedDelayMilliseconds(1L);
         EtlJobPollingAdvice advice = new EtlJobPollingAdvice(workerProperties);
 
@@ -52,8 +52,21 @@ class EtlJobPollingAdviceTest {
     }
 
     @Test
-    void terminalJobsRemoveAnyRetryAfterSuggestion() {
+    void disabledWorkerDoesNotAdvertiseAProcessingCadence() {
         EtlJobPollingAdvice advice = new EtlJobPollingAdvice(new EtlJobWorkerProperties());
+        HttpHeaders headers = new HttpHeaders();
+        headers.set(HttpHeaders.RETRY_AFTER, "999");
+        EtlJobStatusResponse responseBody = response(EtlJobStatus.PENDING);
+
+        Object returnedBody = apply(advice, responseBody, headers);
+
+        assertSame(responseBody, returnedBody);
+        assertTrue(headers.getOrEmpty(HttpHeaders.RETRY_AFTER).isEmpty());
+    }
+
+    @Test
+    void terminalJobsRemoveAnyRetryAfterSuggestion() {
+        EtlJobPollingAdvice advice = new EtlJobPollingAdvice(enabledWorkerProperties());
 
         assertTerminalHeaderRemoved(advice, EtlJobStatus.SUCCEEDED);
         assertTerminalHeaderRemoved(advice, EtlJobStatus.FAILED);
@@ -61,7 +74,7 @@ class EtlJobPollingAdviceTest {
 
     @Test
     void unrelatedBodiesRemainUnchanged() {
-        EtlJobPollingAdvice advice = new EtlJobPollingAdvice(new EtlJobWorkerProperties());
+        EtlJobPollingAdvice advice = new EtlJobPollingAdvice(enabledWorkerProperties());
         HttpHeaders headers = new HttpHeaders();
         headers.set(HttpHeaders.RETRY_AFTER, "7");
         String body = "unrelated-body";
@@ -74,12 +87,18 @@ class EtlJobPollingAdviceTest {
 
     @Test
     void participatesInTheControllerResponseAdviceChain() {
-        EtlJobPollingAdvice advice = new EtlJobPollingAdvice(new EtlJobWorkerProperties());
+        EtlJobPollingAdvice advice = new EtlJobPollingAdvice(enabledWorkerProperties());
 
         assertTrue(advice.supports(
                 mock(MethodParameter.class),
                 MappingJackson2HttpMessageConverter.class
         ));
+    }
+
+    private static EtlJobWorkerProperties enabledWorkerProperties() {
+        EtlJobWorkerProperties workerProperties = new EtlJobWorkerProperties();
+        workerProperties.setEnabled(true);
+        return workerProperties;
     }
 
     private static void assertRetryAfter(
