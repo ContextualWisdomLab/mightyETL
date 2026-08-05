@@ -21,6 +21,10 @@ import java.util.Objects;
  * transaction-level request lock, replays an existing matching response, or writes the target and
  * response ledger in the surrounding transaction. Raw principals and client keys are neither
  * required nor reconstructed.</p>
+ *
+ * <p>One invocation represents exactly one persisted durable attempt. It therefore calls the
+ * non-retrying ETL entry point that joins the current lease transaction; transient failures escape
+ * to {@link EtlJobWorker}, which owns bounded retry accounting in {@code attempt_count}.</p>
  */
 @Service
 public class EtlJobIdempotencyService {
@@ -109,7 +113,9 @@ public class EtlJobIdempotencyService {
             return storedResponse.responseBody();
         }
 
-        String responseBody = etlService.processData(requiredLease.requestPayload());
+        String responseBody = etlService.processDataInExistingTransaction(
+                requiredLease.requestPayload()
+        );
         jdbcTemplate.update(
                 INSERT_LEDGER_SQL,
                 ledgerKeyHash,
