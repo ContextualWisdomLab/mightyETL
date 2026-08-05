@@ -131,7 +131,7 @@ existing xtrmETL platform.
    - Key features overview
    - System architecture summary
    - Technology stack
-   - Use cases and scenarios
+   - Use cases
    - API specifications
    - Quick start guide
    - Future improvements
