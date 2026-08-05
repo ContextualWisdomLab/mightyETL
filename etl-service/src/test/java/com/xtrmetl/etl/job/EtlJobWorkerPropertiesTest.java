@@ -13,6 +13,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class EtlJobWorkerPropertiesTest {
 
+    private static final long MAXIMUM_SCHEDULER_DELAY_MILLISECONDS = 86_400_000L;
+    private static final long MAXIMUM_LEASE_DURATION_SECONDS = 86_400L;
+
     @Test
     void defaultsToDisabledBoundedPollingWithGeneratedSafeOwner() {
         EtlJobWorkerProperties properties = new EtlJobWorkerProperties();
@@ -46,8 +49,14 @@ class EtlJobWorkerPropertiesTest {
         assertEquals(1, properties.getMaxAttempts());
         assertEquals("worker-01", properties.getLeaseOwnerId());
 
+        properties.setFixedDelayMilliseconds(MAXIMUM_SCHEDULER_DELAY_MILLISECONDS);
+        properties.setInitialDelayMilliseconds(MAXIMUM_SCHEDULER_DELAY_MILLISECONDS);
+        properties.setLeaseDurationSeconds(MAXIMUM_LEASE_DURATION_SECONDS);
         properties.setMaxAttempts(100);
         properties.setLeaseOwnerId("w".repeat(128));
+        assertEquals(MAXIMUM_SCHEDULER_DELAY_MILLISECONDS, properties.getFixedDelayMilliseconds());
+        assertEquals(MAXIMUM_SCHEDULER_DELAY_MILLISECONDS, properties.getInitialDelayMilliseconds());
+        assertEquals(MAXIMUM_LEASE_DURATION_SECONDS, properties.getLeaseDurationSeconds());
         assertEquals(100, properties.getMaxAttempts());
         assertEquals(128, properties.getLeaseOwnerId().length());
     }
@@ -62,11 +71,27 @@ class EtlJobWorkerPropertiesTest {
         );
         assertThrows(
                 IllegalArgumentException.class,
+                () -> properties.setFixedDelayMilliseconds(
+                        MAXIMUM_SCHEDULER_DELAY_MILLISECONDS + 1L
+                )
+        );
+        assertThrows(
+                IllegalArgumentException.class,
                 () -> properties.setInitialDelayMilliseconds(-1L)
         );
         assertThrows(
                 IllegalArgumentException.class,
+                () -> properties.setInitialDelayMilliseconds(
+                        MAXIMUM_SCHEDULER_DELAY_MILLISECONDS + 1L
+                )
+        );
+        assertThrows(
+                IllegalArgumentException.class,
                 () -> properties.setLeaseDurationSeconds(0L)
+        );
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> properties.setLeaseDurationSeconds(MAXIMUM_LEASE_DURATION_SECONDS + 1L)
         );
         assertThrows(IllegalArgumentException.class, () -> properties.setMaxAttempts(0));
         assertThrows(IllegalArgumentException.class, () -> properties.setMaxAttempts(101));
