@@ -86,6 +86,12 @@ The worker publishes finite-cardinality metrics only:
 - `etl.jobs.worker.outcomes{outcome=idle|claimed|succeeded|retried|failed|stale}`;
 - `etl.jobs.execution.duration{outcome=idle|succeeded|retried|failed|stale}`.
 
+Every completed poll increments one terminal outcome counter and records one matching duration
+sample. `claimed` is an additional progress counter for polls that acquired work. Idle polls count as
+`idle`; a database failure while persisting a retry or terminal transition counts as `failed`, leaves
+the fenced row recoverable through lease expiry, and is never mislabeled as `retried`, `succeeded`,
+or `stale`.
+
 Do not add payloads, raw principals, raw idempotency keys, hashes, job identifiers, lease identifiers,
 SQL text, exception messages, or unbounded exception classes as metric tags or log fields.
 
