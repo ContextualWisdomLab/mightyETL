@@ -146,6 +146,7 @@ class EtlJobPaginationServiceIntegrationTest {
                 encode("not-an-instant|00000000-0000-0000-0000-000000000000"),
                 encode("2026-08-05T01:00:00Z|not-a-uuid"),
                 encode("2026-08-05T01:00:00Z|00000000-0000-0000-0000-000000000000") + "=",
+                encode("2026-08-05T01:00:00.000Z|00000000-0000-0000-0000-000000000000"),
                 "a".repeat(193)
         );
         for (String invalidCursor : invalidCursors) {
