@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * independently constrain where archive members would be written. The workflow therefore accepts
  * only the documented one-file release shape: one regular member named {@code opencode}. This
  * contract prevents future tool-pin changes from silently broadening extraction to directories,
- * symbolic links, absolute paths, parent-directory paths, or unexpected additional files.</p>
+ * links, device nodes, absolute paths, parent-directory paths, or unexpected additional files.</p>
  */
 class HourlyOpenCodeArchiveValidationTest {
 
@@ -55,6 +55,28 @@ class HourlyOpenCodeArchiveValidationTest {
         assertTrue(workflow.contains(extraction));
         assertTrue(workflow.indexOf(validation) < workflow.indexOf(extraction));
         assertTrue(workflow.indexOf(exactShape) < workflow.indexOf(extraction));
+    }
+
+    /**
+     * Requires the sole member to be a regular-file entry before tar writes to the filesystem.
+     *
+     * <p>Post-extraction symbolic-link checks remain useful defense in depth, but they cannot by
+     * themselves distinguish an ordinary archived file from every link-oriented archive entry.
+     * GNU tar's verbose listing begins each member with its type character, so the Ubuntu-only
+     * installer must require {@code -} for a regular file before extraction.</p>
+     */
+    @Test
+    void validatesRegularFileEntryTypeBeforeExtraction() {
+        String metadata = "archive_entry_metadata=\"$(LC_ALL=C tar --list --verbose "
+                + "--numeric-owner --gzip --file \"${archive}\")\"";
+        String regularType = "[[ \"${archive_entry_metadata:0:1}\" != \"-\" ]]";
+        String extraction = "tar --extract --gzip --no-same-owner --no-same-permissions";
+
+        assertTrue(workflow.contains(metadata));
+        assertTrue(workflow.contains(regularType));
+        assertTrue(workflow.contains("OpenCode archive member is not a regular file"));
+        assertTrue(workflow.indexOf(metadata) < workflow.indexOf(extraction));
+        assertTrue(workflow.indexOf(regularType) < workflow.indexOf(extraction));
     }
 
     /**
