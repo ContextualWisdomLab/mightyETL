@@ -35,7 +35,8 @@ class EtlJobCoveragePolicyTest {
 
     private static final Set<String> DURABLE_JOB_CLASS_FILES = Set.of(
             "com/xtrmetl/etl/job/*.class",
-            "com/xtrmetl/etl/controller/EtlJobController*.class"
+            "com/xtrmetl/etl/controller/EtlJobController*.class",
+            "com/xtrmetl/etl/service/Sha256Digest*.class"
     );
 
     /**
@@ -90,6 +91,9 @@ class EtlJobCoveragePolicyTest {
         assertFalse(serializedPom.contains("<include>com.xtrmetl.etl.job.*</include>"));
         assertFalse(serializedPom.contains(
                 "<include>com.xtrmetl.etl.controller.EtlJobController*</include>"
+        ));
+        assertFalse(serializedPom.contains(
+                "<include>com.xtrmetl.etl.service.Sha256Digest*</include>"
         ));
     }
 
