@@ -14,7 +14,7 @@ permissions:
 jobs:
   maintain-repository:
     permissions:
-      actions: read
+      actions: write
       checks: read
       contents: write
       issues: write
@@ -76,6 +76,22 @@ jobs:
           test "$("${install_dir}/opencode" --version)" = "${OPENCODE_VERSION}"
           printf '%s\n' "${install_dir}" >> "${GITHUB_PATH}"
 
+      - name: Snapshot open pull-request heads
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          snapshot="${RUNNER_TEMP}/open-pr-heads-before.json"
+          gh api --paginate \
+            "/repos/${GITHUB_REPOSITORY}/pulls?state=open&base=develop&per_page=100" \
+            | jq -s --arg repo "${GITHUB_REPOSITORY}" '
+                (add // [])
+                | map(select(.head.repo.full_name == $repo))
+                | map({key: (.number | tostring), value: .head.sha})
+                | from_entries
+              ' > "${snapshot}"
+
       - name: Run bounded NVIDIA OpenCode maintenance
         shell: bash
         env:
@@ -127,3 +143,114 @@ jobs:
           git config --local user.email "opencode-agent[bot]@users.noreply.github.com"
 
           timeout --signal=TERM --kill-after=30s 45m opencode github run
+
+      - name: Authorize exact-head checks for agent-updated pull requests
+        if: ${{ always() && !cancelled() }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          before_file="${RUNNER_TEMP}/open-pr-heads-before.json"
+          after_file="${RUNNER_TEMP}/open-pr-heads-after.json"
+          changed_file="${RUNNER_TEMP}/agent-changed-pr-heads.jsonl"
+          repository="${GITHUB_REPOSITORY}"
+          failed=0
+
+          if [[ ! -f "${before_file}" ]]; then
+            echo "Open pull-request head snapshot is unavailable" >&2
+            exit 1
+          fi
+
+          gh api --paginate \
+            "/repos/${repository}/pulls?state=open&base=develop&per_page=100" \
+            | jq -s '(add // [])' > "${after_file}"
+          jq -c --arg repo "${repository}" --slurpfile before "${before_file}" '
+            .[]
+            | select(.head.repo.full_name == $repo)
+            | select(.base.ref == "develop")
+            | (.number | tostring) as $number_key
+            | ($before[0][$number_key] // null) as $previous_head
+            | select($previous_head != .head.sha)
+            | {
+                number: .number,
+                head_ref: .head.ref,
+                head_sha: .head.sha
+              }
+          ' "${after_file}" > "${changed_file}"
+
+          while IFS= read -r changed_pull_request; do
+            [[ -n "${changed_pull_request}" ]] || continue
+            number="$(jq -r '.number' <<<"${changed_pull_request}")"
+            head_ref="$(jq -r '.head_ref' <<<"${changed_pull_request}")"
+            expected_head="$(jq -r '.head_sha' <<<"${changed_pull_request}")"
+
+            changed_files="$(
+              gh api --paginate "/repos/${repository}/pulls/${number}/files?per_page=100" \
+                | jq -s '(add // []) | map(.filename)'
+            )"
+            if jq -e '
+              any(
+                startswith(".github/workflows/")
+                or . == "CODEOWNERS"
+                or endswith("/CODEOWNERS")
+              )
+            ' >/dev/null <<<"${changed_files}"; then
+              echo "PR #${number} changes workflow or CODEOWNERS policy; exact-head runs require manual authorization" >&2
+              failed=1
+              continue
+            fi
+
+            current_head="$(gh api "/repos/${repository}/pulls/${number}" --jq '.head.sha')"
+            if [[ "${current_head}" != "${expected_head}" ]]; then
+              echo "PR #${number} moved before workflow-run discovery" >&2
+              failed=1
+              continue
+            fi
+
+            runs_file="${RUNNER_TEMP}/pr-${number}-exact-head-runs.json"
+            run_count=0
+            for _ in $(seq 1 18); do
+              gh api --paginate \
+                "/repos/${repository}/actions/runs?event=pull_request&head_sha=${expected_head}&per_page=100" \
+                | jq -s '(map(.workflow_runs) | add) // []' > "${runs_file}"
+              run_count="$(jq 'length' "${runs_file}")"
+              if [[ "${run_count}" -gt 0 ]]; then
+                break
+              fi
+              sleep 5
+            done
+
+            if [[ "${run_count}" -eq 0 ]]; then
+              echo "No pull-request workflow run materialized for PR #${number} exact head ${expected_head}" >&2
+              failed=1
+              continue
+            fi
+
+            current_head="$(gh api "/repos/${repository}/pulls/${number}" --jq '.head.sha')"
+            if [[ "${current_head}" != "${expected_head}" ]]; then
+              echo "PR #${number} moved before workflow-run authorization" >&2
+              failed=1
+              continue
+            fi
+
+            while IFS= read -r run_id; do
+              [[ -n "${run_id}" ]] || continue
+              gh api --method POST \
+                "/repos/${repository}/actions/runs/${run_id}/approve"
+            done < <(
+              jq -r '.[]
+                | select(
+                    .head_sha == "'"${expected_head}"'"
+                    and (
+                      .conclusion == "action_required"
+                      or .status == "waiting"
+                    )
+                  )
+                | .id' "${runs_file}"
+            )
+
+            echo "Authorized exact-head pull-request checks for PR #${number} branch ${head_ref} at ${expected_head}"
+          done < "${changed_file}"
+
+          exit "${failed}"
