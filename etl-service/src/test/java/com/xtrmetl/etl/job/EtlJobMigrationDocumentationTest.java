@@ -54,7 +54,7 @@ class EtlJobMigrationDocumentationTest {
     void paginationMigrationUsesTheOwnerAndCompleteStableOrderingKey() throws IOException {
         String migration = read(
                 "etl-service/src/main/resources/db/migration/"
-                        + "V4__add_etl_job_owner_pagination_index.sql"
+                        + "V5__add_etl_job_owner_pagination_index.sql"
         ).replaceAll("\\s+", " ");
 
         assertTrue(migration.contains(
@@ -70,7 +70,7 @@ class EtlJobMigrationDocumentationTest {
     @Test
     void paginationIndexMigrationDoesNotBlockProductionWriters() throws IOException {
         String migrationPath = "etl-service/src/main/resources/db/migration/"
-                + "V4__add_etl_job_owner_pagination_index.sql";
+                + "V5__add_etl_job_owner_pagination_index.sql";
         String configurationPath = migrationPath + ".conf";
         String migration = read(migrationPath).replaceAll("\\s+", " ");
         Path configuration = projectRoot().resolve(configurationPath);
@@ -123,7 +123,7 @@ class EtlJobMigrationDocumentationTest {
         assertTrue(runbook.contains("rel=\"next\""));
         assertTrue(runbook.contains("etl_invalid_job_page_limit"));
         assertTrue(runbook.contains("etl_invalid_job_page_cursor"));
-        assertTrue(runbook.contains("V4__add_etl_job_owner_pagination_index.sql"));
+        assertTrue(runbook.contains("V5__add_etl_job_owner_pagination_index.sql"));
         assertTrue(runbook.contains("executeInTransaction=false"));
         assertTrue(runbook.contains(
                 "DROP INDEX CONCURRENTLY etl_job_owner_pagination_index"
@@ -135,6 +135,9 @@ class EtlJobMigrationDocumentationTest {
         return Files.readString(projectRoot().resolve(relativePath), StandardCharsets.UTF_8);
     }
 
+    /**
+     * Finds the reactor root from either repository-root or module-local Maven execution.
+     */
     private static Path projectRoot() {
         Path current = Paths.get(System.getProperty("user.dir")).toAbsolutePath();
         Path lastPomParent = null;
