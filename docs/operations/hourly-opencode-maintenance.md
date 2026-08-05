@@ -91,6 +91,18 @@ It never checks out or executes repository code and never receives `NVIDIA_API_K
 
 GitHub prevents most events created with `GITHUB_TOKEN` from recursively triggering workflows. Pull-request runs created after an Actions-authored open or synchronize event can remain approval-required. Without explicit authorization, an agent could push a valid repair whose exact head never receives CI, dependency review, SBOM, SAST, or security scans.
 
+GitHub materializes those workflows asynchronously. Seeing and authorizing only the first run is not sufficient: later workflows can appear after the authorization step exits and remain waiting forever. The isolated job therefore requires this complete workflow-name set for a direct `develop` pull request:
+
+```text
+CI
+Dependency Review
+SBOM (CycloneDX)
+SAST Semgrep
+Security Scan
+```
+
+These names prove only that the runs exist for the head. They do not make a run successful and do not replace the named check requirements enforced by merge disposition.
+
 The maintenance job snapshots same-repository pull requests targeting `develop` before OpenCode starts and exports only the compact pull-request-number-to-head-SHA map. The isolated authorization job runs after the maintenance job succeeds or fails without cancellation and:
 
 1. requires the snapshot to exist and parse as a JSON object;
@@ -98,14 +110,16 @@ The maintenance job snapshots same-repository pull requests targeting `develop` 
 3. selects only a new pull request or a head changed by that run;
 4. refuses automatic authorization for any `.github/**` or `CODEOWNERS` change;
 5. verifies that the current head equals the expected SHA;
-6. discovers only `pull_request` workflow runs for that exact SHA;
-7. fails if no run materializes;
-8. verifies the head again immediately before authorization;
-9. approves only runs in `action_required` or `waiting` state.
+6. repeatedly discovers only `pull_request` workflow runs for that exact SHA;
+7. authorizes every visible run still in `action_required` or `waiting` state on each pass;
+8. compares observed names with the complete five-workflow set;
+9. continues bounded discovery until all five materialize;
+10. fails if no run appears or any required workflow remains missing;
+11. verifies the head again immediately before authorization is declared complete.
 
-The expected SHA is passed to `jq` as data, not interpolated into jq source. Authorization only starts validation. Every check must still complete successfully, all review threads must be resolved, a non-author approval must be anchored to the same head, and branch protection and expected-head merge disposition must still permit merge.
+The expected SHA and workflow-name arrays are passed to `jq` as data, not interpolated into jq source. Authorization only starts validation. Every check must still complete successfully, all review threads must be resolved, a non-author approval must be anchored to the same head, and branch protection and expected-head merge disposition must still permit merge.
 
-Test-first, least-privilege, time-of-check/time-of-use, and rollback evidence is recorded in `docs/doctoring/github-token-exact-head-check-authorization-evidence.md`.
+Test-first, least-privilege, complete-materialization, time-of-check/time-of-use, and rollback evidence is recorded in `docs/doctoring/github-token-exact-head-check-authorization-evidence.md`.
 
 ## Agent authority boundary
 
@@ -135,7 +149,7 @@ Even with an authorized automation issue, `.github/**` and `CODEOWNERS` changes 
 6. The credential cleanup trap removes the local helper.
 7. The isolated authorization job compares before and after heads.
 8. Policy-changing pull requests are rejected from automatic run authorization.
-9. Exact-head approval-required workflow runs are authorized after two SHA checks.
+9. Exact-head approval-required runs are repeatedly authorized while all five required workflow names materialize.
 10. CI, security, coverage, independent review, and merge disposition operate separately.
 
 ## Failure handling
@@ -151,7 +165,8 @@ Even with an authorized automation issue, `.github/**` and `CODEOWNERS` changes 
 | Agent changes `.github/**` or `CODEOWNERS` | Automatic authorization refused | Require explicit human workflow-run authorization |
 | Head moves during discovery or authorization | Authorization refused | Re-evaluate the new exact head |
 | No exact-head run materializes | Workflow fails | Diagnose event and Actions policy; do not merge the head |
-| Workflow-run approval rejected | Workflow fails | Verify repository policy and token permissions; add no personal-token workaround |
+| A required workflow name remains absent | Workflow fails and lists missing names | Diagnose trigger filters or renamed workflows; update the contract only through review |
+| Workflow-run approval is rejected | Workflow fails | Verify repository policy and token permissions; add no personal-token workaround |
 | Checks or review fail | Pull request remains blocked | Fix the exact head without weakening the gate |
 | A prior hourly run remains active | New run waits | Investigate only if the prior run is stuck |
 
@@ -161,7 +176,7 @@ A failed run can leave a reviewable feature branch or pull request, but it canno
 
 Disable **Hourly OpenCode maintenance** to stop execution immediately. Permanent rollback must revert the workflow, contract tests, operations document, doctoring evidence, plan/design documents, and `CHANGELOG.md` through a reviewed pull request.
 
-Do not remove exact-head authorization while retaining agent writes through `GITHUB_TOKEN`, and do not move `actions: write` into the OpenCode job. A GitHub App replacement requires separately reviewed evidence for installation permissions, recursive triggers, actor identity, secret lifecycle, exact-head validation, and independent review.
+Do not remove exact-head authorization while retaining agent writes through `GITHUB_TOKEN`, and do not move `actions: write` into the OpenCode job. A GitHub App replacement requires separately reviewed evidence for installation permissions, recursive triggers, actor identity, secret lifecycle, complete exact-head validation, and independent review.
 
 ## Verification checklist
 
@@ -178,6 +193,7 @@ Before merge, verify on the exact current head:
 - OpenCode retains no Actions write authority;
 - the isolated authorization job is the only holder of `actions: write` and performs no checkout;
 - the before/after head output, `.github/**` and `CODEOWNERS` exclusion, exact-head run filter, double head check, and visible absent-run failure remain intact;
+- all five required pull-request workflows must materialize before the authorization job reports completion;
 - the development workflow contains no review approval, merge, protected-branch push, fallback credential, or review-agent modification.
 
 ## References — APA 7th
