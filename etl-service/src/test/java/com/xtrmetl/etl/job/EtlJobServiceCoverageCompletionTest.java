@@ -17,16 +17,17 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 /**
  * Exercises realistic durable-intake validation boundaries that are easy to miss in ordinary
  * happy-path and persistence tests.
  *
- * <p>The cases model malformed empty request bodies, intentionally empty batches, visually
- * ambiguous Unicode identifiers, identifiers that exceed the documented code-point bound, and
- * separators that can alter how an identifier appears in logs or text tools. Every rejection must
- * happen before transaction, lock, or database work so an invalid client request cannot consume
- * shared persistence capacity.</p>
+ * <p>The cases model a parser that reaches end-of-input without producing a tree, intentionally
+ * empty batches, visually ambiguous Unicode identifiers, identifiers that exceed the documented
+ * code-point bound, and separators that can alter how an identifier appears in logs or text tools.
+ * Every rejection must happen before transaction, lock, or database work so an invalid client
+ * request cannot consume shared persistence capacity.</p>
  */
 class EtlJobServiceCoverageCompletionTest {
 
@@ -34,20 +35,30 @@ class EtlJobServiceCoverageCompletionTest {
     private static final String PRINCIPAL_SCOPE = "tenant_alpha";
 
     /**
-     * Verifies that an empty JSON stream is rejected as malformed rather than reaching transaction
-     * or persistence work. Jackson represents this input with a {@code null} parse result instead
-     * of a JSON null node, so it is a distinct real-world boundary from the literal text
-     * {@code null}.
+     * Verifies the defensive parser-end-of-input boundary independently of Jackson version-specific
+     * empty-string behavior. A copied application mapper is allowed to return no tree, and the
+     * service must classify that result as invalid JSON before transaction, lock, or database work.
+     *
+     * @throws Exception when Mockito cannot configure the checked parser method
      */
     @Test
-    void rejectsEmptyJsonStreamBeforeTransactionOrPersistence() {
+    void rejectsParserEndOfInputWithoutAJsonTreeBeforePersistence() throws Exception {
         JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
         EtlRequestLock requestLock = mock(EtlRequestLock.class);
-        EtlJobService service = service(jdbcTemplate, requestLock);
+        ObjectMapper sourceMapper = mock(ObjectMapper.class);
+        ObjectMapper copiedMapper = mock(ObjectMapper.class);
+        when(sourceMapper.copy()).thenReturn(copiedMapper);
+        when(copiedMapper.readTree("parser-end-of-input")).thenReturn(null);
+        EtlJobService service = new EtlJobService(
+                jdbcTemplate,
+                sourceMapper,
+                new EtlBatchProperties(),
+                requestLock
+        );
 
         EtlRequestException exception = assertThrows(
                 EtlRequestException.class,
-                () -> service.submit("", IDEMPOTENCY_KEY, PRINCIPAL_SCOPE)
+                () -> service.submit("parser-end-of-input", IDEMPOTENCY_KEY, PRINCIPAL_SCOPE)
         );
 
         assertEquals(EtlRequestError.INVALID_JSON, exception.error());
