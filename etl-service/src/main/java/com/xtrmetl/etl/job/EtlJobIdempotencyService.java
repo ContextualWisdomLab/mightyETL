@@ -6,7 +6,6 @@ import com.xtrmetl.etl.service.Sha256Digest;
 import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.List;
@@ -19,12 +18,15 @@ import java.util.Objects;
  * submission key. This service domain-separates and hashes those values into one response-ledger
  * key, verifies the exact retained payload digest, serializes execution with the existing
  * transaction-level request lock, replays an existing matching response, or writes the target and
- * response ledger in the surrounding transaction. Raw principals and client keys are neither
- * required nor reconstructed.</p>
+ * response ledger in the caller-owned lease-fenced transaction. Raw principals and client keys are
+ * neither required nor reconstructed.</p>
  *
- * <p>One invocation represents exactly one persisted durable attempt. It therefore calls the
- * non-retrying ETL entry point that joins the current lease transaction; transient failures escape
- * to {@link EtlJobWorker}, which owns bounded retry accounting in {@code attempt_count}.</p>
+ * <p>One invocation represents exactly one persisted durable attempt. This service deliberately
+ * creates no transaction and performs no in-process retry. It joins the transaction owned by
+ * {@link EtlJobExecutionService}, calls the non-retrying ETL entry point once, and lets transient
+ * failures escape to {@link EtlJobWorker}, which owns bounded retry accounting in
+ * {@code attempt_count}. Direct Spring-proxy invocation without an existing transaction fails
+ * before lock or JDBC access.</p>
  */
 @Service
 public class EtlJobIdempotencyService {
@@ -68,7 +70,12 @@ public class EtlJobIdempotencyService {
     }
 
     /**
-     * Executes or replays one durable job inside a real database transaction.
+     * Executes or replays one durable job inside the caller's exact lease-fenced transaction.
+     *
+     * <p>The method has neither transaction-creation nor retry advice. The caller must establish
+     * the transaction that also contains terminal success fencing; otherwise execution fails
+     * before any request lock, target write, or response-ledger access. This prevents a direct
+     * proxy caller from committing durable effects without the lease-success predicate.</p>
      *
      * @param lease exact live claim carrying hashed execution identity and retained payload
      * @return newly generated or replayed stable response body
@@ -77,7 +84,6 @@ public class EtlJobIdempotencyService {
      * @throws EtlJobIntegrityException when retained payload or ledger identity conflicts
      * @throws CannotAcquireLockException when another transaction owns the execution ledger key
      */
-    @Transactional
     public String process(EtlJobLease lease) {
         EtlJobLease requiredLease = Objects.requireNonNull(lease, "lease must not be null");
         requireActiveTransaction();
