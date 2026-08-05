@@ -71,7 +71,7 @@ class EtlJobWorkerTest {
         worker.pollOnce();
 
         verify(executionService, never()).execute(any());
-        assertMetric("idle", 0.0, 1L);
+        assertMetric("idle", 1.0, 1L);
     }
 
     @Test
@@ -204,6 +204,23 @@ class EtlJobWorkerTest {
     }
 
     @Test
+    void recordsRetryTransitionDatabaseFailureAsFailedEvidence() {
+        EtlJobLease lease = lease(1);
+        when(leaseRepository.claimNext(anyString(), any(), anyInt()))
+                .thenReturn(Optional.of(lease));
+        doThrow(new CannotAcquireLockException("temporary"))
+                .when(executionService).execute(lease);
+        doThrow(new DataIntegrityViolationException("sensitive SQL"))
+                .when(leaseRepository).releaseForRetry(lease, 3);
+
+        worker.pollOnce();
+
+        assertMetric("failed", 1.0, 1L);
+        assertMetric("retried", 0.0, 0L);
+        assertMetric("stale", 0.0, 0L);
+    }
+
+    @Test
     void treatsAStaleTerminalTransitionAsStaleEvidence() {
         EtlJobLease lease = lease(1);
         when(leaseRepository.claimNext(anyString(), any(), anyInt()))
@@ -217,6 +234,22 @@ class EtlJobWorkerTest {
 
         assertMetric("stale", 1.0, 1L);
         assertMetric("failed", 0.0, 0L);
+    }
+
+    @Test
+    void recordsTerminalTransitionDatabaseFailureAsFailedEvidence() {
+        EtlJobLease lease = lease(1);
+        when(leaseRepository.claimNext(anyString(), any(), anyInt()))
+                .thenReturn(Optional.of(lease));
+        doThrow(new EtlRequestException(EtlRequestError.INVALID_JSON))
+                .when(executionService).execute(lease);
+        doThrow(new DataIntegrityViolationException("sensitive SQL"))
+                .when(leaseRepository).markFailed(lease, "etl_invalid_json");
+
+        worker.pollOnce();
+
+        assertMetric("failed", 1.0, 1L);
+        assertMetric("stale", 0.0, 0L);
     }
 
     @Test
