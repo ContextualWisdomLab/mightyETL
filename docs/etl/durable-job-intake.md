@@ -187,14 +187,25 @@ error classes. Operational procedures and metric contracts are authoritative in
 ## Migration and rollback
 
 Apply Flyway migrations in version order. `V4__add_etl_job_owner_pagination_index.sql` is additive and
-does not change row contents or the API state machine. On a large production table, measure index
-creation lock and I/O impact in a representative staging environment before rollout.
+does not change row contents or the API state machine. It uses PostgreSQL `CREATE INDEX CONCURRENTLY`
+so inserts, updates, and deletes remain available while the index is built. Its companion
+`V4__add_etl_job_owner_pagination_index.sql.conf` contains `executeInTransaction=false` because
+PostgreSQL rejects concurrent index creation inside a transaction block and Flyway otherwise executes
+SQL migrations transactionally by default.
+
+Concurrent index creation performs more work and can wait for transactions that could affect the
+index. Measure duration, I/O, replication lag, and transaction age in a representative staging
+environment, then schedule production rollout with explicit monitoring. If the build fails,
+PostgreSQL can leave an invalid `etl_job_owner_pagination_index`; inspect catalog validity, remove the
+invalid object concurrently, correct the root cause, and rerun the migration under the repository's
+repair procedure rather than treating schema-history evidence as a usable index.
 
 Application rollback is compatible with the additional index because older binaries ignore it. After
-rolling back all binaries that depend on the list endpoint, the database-only rollback is:
+rolling back all binaries that depend on the list endpoint, run the database-only rollback outside a
+transaction block:
 
 ```sql
-DROP INDEX etl_job_owner_pagination_index;
+DROP INDEX CONCURRENTLY etl_job_owner_pagination_index;
 ```
 
 Dropping the index while the pagination endpoint is still active preserves query correctness but can
@@ -213,8 +224,12 @@ execution-plan review confirms the rollback boundary.
   ordering when `LIMIT` is used.
 - PostgreSQL 18 documents that equality constraints on leading multicolumn B-tree keys plus a range
   constraint on the next key efficiently limit the scanned index portion.
+- PostgreSQL 18 documents that ordinary index construction blocks writes, while concurrent index
+  construction preserves writes with additional scans, waits, and invalid-index recovery caveats.
 - PostgreSQL 18 documents `SKIP LOCKED` as unsuitable for a general consistent view but useful for
   avoiding contention among multiple consumers of a queue-like table.
+- Flyway script configuration supports a migration-matched `.sql.conf` file and the
+  `executeInTransaction=false` override required for non-transactional PostgreSQL DDL.
 - Spring fixed-delay scheduling measures each delay from completion of the preceding invocation.
 - OpenTelemetry SQL/PostgreSQL semantic conventions define stable database telemetry fields; raw
   query text and parameters remain privacy-sensitive opt-in data.
@@ -237,6 +252,12 @@ OpenTelemetry Authors. (2026). *OpenTelemetry semantic conventions 1.43.0: Seman
 SQL databases client operations*. Cloud Native Computing Foundation.
 https://opentelemetry.io/docs/specs/semconv/db/sql/
 
+PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: CREATE INDEX*.
+https://www.postgresql.org/docs/18/sql-createindex.html
+
+PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: Introduction to indexes*.
+https://www.postgresql.org/docs/18/indexes-intro.html
+
 PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: Multicolumn indexes*.
 https://www.postgresql.org/docs/18/indexes-multicolumn.html
 
@@ -245,6 +266,12 @@ https://www.postgresql.org/docs/18/sql-select.html
 
 PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: Sorting rows (ORDER BY)*.
 https://www.postgresql.org/docs/18/queries-order.html
+
+Redgate Software. (2026, July 20). *Flyway execute in transaction setting*.
+https://documentation.red-gate.com/fd/flyway-execute-in-transaction-setting-277578997.html
+
+Redgate Software. (2026, July 20). *Script configuration*.
+https://documentation.red-gate.com/flyway/reference/script-configuration
 
 Spring Authors. (2026). *Task execution and scheduling*. Broadcom.
 https://docs.spring.io/spring-framework/reference/integration/scheduling.html
