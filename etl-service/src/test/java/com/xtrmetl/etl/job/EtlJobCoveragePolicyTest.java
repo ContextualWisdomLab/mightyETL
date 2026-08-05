@@ -72,12 +72,12 @@ class EtlJobCoveragePolicyTest {
         Element reportExecution = findExecution(jacocoPlugin, "report-durable-job-coverage");
         assertEquals("test", directText(reportExecution, "phase"));
         assertTrue(goalNames(reportExecution).contains("report"));
-        assertEquals(DURABLE_JOB_CLASS_FILES, configuredIncludes(reportExecution));
+        assertConfiguredIncludes(reportExecution);
 
         Element checkExecution = findExecution(jacocoPlugin, "check-durable-job-coverage");
         assertEquals("test", directText(checkExecution, "phase"));
         assertTrue(goalNames(checkExecution).contains("check"));
-        assertEquals(DURABLE_JOB_CLASS_FILES, configuredIncludes(checkExecution));
+        assertConfiguredIncludes(checkExecution);
         assertTrue(hasLimit(checkExecution, "BUNDLE", "INSTRUCTION", "TOTALCOUNT", "minimum", "1"));
 
         for (String counter : Set.of("INSTRUCTION", "LINE", "METHOD", "BRANCH")) {
@@ -95,6 +95,13 @@ class EtlJobCoveragePolicyTest {
         assertFalse(serializedPom.contains(
                 "<include>com.xtrmetl.etl.service.Sha256Digest*</include>"
         ));
+    }
+
+    private static void assertConfiguredIncludes(Element execution) {
+        assertEquals(
+                DURABLE_JOB_CLASS_FILES.stream().sorted().toList(),
+                configuredIncludes(execution).stream().sorted().toList()
+        );
     }
 
     private static Document parseModulePom()
