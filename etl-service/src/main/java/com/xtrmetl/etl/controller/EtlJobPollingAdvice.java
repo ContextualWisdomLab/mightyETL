@@ -18,10 +18,11 @@ import java.util.Objects;
 /**
  * Adds a bounded RFC 9110 polling advisory to active durable-job status responses.
  *
- * <p>The advice is scoped to {@link EtlJobController}. It derives a positive whole-second
- * {@code Retry-After} value from the validated durable-worker fixed delay and rounds any fractional
- * second upward. Pending and running jobs advertise that cadence; succeeded and failed jobs remove
- * the header because their state is terminal and no further status polling is suggested.</p>
+ * <p>The advice is scoped to {@link EtlJobController}. When the durable worker is enabled, it
+ * derives a positive whole-second {@code Retry-After} value from the validated fixed delay and
+ * rounds any fractional second upward. Pending and running jobs advertise that cadence; succeeded
+ * and failed jobs remove the header because their state is terminal. A disabled worker also removes
+ * the header so maintenance-mode intake does not imply that execution is progressing.</p>
  *
  * <p>The header is only client guidance. PostgreSQL lease fencing, principal-scoped authorization,
  * lifecycle validation, rate limiting, and client-side backoff remain independent correctness and
@@ -38,23 +39,27 @@ public class EtlJobPollingAdvice implements ResponseBodyAdvice<Object> {
 
     private static final long MILLISECONDS_PER_SECOND = 1_000L;
 
+    private final boolean workerEnabled;
     private final String retryAfterSeconds;
 
     /**
-     * Creates polling advice aligned to the configured durable-worker cadence.
+     * Creates polling advice aligned to the configured durable-worker state and cadence.
      *
      * <p>{@link EtlJobWorkerProperties} validates the fixed delay as one millisecond through one
      * day. Converting with upward rounding therefore always yields a positive RFC 9110
-     * {@code delay-seconds} value from one through 86,400.</p>
+     * {@code delay-seconds} value from one through 86,400 when the worker is enabled. The computed
+     * value remains dormant while the worker is disabled.</p>
      *
      * @param workerProperties validated durable-worker scheduling configuration
      * @throws NullPointerException when the configuration is {@code null}
      */
     public EtlJobPollingAdvice(EtlJobWorkerProperties workerProperties) {
-        long fixedDelayMilliseconds = Objects.requireNonNull(
+        EtlJobWorkerProperties requiredProperties = Objects.requireNonNull(
                 workerProperties,
                 "workerProperties must not be null"
-        ).getFixedDelayMilliseconds();
+        );
+        this.workerEnabled = requiredProperties.isEnabled();
+        long fixedDelayMilliseconds = requiredProperties.getFixedDelayMilliseconds();
         long roundedSeconds = (fixedDelayMilliseconds + MILLISECONDS_PER_SECOND - 1L)
                 / MILLISECONDS_PER_SECOND;
         this.retryAfterSeconds = Long.toString(roundedSeconds);
@@ -81,12 +86,13 @@ public class EtlJobPollingAdvice implements ResponseBodyAdvice<Object> {
     }
 
     /**
-     * Adds or removes {@code Retry-After} according to the durable job lifecycle state.
+     * Adds or removes {@code Retry-After} according to worker availability and job lifecycle state.
      *
      * <p>Only {@link EtlJobStatusResponse} bodies are modified. Active states set the configured
-     * rounded delay. Terminal states explicitly remove the field, protecting embedded adapters or
-     * future response builders from accidentally retaining a stale polling suggestion. All other
-     * bodies and headers pass through unchanged.</p>
+     * rounded delay only when a worker is enabled. Disabled-worker and terminal responses
+     * explicitly remove the field, protecting maintenance-mode intake, embedded adapters, and
+     * future response builders from retaining a misleading polling suggestion. All other bodies and
+     * headers pass through unchanged.</p>
      *
      * @param body response body selected by the controller or exception handler
      * @param returnType controller method return metadata
@@ -108,10 +114,16 @@ public class EtlJobPollingAdvice implements ResponseBodyAdvice<Object> {
     ) {
         if (body instanceof EtlJobStatusResponse statusResponse) {
             switch (statusResponse.jobStatus()) {
-                case PENDING, RUNNING -> response.getHeaders().set(
-                        HttpHeaders.RETRY_AFTER,
-                        retryAfterSeconds
-                );
+                case PENDING, RUNNING -> {
+                    if (workerEnabled) {
+                        response.getHeaders().set(
+                                HttpHeaders.RETRY_AFTER,
+                                retryAfterSeconds
+                        );
+                    } else {
+                        response.getHeaders().remove(HttpHeaders.RETRY_AFTER);
+                    }
+                }
                 case SUCCEEDED, FAILED -> response.getHeaders().remove(HttpHeaders.RETRY_AFTER);
             }
         }
