@@ -26,7 +26,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -210,7 +209,7 @@ class EtlJobLeaseRepositoryIntegrationTest {
         assertNull(textColumn(retryJobId, "failure_code"));
         assertNull(textColumn(retryJobId, "lease_owner_id"));
 
-        UUID failedJobId = insertPending(Instant.parse("2026-08-05T00:02:00Z"), 2);
+        UUID failedJobId = insertPending(Instant.parse("2026-08-05T00:00:30Z"), 2);
         EtlJobLease failedLease = repository.claimNext(OWNER_ALPHA, LEASE_DURATION, 3)
                 .orElseThrow();
         repository.markFailed(failedLease, "etl_target_failure");
@@ -274,7 +273,15 @@ class EtlJobLeaseRepositoryIntegrationTest {
         );
         assertThrows(
                 IllegalArgumentException.class,
+                () -> repository.claimNext(OWNER_ALPHA, Duration.ofSeconds(-1), 3)
+        );
+        assertThrows(
+                IllegalArgumentException.class,
                 () -> repository.claimNext(OWNER_ALPHA, LEASE_DURATION, 0)
+        );
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> repository.claimNext(OWNER_ALPHA, LEASE_DURATION, 101)
         );
         assertThrows(
                 NullPointerException.class,
