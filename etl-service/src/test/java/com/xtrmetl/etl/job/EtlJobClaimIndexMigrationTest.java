@@ -67,7 +67,9 @@ class EtlJobClaimIndexMigrationTest {
 
     @Test
     void runbookDocumentsConcurrentFailureRecoveryAndRollback() throws IOException {
-        String runbook = normalize(read("docs/operations/durable-job-worker.md"));
+        String runbook = normalize(read(
+                "docs/operations/durable-job-claim-index-rollout.md"
+        ));
 
         assertTrue(runbook.contains("V4__add_etl_job_claim_eligibility_index.sql"));
         assertTrue(runbook.contains("CREATE INDEX CONCURRENTLY"));
