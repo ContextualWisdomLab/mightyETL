@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Active durable-job status responses now emit an RFC 9110 `Retry-After` delay for `PENDING` and `RUNNING` states only when local worker execution is enabled, derived from the bounded worker fixed-delay configuration with upward whole-second rounding; terminal states and intake-only maintenance mode omit the advisory.
 - The durable job pagination index now uses PostgreSQL `CREATE INDEX CONCURRENTLY` with a migration-local Flyway `executeInTransaction=false` companion configuration, preserving production writers and documenting invalid-index recovery and concurrent rollback.
 - Durable job operators can now list only their own jobs through bounded newest-first keyset pagination with canonical opaque cursors, deterministic timestamp-plus-UUID ordering, `Cache-Control: no-store`, and RFC 8288 next-page links without offset drift or cross-tenant existence leakage.
 - The durable-job claim eligibility index now builds in a separate PostgreSQL `CREATE INDEX CONCURRENTLY` migration with Flyway non-transactional script configuration and session-level PostgreSQL migration locking, preserving normal job writes during rollout while keeping lease columns and constraints transactional.
@@ -32,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Controller-scoped polling advice, deterministic active/terminal lifecycle tests, disabled-worker fail-closed behavior, sub-second rounding coverage, rollback guidance, and APA 7th standards evidence in `docs/etl/durable-job-polling.md`.
 - Owner-scoped durable job list models and HTTP contract, strict cursor and page-limit validation, one-extra-row next-page detection, the descriptive `etl_job_owner_pagination_index`, deterministic tenant-isolation and equal-timestamp tests, migration rollback guidance, and APA 7th standards evidence in `docs/etl/durable-job-intake.md`.
 - A production rollout and invalid-index recovery runbook for the nonblocking durable-job claim index: `docs/operations/durable-job-claim-index-rollout.md`.
 - PostgreSQL `FOR UPDATE SKIP LOCKED` durable-job claiming, per-process and per-claim lease fencing, expiry reclaim, bounded attempts, exact-live-lease transitions, terminal payload clearing, stable failure codes, and finite-cardinality worker metrics.
@@ -69,6 +71,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Polling advice exposes only a bounded delay integer and is omitted when local execution is disabled or terminal; it never contains job, lease, principal, key, hash, payload, SQL, exception, target, or queue-depth data.
 - Job-list cursors contain only ordering keys, never authority or sensitive values; every page query independently binds the hashed authenticated principal, malformed and non-canonical cursors fail before database access, and list responses exclude payloads, principals, keys, hashes, lease identifiers, SQL, and exception text.
 - Durable-worker metrics and ordinary logs exclude payloads, raw principals, raw idempotency keys, hashes, job and lease identifiers, SQL, exception messages, and unbounded exception labels.
 - Retained payload or response-ledger identity conflicts fail closed with `etl_job_integrity_failure`; an expired or superseded lease rolls back target, ledger, and terminal-state effects.
