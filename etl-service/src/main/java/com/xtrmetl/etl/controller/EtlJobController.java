@@ -9,6 +9,7 @@ import com.xtrmetl.etl.job.EtlJobStatusResponse;
 import com.xtrmetl.etl.job.EtlJobSubmission;
 import com.xtrmetl.etl.service.EtlRequestError;
 import com.xtrmetl.etl.service.EtlRequestException;
+import com.xtrmetl.etl.service.Sha256Digest;
 import io.micrometer.observation.annotation.Observed;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty;
 import org.springframework.dao.DataAccessException;
@@ -45,7 +46,9 @@ import java.util.UUID;
  *
  * <p>Success and covered failure responses use {@code Cache-Control: no-store}. Malformed, absent,
  * and foreign-owned job identifiers use the same owner-safe not-found classification so the status
- * endpoint does not become a cross-principal existence oracle.</p>
+ * endpoint does not become a cross-principal existence oracle. Successful status responses also
+ * carry a weak entity tag so an authenticated client can explicitly validate an unchanged
+ * representation without authorizing shared-cache persistence.</p>
  */
 @ConditionalOnBooleanProperty(
         prefix = "xtrmetl.etl.jobs",
@@ -177,9 +180,15 @@ public class EtlJobController {
     /**
      * Returns one status resource only within the authenticated principal namespace.
      *
+     * <p>The response includes a weak {@code ETag} derived from every operator-visible status
+     * field. Spring MVC applies RFC 9110 weak comparison to {@code If-None-Match}; a matching GET
+     * returns {@code 304 Not Modified} with no representation body. Authentication and owner-safe
+     * lookup still occur before the validator is produced, and {@code Cache-Control: no-store}
+     * remains in force.</p>
+     *
      * @param jobRecordIdText opaque durable job identifier text
      * @param principal authenticated principal namespace
-     * @return operator-safe status representation
+     * @return operator-safe status representation or an empty not-modified response
      */
     @GetMapping("/{jobRecordId}")
     @Observed(name = "etl.jobs.status", contextualName = "etl-job-status")
@@ -200,9 +209,48 @@ public class EtlJobController {
         } catch (RuntimeException exception) {
             throw new EtlUnexpectedException(exception);
         }
+        EtlJobStatusResponse responseBody = EtlJobStatusResponse.from(snapshot);
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
-                .body(EtlJobStatusResponse.from(snapshot));
+                .eTag(statusEntityTag(responseBody))
+                .body(responseBody);
+    }
+
+    /**
+     * Builds an opaque weak validator from the complete status representation.
+     *
+     * <p>Each field is length-prefixed before SHA-256 hashing, so adjacent values cannot create
+     * ambiguous material. The digest prevents the response header from exposing even the
+     * operator-safe values themselves. Payloads, principals, idempotency keys, lease identifiers,
+     * SQL text, and exception text are not part of the response model and therefore cannot enter
+     * this tag.</p>
+     *
+     * @param responseBody complete owner-authorized status representation
+     * @return syntactically valid weak HTTP entity tag
+     */
+    private static String statusEntityTag(EtlJobStatusResponse responseBody) {
+        EtlJobStatusResponse requiredResponse = Objects.requireNonNull(
+                responseBody,
+                "responseBody must not be null"
+        );
+        String canonicalRepresentation = canonicalField(requiredResponse.jobRecordId())
+                + canonicalField(requiredResponse.jobStatus())
+                + canonicalField(requiredResponse.attemptCount())
+                + canonicalField(requiredResponse.failureCode())
+                + canonicalField(requiredResponse.createdAt())
+                + canonicalField(requiredResponse.updatedAt());
+        return "W/\"" + Sha256Digest.digest(canonicalRepresentation) + "\"";
+    }
+
+    /**
+     * Encodes one possibly-null value without delimiter ambiguity.
+     *
+     * @param value representation field value
+     * @return decimal character length, a colon, and the canonical text value
+     */
+    private static String canonicalField(@Nullable Object value) {
+        String canonicalValue = Objects.toString(value, "");
+        return canonicalValue.length() + ":" + canonicalValue;
     }
 
     private static UUID parseJobRecordId(String jobRecordIdText) {
