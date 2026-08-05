@@ -4,7 +4,7 @@
 
 **Goal:** Add a fail-closed hourly OpenCode development agent that uses `NVIDIA_NIM_API_KEY` without changing the independent review agent or deterministic merge workflow.
 
-**Architecture:** A new scheduled GitHub Actions workflow runs OpenCode from the protected default branch, uses a pinned NVIDIA model and checksum-verified OpenCode release, and may only prepare feature-branch pull requests. Before extraction, the installer accepts only the reviewed one-member archive shape and uses a fresh private directory plus file-type checks. Existing review, CI, security, and hourly merge-disposition automation remain independent and authoritative. Direct `GITHUB_TOKEN` mode retains `persist-credentials: false` and adds a repository-local GitHub CLI credential helper because OpenCode 1.18.13 skips its own Git setup in that mode. A bounded `TERM` timeout escalates to `KILL` after 30 seconds so cleanup completes before the workflow-level timeout.
+**Architecture:** A new scheduled GitHub Actions workflow runs OpenCode from the protected default branch, uses a pinned NVIDIA model and checksum-verified OpenCode release, and may only prepare feature-branch pull requests. Before extraction, the installer accepts only the reviewed single-member regular-file archive shape and uses a fresh private directory plus post-extraction file-type checks. Existing review, CI, security, and hourly merge-disposition automation remain independent and authoritative. Direct `GITHUB_TOKEN` mode retains `persist-credentials: false` and adds a repository-local GitHub CLI credential helper because OpenCode 1.18.13 skips its own Git setup in that mode. A bounded `TERM` timeout escalates to `KILL` after 30 seconds so cleanup completes before the workflow-level timeout.
 
 **Tech Stack:** GitHub Actions, OpenCode 1.18.13 immutable release archive, NVIDIA NIM, GitHub CLI credential helper, GNU Coreutils `sha256sum` and `timeout`, GNU tar, bash, Maven, JUnit 5.
 
@@ -15,7 +15,7 @@
 - Never configure GitHub Copilot, Anthropic, or OpenAI credentials as fallbacks.
 - Pin third-party workflow sources and executable content immutably.
 - Download OpenCode only from the immutable `v1.18.13` release asset and verify Linux x64 SHA-256 `8d500b20fed2d26e537e221895b1a575476571b4f0089bb29fb13eeb8eb9e937` before extraction.
-- Require exactly one archive member named `opencode` before extraction; use a fresh mode-`0700` directory, refuse overwrites, and reject non-regular or symbolic-link output.
+- Require exactly one archive member named `opencode` and require GNU tar's regular-file entry type before extraction; use a fresh mode-`0700` directory, refuse overwrites, and reject non-regular or symbolic-link output afterward.
 - Do not use npm install commands, floating package tags, or mutable OpenCode action references.
 - Keep checkout credential persistence disabled; bootstrap only a repository-local GitHub CLI credential helper and remove it through an `EXIT` trap.
 - Keep the workflow-level token default read-only and scope required write permissions to the sole maintenance job.
@@ -54,11 +54,11 @@ Observed initial RED: the explicit existence assertion failed because `.github/w
 
 Observed subsequent RED states covered the mutable npm command, workflow-scoped write permission, missing direct-token Git bootstrap, and prompt wording boundary before each corresponding production change.
 
-- [x] **Step 3: Write the archive-member regression test**
+- [x] **Step 3: Write archive regression tests**
 
-Create `HourlyOpenCodeArchiveValidationTest` with complete beginner-readable Javadoc. Require the workflow to list the verified archive, accept exactly one member named `opencode`, emit a stable failure message for any other shape, and perform this validation before extraction.
+Create `HourlyOpenCodeArchiveValidationTest` with complete beginner-readable Javadoc. Require the workflow to list the verified archive, accept exactly one member named `opencode`, obtain locale-stable GNU tar verbose metadata, require the regular-file type character `-`, emit stable failure messages, and perform all checks before extraction.
 
-- [x] **Step 4: Run the archive test to verify RED**
+- [x] **Step 4: Run archive tests to verify RED**
 
 Run:
 
@@ -66,11 +66,13 @@ Run:
 ./mvnw -pl etl-service -Dtest=HourlyOpenCodeArchiveValidationTest test
 ```
 
-Observed on the pull-request CI merge ref for the test-only commit: `Tests run: 284, Failures: 1, Errors: 0`. The sole failure was `HourlyOpenCodeArchiveValidationTest.validatesOneExpectedArchiveMemberBeforeExtraction`, proving that the existing checksum-only installer did not satisfy the archive-member boundary.
+Observed first RED on the pull-request CI merge ref for test-only commit `751eedb852eca1165a5b936296255fc608494dad`: 284 tests, one failure, zero errors. The sole failure was `validatesOneExpectedArchiveMemberBeforeExtraction`, proving that the checksum-only installer did not satisfy the member-shape boundary.
+
+Observed second RED on the pull-request CI merge ref for test-only commit `7b82a40b12c46aed869aeec7b387a161a7b33896`: 285 tests, one failure, zero errors, zero skipped project tests. The sole failure was `validatesRegularFileEntryTypeBeforeExtraction`, proving that name and count validation did not reject hard-link or other non-regular archive entries before extraction.
 
 - [x] **Step 5: Commit the failing contracts**
 
-The workflow contracts were committed before their production fixes, including the dedicated archive-member regression contract.
+The workflow contracts were committed before their production fixes, including the dedicated member-shape and regular-entry regression contracts.
 
 ### Task 2: Implement the checksum-pinned NVIDIA OpenCode workflow
 
@@ -108,13 +110,14 @@ Before extraction:
 2. download `opencode-linux-x64.tar.gz` from release `v1.18.13` over HTTPS;
 3. validate SHA-256 `8d500b20fed2d26e537e221895b1a575476571b4f0089bb29fb13eeb8eb9e937` with `sha256sum --check --strict`;
 4. list the archive and require exactly one member named `opencode`;
-5. recreate the extraction directory with mode `0700`;
-6. extract with ownership and archived permission restoration disabled and overwrite refusal enabled;
-7. require the resulting `opencode` path to be a regular file and not a symbolic link;
-8. apply executable mode only to the expected binary;
-9. verify the exact reported version before adding the temporary directory to `GITHUB_PATH`.
+5. under `LC_ALL=C`, obtain GNU tar verbose metadata and require its first type character to be `-` for a regular-file entry;
+6. recreate the extraction directory with mode `0700`;
+7. extract with ownership and archived permission restoration disabled and overwrite refusal enabled;
+8. require the resulting `opencode` path to be a regular file and not a symbolic link;
+9. apply executable mode only to the expected binary;
+10. verify the exact reported version before adding the temporary directory to `GITHUB_PATH`.
 
-Do not fall back to npm, a floating release, a mutable action reference, or a broader archive-member allowlist after any failure.
+Do not fall back to npm, a floating release, a mutable action reference, a broader archive-member allowlist, or link/special-file entry support after any failure.
 
 - [x] **Step 3: Bootstrap direct-token Git access without persisted checkout credentials**
 
@@ -157,16 +160,16 @@ Expected: PASS with no skipped project tests.
 - Modify: `docs/superpowers/plans/2026-08-04-hourly-opencode-maintenance-plan.md`
 
 **Interfaces:**
-- Consumes: behavior and constraints from the workflow, OpenCode 1.18.13 primary source, immutable release metadata, upstream checksum evidence, GNU tar security guidance, GitHub workflow permission semantics, and GitHub CLI credential behavior.
-- Produces: beginner-readable activation, failure, rollback, credential-lifecycle, permission-inheritance, checksum, archive-member, timeout-escalation, security, and evidence documentation.
+- Consumes: behavior and constraints from the workflow, OpenCode 1.18.13 primary source, immutable release metadata, release-asset metadata, GNU tar security guidance, GitHub workflow permission semantics, and GitHub CLI credential behavior.
+- Produces: beginner-readable activation, failure, rollback, credential-lifecycle, permission-inheritance, checksum, archive-member, archive-entry, timeout-escalation, security, and evidence documentation.
 
 - [x] **Step 1: Add and update operator documentation**
 
-Document the secret name, provider alias, exact model and version, release asset and checksum, exact archive shape, private extraction directory, file-type checks, schedule, job-scoped permissions, branch/PR lifecycle, direct-token GitHub CLI helper, credential cleanup, bounded `TERM`/`KILL` behavior, repository/default agent behavior, separation from review and merge agents, failure modes, rollback procedure, and APA 7 references to OpenCode, NVIDIA, GitHub, GNU tar, and GNU Coreutils primary documentation.
+Document the secret name, provider alias, exact model and version, release asset and checksum, exact archive name and regular-file type, private extraction directory, file-type checks, schedule, job-scoped permissions, branch/PR lifecycle, direct-token GitHub CLI helper, credential cleanup, bounded `TERM`/`KILL` behavior, repository/default agent behavior, separation from review and merge agents, failure modes, rollback procedure, and APA 7 references to OpenCode, NVIDIA, GitHub, GNU tar, and GNU Coreutils primary documentation.
 
-- [ ] **Step 2: Add doctoring evidence and update `CHANGELOG.md`**
+- [x] **Step 2: Add doctoring evidence and update `CHANGELOG.md`**
 
-Record the threat, evidence chain, exact fail-closed controls, RED/GREEN verification, rollback implications, and APA 7 references in `docs/doctoring/opencode-archive-extraction-evidence.md`. Update the Unreleased entry to state that the installer validates exactly one expected archive member before extraction and rejects symbolic-link or non-regular output.
+Record the threat, evidence chain, exact fail-closed controls, both RED cycles, rollback implications, and APA 7 references in `docs/doctoring/opencode-archive-extraction-evidence.md`. Update the Unreleased entry to state that the installer validates exactly one expected regular-file archive member before extraction and rejects symbolic-link or non-regular output.
 
 - [ ] **Step 3: Run the full reactor tests**
 
@@ -176,14 +179,14 @@ Record the threat, evidence chain, exact fail-closed controls, RED/GREEN verific
 
 Expected: all modules build successfully; no project test is skipped.
 
-### Task 4: Verify and open the protected workflow-change pull request
+### Task 4: Verify and integrate the protected workflow-change pull request
 
 **Files:**
 - No additional source files.
 
 **Interfaces:**
 - Consumes: completed branch and all exact-head test results.
-- Produces: a ready-for-review pull request targeting `develop`.
+- Produces: a ready-for-review pull request targeting `develop` and a guarded merge only after every gate passes.
 
 - [ ] **Step 1: Verify exact branch head and diff**
 
@@ -198,7 +201,7 @@ Expected: clean tree, no whitespace errors, successful build.
 
 - [x] **Step 2: Open the pull request**
 
-Open a pull request titled `ci: schedule NVIDIA OpenCode maintenance agent`, explain the credential isolation and authority boundary, and apply `automerge-workflow` because the deterministic disposition workflow requires explicit approval for workflow changes.
+Open a pull request titled `ci: schedule NVIDIA OpenCode maintenance agent`, explain credential and supply-chain isolation, and apply `automerge-workflow` because the deterministic disposition workflow requires explicit approval for workflow changes.
 
 - [ ] **Step 3: Request independent review and verify exact-head checks**
 
