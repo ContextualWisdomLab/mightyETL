@@ -191,12 +191,12 @@ jobs:
             )"
             if jq -e '
               any(
-                startswith(".github/workflows/")
+                startswith(".github/")
                 or . == "CODEOWNERS"
                 or endswith("/CODEOWNERS")
               )
             ' >/dev/null <<<"${changed_files}"; then
-              echo "PR #${number} changes workflow or CODEOWNERS policy; exact-head runs require manual authorization" >&2
+              echo "PR #${number} changes .github or CODEOWNERS policy; exact-head runs require manual authorization" >&2
               failed=1
               continue
             fi
@@ -239,15 +239,17 @@ jobs:
               gh api --method POST \
                 "/repos/${repository}/actions/runs/${run_id}/approve"
             done < <(
-              jq -r '.[]
+              jq -r --arg expected_head "${expected_head}" '
+                .[]
                 | select(
-                    .head_sha == "'"${expected_head}"'"
+                    .head_sha == $expected_head
                     and (
                       .conclusion == "action_required"
                       or .status == "waiting"
                     )
                   )
-                | .id' "${runs_file}"
+                | .id
+              ' "${runs_file}"
             )
 
             echo "Authorized exact-head pull-request checks for PR #${number} branch ${head_ref} at ${expected_head}"
