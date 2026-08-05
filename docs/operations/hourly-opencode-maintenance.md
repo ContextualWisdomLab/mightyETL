@@ -31,6 +31,7 @@ Never place the key in repository variables, source files, workflow output, issu
 | Schedule | `43 * * * *` |
 | OpenCode release | `v1.18.13` immutable GitHub release |
 | Linux x64 archive SHA-256 | `8d500b20fed2d26e537e221895b1a575476571b4f0089bb29fb13eeb8eb9e937` |
+| Expected archive shape | exactly one root member named `opencode` |
 | OpenCode provider/model | `nvidia/qwen/qwen3-coder-480b-a35b-instruct` |
 | OpenCode agent | Repository `default_agent`, with OpenCode 1.18.13 falling back to `build` |
 | Checkout action | `actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0` |
@@ -39,7 +40,9 @@ Never place the key in repository variables, source files, workflow output, issu
 | Session sharing | disabled |
 | Overlapping runs | disabled; an active run is not cancelled |
 
-The workflow downloads the immutable `opencode-linux-x64.tar.gz` release asset, verifies the authoritative SHA-256 published by the upstream release process before extraction, and then verifies `opencode --version`. It does not execute an npm install command, invoke a mutable OpenCode GitHub Action tag, or use a floating `latest` reference. Checkout credentials are not persisted in the working tree.
+The workflow downloads the immutable `opencode-linux-x64.tar.gz` release asset and verifies the authoritative SHA-256 published by the upstream release process. Before extraction it lists the archive and requires exactly one member named `opencode`. It then creates a fresh mode-`0700` installation directory, refuses overwrites, does not restore archived ownership or permissions, and verifies that the extracted object is a regular non-symbolic-link file whose reported version is exactly `1.18.13`. It does not execute an npm install command, invoke a mutable OpenCode GitHub Action tag, or use a floating `latest` reference. Checkout credentials are not persisted in the working tree.
+
+Checksum validation and member validation are separate controls. The checksum binds the bytes to the reviewed release asset; the member check constrains the extraction shape if a future pin is changed incorrectly or upstream packaging changes. The private empty extraction directory and post-extraction type checks provide additional containment.
 
 OpenCode 1.18.13's raw `opencode github run` handler does not consume an `AGENT` environment variable. It deliberately omits an explicit agent from the session request, allowing repository `default_agent` configuration or the handler's `build` fallback. The workflow therefore does not set a misleading `AGENT` variable.
 
@@ -96,14 +99,15 @@ The agent must not:
 
 1. GitHub starts the workflow from the default branch.
 2. The workflow checks out a shallow copy with persisted credentials disabled.
-3. It downloads the OpenCode 1.18.13 Linux archive, verifies the pinned SHA-256, extracts the executable, and verifies its version.
-4. It checks that `NVIDIA_NIM_API_KEY` was supplied through `NVIDIA_API_KEY` and that the repository token aliases are present.
-5. It installs the repository-local Git author and GitHub CLI credential helper required by OpenCode's direct-token path.
-6. OpenCode inspects all current pull requests before selecting any work.
-7. The agent runs tests first, implements one bounded change, updates authoritative documentation and `CHANGELOG.md`, and leaves a feature branch and pull request.
-8. The shell `EXIT` trap removes the local Git credential helper.
-9. Independent review and repository checks evaluate the exact new head.
-10. The separate disposition workflow may merge only after every gate passes.
+3. It downloads the OpenCode 1.18.13 Linux archive and verifies the pinned SHA-256.
+4. It requires exactly one archive member named `opencode`, extracts into a fresh private directory without archived ownership or permissions, and verifies a regular non-symbolic-link executable with the exact version.
+5. It checks that `NVIDIA_NIM_API_KEY` was supplied through `NVIDIA_API_KEY` and that the repository token aliases are present.
+6. It installs the repository-local Git author and GitHub CLI credential helper required by OpenCode's direct-token path.
+7. OpenCode inspects all current pull requests before selecting any work.
+8. The agent runs tests first, implements one bounded change, updates authoritative documentation and `CHANGELOG.md`, and leaves a feature branch and pull request.
+9. The shell `EXIT` trap removes the local Git credential helper.
+10. Independent review and repository checks evaluate the exact new head.
+11. The separate disposition workflow may merge only after every gate passes.
 
 ## Failure handling
 
@@ -114,6 +118,8 @@ The agent must not:
 | GitHub CLI or Git bootstrap fails | Job fails before OpenCode starts or push fails visibly | Retain `persist-credentials: false`; verify the runner-provided `gh` executable and local helper entries |
 | Release archive unavailable | Installation step fails before extraction | Verify the immutable upstream release exists; do not substitute a floating version |
 | Archive checksum mismatches | Installation fails closed before extraction | Treat as a supply-chain incident; compare the upstream immutable release and generated tap checksum before changing any pin |
+| Archive has an unexpected member set | Installation fails closed before extraction | Treat the packaging change as a supply-chain review event; inspect the exact immutable asset before updating the member contract |
+| Extracted object is absent, non-regular, or a symbolic link | Installation fails before execution | Treat as a supply-chain incident; do not relax the file-type checks |
 | OpenCode version mismatches | Installation step fails | Investigate the verified archive contents; do not bypass the version assertion |
 | NVIDIA API unavailable or model rejected | OpenCode step fails | Check NVIDIA service health and model availability; retain the current PR state |
 | Process exceeds 45 minutes | `timeout` sends `TERM`, escalates to `KILL` after 30 seconds if necessary, the credential-cleanup trap runs, and the step fails | Inspect the incomplete feature branch or PR; reduce slice size if needed |
@@ -126,7 +132,7 @@ The workflow must not claim success for partial work. A failed run may leave a f
 
 ## Rollback and disablement
 
-This change has no database migration and does not change runtime ETL services. To stop scheduled agent execution immediately, disable the **Hourly OpenCode maintenance** workflow in GitHub Actions. To remove it permanently, revert the workflow, its contract test, this runbook, the design and plan documents, and the corresponding `CHANGELOG.md` entry through a reviewed pull request.
+This change has no database migration and does not change runtime ETL services. To stop scheduled agent execution immediately, disable the **Hourly OpenCode maintenance** workflow in GitHub Actions. To remove it permanently, revert the workflow, its contract tests, this runbook, the design and plan documents, the doctoring evidence, and the corresponding `CHANGELOG.md` entry through a reviewed pull request.
 
 Do not delete or rename `NVIDIA_NIM_API_KEY` when it is also used by other approved workflows. Disabling this workflow does not require changing the review agent or its credential scheme.
 
@@ -141,6 +147,8 @@ Before merging a workflow change, verify the exact current head has:
 - the `automerge-workflow` label required by the deterministic disposition workflow;
 - no new secret reference other than `NVIDIA_NIM_API_KEY`;
 - a full-SHA checkout pin and checksum-pinned immutable OpenCode release asset;
+- exactly one expected archive member validated before extraction;
+- a fresh mode-`0700` extraction directory, overwrite refusal, and regular non-symbolic-link executable validation;
 - no npm install command, floating package tag, or mutable OpenCode action reference;
 - workflow-level read-only permission plus explicit job-scoped write permissions;
 - `persist-credentials: false` plus the local GitHub CLI credential helper and `EXIT` cleanup;
@@ -159,6 +167,8 @@ Anomaly. (2026). *OpenCode Homebrew formula* [Source code]. GitHub. https://gith
 Anomaly. (2026). *GitHub integration*. OpenCode. https://opencode.ai/docs/github/
 
 Anomaly. (2026). *Providers*. OpenCode. https://opencode.ai/docs/providers/
+
+Free Software Foundation. (2023). *GNU tar 1.35: Security*. https://www.gnu.org/software/tar/manual/html_section/Security.html
 
 Free Software Foundation. (2026). *timeout: Run a command with a time limit*. GNU Coreutils 9.11. https://www.gnu.org/software/coreutils/manual/html_node/timeout-invocation.html
 
