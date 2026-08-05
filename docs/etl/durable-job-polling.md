@@ -39,14 +39,15 @@ Authorization: Bearer <credential>
 If-None-Match: W/"86b79e..."
 ```
 
-When the complete representation is unchanged, Spring MVC applies RFC 9110 weak comparison and returns no representation body:
+When the complete representation is unchanged, ordinary entity tags use Spring MVC's RFC 9110 weak comparison and return no representation body:
 
 ```http
 HTTP/1.1 304 Not Modified
 Cache-Control: no-store
 ETag: W/"86b79e..."
-Retry-After: 5
 ```
+
+The RFC wildcard form `If-None-Match: *` is evaluated explicitly after the same authenticated owner-safe lookup. This narrow compatibility handling is required because Spring Framework 6.2.19 does not recognize the wildcard as a matching safe-method validator, even though RFC 9110 requires it to match any selected current representation.
 
 When any represented value changes, including lifecycle state, attempt count, failure code, or update timestamp, the request returns `200 OK`, the current JSON representation, and a new weak tag. `SUCCEEDED` and `FAILED` are terminal and omit `Retry-After` while retaining their validator. Submission responses, list responses, problem responses, and unrelated controllers do not receive a status entity tag.
 
@@ -87,11 +88,12 @@ Clients should:
 1. retain the most recent status `ETag` only in process memory when permitted by their own security policy;
 2. send that value in `If-None-Match` on the next authenticated status request;
 3. treat `304 Not Modified` as confirmation that the previously received representation is still current, not as a new representation;
-4. treat `Retry-After` as the minimum delay before the next status request;
-5. add bounded jitter when many jobs are polled concurrently;
-6. apply a larger local backoff after transport failures or `429`/`503` responses;
-7. stop polling when the returned state is `SUCCEEDED` or `FAILED`;
-8. retain their own overall timeout and operator escalation policy.
+4. treat `Retry-After` on a `200` active-status representation as the minimum delay before the next request;
+5. retain the last applicable local cadence when a bodyless `304` does not repeat `Retry-After`;
+6. add bounded jitter when many jobs are polled concurrently;
+7. apply a larger local backoff after transport failures or `429`/`503` responses;
+8. stop polling when the returned state is `SUCCEEDED` or `FAILED`;
+9. retain their own overall timeout and operator escalation policy.
 
 Clients must not interpret either header as a guarantee that the job will finish within one interval or as permission to access another principal's resource.
 
@@ -105,10 +107,12 @@ Rolling back the application removes the entity-tag builder and conditional resp
 
 RFC 9110 Section 10.2.3 defines `Retry-After` as either an HTTP-date or a non-negative decimal number of seconds indicating how long a user agent ought to wait before a follow-up request. mightyETL uses the bounded `delay-seconds` form because it is deterministic, timezone-independent, and directly derived from the configured worker cadence.
 
-RFC 9110 Sections 8.8 and 13.1.2 define entity tags and require weak comparison for `If-None-Match`. For GET and HEAD, a false `If-None-Match` precondition produces `304 Not Modified`. Spring MVC documents that an `ETag` supplied through `ResponseEntity` participates in conditional request processing and yields an empty `304` response when unchanged.
+RFC 9110 Sections 8.8 and 13.1.2 define entity tags and require weak comparison for `If-None-Match`. For GET and HEAD, a false `If-None-Match` precondition produces `304 Not Modified`. Spring MVC documents that an `ETag` supplied through `ResponseEntity` participates in ordinary conditional request processing and yields an empty `304` response when unchanged. The Spring Framework 6.2.19 primary source also establishes the exact wildcard limitation compensated by the controller.
 
 ### References
 
 Fielding, R., Nottingham, M., & Reschke, J. (2022). *HTTP semantics* (RFC 9110). RFC Editor. https://www.rfc-editor.org/rfc/rfc9110
+
+Spring Framework. (2025). *ServletWebRequest.java* (Version 6.2.19) [Source code]. GitHub. https://github.com/spring-projects/spring-framework/blob/v6.2.19/spring-web/src/main/java/org/springframework/web/context/request/ServletWebRequest.java
 
 Spring Framework. (2026). *HTTP caching: Spring Web MVC*. https://docs.spring.io/spring-framework/reference/6.2/web/webmvc/mvc-caching.html
