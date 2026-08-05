@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The durable job pagination index now uses PostgreSQL `CREATE INDEX CONCURRENTLY` with a migration-local Flyway `executeInTransaction=false` companion configuration, preserving production writers and documenting invalid-index recovery and concurrent rollback.
 - Durable job operators can now list only their own jobs through bounded newest-first keyset pagination with canonical opaque cursors, deterministic timestamp-plus-UUID ordering, `Cache-Control: no-store`, and RFC 8288 next-page links without offset drift or cross-tenant existence leakage.
 - Durable asynchronous ETL jobs now progress from `PENDING` through lease-fenced execution to `SUCCEEDED` or `FAILED`; PostgreSQL owns cross-replica claiming, stale workers cannot commit target or lifecycle effects, and intake and execution remain independently fail-closed.
 - Durable-worker observability now records one terminal outcome counter and one matching duration sample for every completed poll, including idle polls and database failures while persisting retry or terminal transitions.
