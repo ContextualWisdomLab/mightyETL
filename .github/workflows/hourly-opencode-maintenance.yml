@@ -14,13 +14,15 @@ permissions:
 jobs:
   maintain-repository:
     permissions:
-      actions: write
+      actions: read
       checks: read
       contents: write
       issues: write
       pull-requests: write
       security-events: read
       statuses: read
+    outputs:
+      open_pr_heads_before: ${{ steps.snapshot_heads.outputs.open_pr_heads }}
     runs-on: ubuntu-latest
     timeout-minutes: 50
     steps:
@@ -77,6 +79,7 @@ jobs:
           printf '%s\n' "${install_dir}" >> "${GITHUB_PATH}"
 
       - name: Snapshot open pull-request heads
+        id: snapshot_heads
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -91,6 +94,7 @@ jobs:
                 | map({key: (.number | tostring), value: .head.sha})
                 | from_entries
               ' > "${snapshot}"
+          printf 'open_pr_heads=%s\n' "$(jq -c . "${snapshot}")" >> "${GITHUB_OUTPUT}"
 
       - name: Run bounded NVIDIA OpenCode maintenance
         shell: bash
@@ -144,11 +148,21 @@ jobs:
 
           timeout --signal=TERM --kill-after=30s 45m opencode github run
 
+  authorize-exact-head-checks:
+    needs: maintain-repository
+    if: ${{ always() && !cancelled() }}
+    permissions:
+      actions: write
+      contents: read
+      pull-requests: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
       - name: Authorize exact-head checks for agent-updated pull requests
-        if: ${{ always() && !cancelled() }}
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          BEFORE_HEADS: ${{ needs.maintain-repository.outputs.open_pr_heads_before }}
         run: |
           set -euo pipefail
           before_file="${RUNNER_TEMP}/open-pr-heads-before.json"
@@ -157,10 +171,12 @@ jobs:
           repository="${GITHUB_REPOSITORY}"
           failed=0
 
-          if [[ ! -f "${before_file}" ]]; then
+          if [[ -z "${BEFORE_HEADS}" ]]; then
             echo "Open pull-request head snapshot is unavailable" >&2
             exit 1
           fi
+          printf '%s\n' "${BEFORE_HEADS}" \
+            | jq -e 'select(type == "object")' > "${before_file}"
 
           gh api --paginate \
             "/repos/${repository}/pulls?state=open&base=develop&per_page=100" \
