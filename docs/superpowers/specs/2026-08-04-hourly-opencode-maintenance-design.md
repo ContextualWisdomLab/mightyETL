@@ -13,6 +13,7 @@ The maintenance workflow will:
 - run at minute 43 of every hour and on manual dispatch;
 - use an immutable full-length SHA for `actions/checkout` and disable persisted checkout credentials;
 - download the immutable OpenCode `v1.18.13` Linux x64 release archive and verify SHA-256 `8d500b20fed2d26e537e221895b1a575476571b4f0089bb29fb13eeb8eb9e937` before extraction;
+- require the verified archive to contain exactly one root member named `opencode`, extract it into a fresh mode-`0700` directory, and reject non-regular or symbolic-link output;
 - avoid npm install commands, floating package tags, and mutable OpenCode action references;
 - map `${{ secrets.NVIDIA_NIM_API_KEY }}` only to OpenCode's documented `NVIDIA_API_KEY` environment variable;
 - select `nvidia/qwen/qwen3-coder-480b-a35b-instruct` explicitly;
@@ -33,12 +34,17 @@ The installation step:
 
 1. downloads only over HTTPS with redirect failure handling and a TLS 1.2 minimum;
 2. verifies the archive against the SHA-256 published by the upstream release process and generated Homebrew tap;
-3. refuses extraction on any mismatch;
-4. extracts without preserving archive ownership or permissions;
-5. applies executable mode only to the expected `opencode` file;
-6. verifies the binary reports exactly `1.18.13` before adding its directory to `GITHUB_PATH`.
+3. lists the verified archive and requires exactly one member named `opencode` before extraction;
+4. refuses extraction on a checksum or member-shape mismatch;
+5. creates a fresh mode-`0700` extraction directory and refuses overwrites;
+6. extracts without preserving archive ownership or permissions;
+7. requires the extracted object to be a regular file and not a symbolic link;
+8. applies executable mode only to the expected `opencode` file;
+9. verifies the binary reports exactly `1.18.13` before adding its directory to `GITHUB_PATH`.
 
-This closes the mutable npm-command finding without adding a package-manager bootstrap, lockfile-generation network step, or floating release reference.
+The checksum and archive-member controls serve different purposes. SHA-256 binds the downloaded bytes to the reviewed upstream release. Exact member validation and private-directory extraction constrain filesystem effects when a future pin is changed incorrectly or upstream packaging changes. Post-extraction file-type checks prevent a symbolic-link or special-file output from being executed.
+
+This closes the mutable npm-command finding without adding a package-manager bootstrap, lockfile-generation network step, floating release reference, or unconstrained archive extraction.
 
 ## Direct-token credential lifecycle
 
@@ -78,18 +84,20 @@ The deterministic hourly disposition workflow remains responsible for exact-head
 
 1. GitHub starts the scheduled workflow from `develop`.
 2. Checkout reads the default-branch source with credentials persistence disabled.
-3. The installer downloads the immutable OpenCode archive, verifies the pinned SHA-256, extracts it safely, and verifies the exact version.
-4. The shell validates required tokens, installs the repository-local bot author and GitHub CLI credential helper, and registers helper cleanup.
-5. `opencode github run` receives the bounded maintenance prompt, NVIDIA model selection, `GITHUB_TOKEN`, `GH_TOKEN`, and `NVIDIA_API_KEY` alias.
-6. The agent inspects every open pull request first. If one exists, it works only on the dependency-eligible current head. If none exists, it selects one bounded buyer-visible gap, preferring the durable worker lifecycle tracked in issue #120.
-7. OpenCode infrastructure commits and pushes the generated feature branch and opens or updates one pull request. It does not approve or merge.
-8. The shell removes the repository-local credential helper.
-9. Existing CI, security, independent review, and the deterministic disposition workflow evaluate the exact head independently.
+3. The installer downloads the immutable OpenCode archive and verifies the pinned SHA-256.
+4. The installer validates the one-member archive shape, extracts into a fresh private directory without archived ownership or permissions, and verifies a regular non-symbolic-link executable at the exact version.
+5. The shell validates required tokens, installs the repository-local bot author and GitHub CLI credential helper, and registers helper cleanup.
+6. `opencode github run` receives the bounded maintenance prompt, NVIDIA model selection, `GITHUB_TOKEN`, `GH_TOKEN`, and `NVIDIA_API_KEY` alias.
+7. The agent inspects every open pull request first. If one exists, it works only on the dependency-eligible current head. If none exists, it selects one bounded buyer-visible gap, preferring the durable worker lifecycle tracked in issue #120.
+8. OpenCode infrastructure commits and pushes the generated feature branch and opens or updates one pull request. It does not approve or merge.
+9. The shell removes the repository-local credential helper.
+10. Existing CI, security, independent review, and the deterministic disposition workflow evaluate the exact head independently.
 
 ## Failure behavior
 
-- A missing `NVIDIA_NIM_API_KEY`, missing repository token alias, unavailable NVIDIA endpoint, release download failure, checksum mismatch, version mismatch, Git bootstrap failure, timeout, test failure, or GitHub permission denial fails the scheduled job visibly.
-- The archive is never extracted after a checksum mismatch.
+- A missing `NVIDIA_NIM_API_KEY`, missing repository token alias, unavailable NVIDIA endpoint, release download failure, checksum mismatch, archive-member mismatch, extracted-file type mismatch, version mismatch, Git bootstrap failure, timeout, test failure, or GitHub permission denial fails the scheduled job visibly.
+- The archive is never extracted after a checksum or member-shape mismatch.
+- Extraction occurs only in a newly recreated mode-`0700` directory and refuses overwrites.
 - No fallback provider or Copilot credential is configured.
 - Concurrency is serialized with `cancel-in-progress: false`, preventing overlapping maintenance runs from racing.
 - At 45 minutes, the process receives `TERM`; if it remains alive after 30 seconds, GNU `timeout` sends `KILL` so the shell can complete its credential-cleanup trap before the 50-minute workflow limit.
@@ -97,11 +105,12 @@ The deterministic hourly disposition workflow remains responsible for exact-head
 
 ## Verification
 
-A repository test parses the workflow as text and fails unless it proves all of the following:
+Repository tests parse the workflow as text and fail unless they prove all of the following:
 
 - hourly off-peak schedule, serialized concurrency, bounded graceful timeout, and forced termination;
 - full-SHA checkout pinning and disabled credential persistence;
 - immutable OpenCode release URL, exact SHA-256 verification, exact version verification, and no npm install command;
+- exact one-member archive validation before extraction, private extraction directory creation, overwrite refusal, and regular non-symbolic-link output checks;
 - exclusive use of `NVIDIA_NIM_API_KEY` through `NVIDIA_API_KEY` with the explicit NVIDIA model;
 - no Copilot, Anthropic, or OpenAI credential path;
 - private session setting and direct GitHub token mode;
@@ -120,6 +129,8 @@ Anomaly. (2026). *OpenCode Homebrew formula* [Source code]. GitHub. https://gith
 Anomaly. (2026). *GitHub integration*. OpenCode. https://opencode.ai/docs/github/
 
 Anomaly. (2026). *Providers*. OpenCode. https://opencode.ai/docs/providers/
+
+Free Software Foundation. (2023). *GNU tar 1.35: Security*. https://www.gnu.org/software/tar/manual/html_section/Security.html
 
 Free Software Foundation. (2026). *timeout: Run a command with a time limit*. GNU Coreutils 9.11. https://www.gnu.org/software/coreutils/manual/html_node/timeout-invocation.html
 
