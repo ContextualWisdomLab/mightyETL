@@ -20,6 +20,8 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.format.DateTimeParseException;
+import java.util.Base64;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -29,18 +31,23 @@ import java.util.UUID;
 import java.util.regex.Pattern;
 
 /**
- * Creates and reads durable principal-scoped asynchronous ETL job resources.
+ * Creates, reads, and lists durable principal-scoped asynchronous ETL job resources.
  *
  * <p>The intake path validates the complete bounded JSON batch before persistence. Raw
  * authentication principals and idempotency keys are never stored. Instead, independent SHA-256
  * hashes namespace the submission, while the exact JSON text is retained only because a later
- * worker slice must execute the accepted job. The status representation never exposes that payload
- * or either internal hash.</p>
+ * worker slice must execute the accepted job. Status and list representations never expose that
+ * payload or either internal hash.</p>
  *
  * <p>A PostgreSQL transaction-level try-lock serializes creation of one principal-scoped
  * submission key. The table-level unique constraint remains a second integrity boundary. Replaying
  * byte-identical JSON returns the original job identifier; reusing the key with different JSON text
  * returns a deterministic conflict.</p>
+ *
+ * <p>Job discovery uses owner-scoped keyset pagination ordered by creation time and UUID. The
+ * opaque cursor is non-authoritative: it contains only the last returned ordering key, while the
+ * principal hash remains an independent mandatory query predicate. Malformed or non-canonical
+ * cursors fail closed before database access.</p>
  */
 @Service
 public class EtlJobService {
@@ -70,8 +77,31 @@ public class EtlJobService {
             WHERE job_record_id = ?
               AND principal_scope_hash = ?
             """;
+    private static final String SELECT_OWNED_JOB_PAGE_SQL = """
+            SELECT job_record_id, job_status, attempt_count,
+                   failure_code, created_at, updated_at
+            FROM etl_job_records
+            WHERE principal_scope_hash = ?
+            ORDER BY created_at DESC, job_record_id DESC
+            LIMIT ?
+            """;
+    private static final String SELECT_OWNED_JOB_PAGE_AFTER_CURSOR_SQL = """
+            SELECT job_record_id, job_status, attempt_count,
+                   failure_code, created_at, updated_at
+            FROM etl_job_records
+            WHERE principal_scope_hash = ?
+              AND (
+                    created_at < ?
+                    OR (created_at = ? AND job_record_id < ?)
+              )
+            ORDER BY created_at DESC, job_record_id DESC
+            LIMIT ?
+            """;
     private static final int MAX_PRINCIPAL_SCOPE_CODE_POINTS = 512;
     private static final int MAX_RECORD_ID_CODE_POINTS = 256;
+    private static final int DEFAULT_JOB_PAGE_SIZE = 50;
+    private static final int MAX_JOB_PAGE_SIZE = 100;
+    private static final int MAX_JOB_PAGE_CURSOR_CHARACTERS = 192;
     private static final Pattern OUTER_IDENTIFIER_WHITESPACE = Pattern.compile(
             "^\\s|\\s$",
             Pattern.UNICODE_CHARACTER_CLASS
@@ -83,6 +113,7 @@ public class EtlJobService {
     private static final Pattern IDEMPOTENCY_KEY_STRUCTURED_FIELD_PROFILE = Pattern.compile(
             "\"(" + IDEMPOTENCY_KEY_VALUE_EXPRESSION + ")\""
     );
+    private static final Pattern JOB_PAGE_LIMIT_PROFILE = Pattern.compile("[1-9][0-9]{0,2}");
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
@@ -237,6 +268,62 @@ public class EtlJobService {
         return jobs.getFirst();
     }
 
+    /**
+     * Lists one deterministic owner-scoped page of durable ETL jobs.
+     *
+     * <p>The query fetches one more row than the requested page size. That extra row is never
+     * returned; it only proves whether another page exists. The cursor records the final returned
+     * row's creation timestamp and UUID, while every query independently requires the authenticated
+     * principal hash.</p>
+     *
+     * @param principalScope authenticated principal namespace
+     * @param cursor opaque following-page cursor, or {@code null} for the newest page
+     * @param pageSizeText canonical decimal page size, or {@code null} for the default of 50
+     * @return immutable operator-safe page
+     * @throws EtlRequestException when principal, cursor, or page size validation fails
+     */
+    @Transactional(readOnly = true)
+    public EtlJobPage listOwned(
+            @Nullable String principalScope,
+            @Nullable String cursor,
+            @Nullable String pageSizeText
+    ) {
+        String principalScopeHash = Sha256Digest.digest(validatePrincipalScope(principalScope));
+        int pageSize = validatePageSize(pageSizeText);
+        PageCursor pageCursor = decodeCursor(cursor);
+        int fetchLimit = pageSize + 1;
+
+        List<EtlJobSnapshot> queriedJobs;
+        if (pageCursor == null) {
+            queriedJobs = jdbcTemplate.query(
+                    SELECT_OWNED_JOB_PAGE_SQL,
+                    EtlJobService::mapSnapshotRow,
+                    principalScopeHash,
+                    fetchLimit
+            );
+        } else {
+            Timestamp cursorTimestamp = Timestamp.from(pageCursor.createdAt());
+            queriedJobs = jdbcTemplate.query(
+                    SELECT_OWNED_JOB_PAGE_AFTER_CURSOR_SQL,
+                    EtlJobService::mapSnapshotRow,
+                    principalScopeHash,
+                    cursorTimestamp,
+                    cursorTimestamp,
+                    pageCursor.jobRecordId(),
+                    fetchLimit
+            );
+        }
+
+        boolean hasNextPage = queriedJobs.size() > pageSize;
+        List<EtlJobSnapshot> pageJobs = hasNextPage
+                ? List.copyOf(queriedJobs.subList(0, pageSize))
+                : List.copyOf(queriedJobs);
+        String nextCursor = hasNextPage
+                ? encodeCursor(pageJobs.getLast())
+                : null;
+        return new EtlJobPage(pageJobs, nextCursor);
+    }
+
     private StoredJobRecord findSubmission(String principalScopeHash, String submissionKeyHash) {
         List<StoredJobRecord> jobs = jdbcTemplate.query(
                 SELECT_SUBMISSION_SQL,
@@ -255,6 +342,20 @@ public class EtlJobService {
                 submissionKeyHash
         );
         return jobs.isEmpty() ? null : jobs.getFirst();
+    }
+
+    private static EtlJobSnapshot mapSnapshotRow(
+            java.sql.ResultSet resultSet,
+            int rowNumber
+    ) throws java.sql.SQLException {
+        return mapSnapshot(
+                resultSet.getObject("job_record_id", UUID.class),
+                resultSet.getString("job_status"),
+                resultSet.getInt("attempt_count"),
+                resultSet.getString("failure_code"),
+                resultSet.getTimestamp("created_at"),
+                resultSet.getTimestamp("updated_at")
+        );
     }
 
     private static EtlJobSnapshot mapSnapshot(
@@ -281,6 +382,75 @@ public class EtlJobService {
                 createdInstant,
                 updatedInstant
         );
+    }
+
+    private static int validatePageSize(@Nullable String pageSizeText) {
+        if (pageSizeText == null) {
+            return DEFAULT_JOB_PAGE_SIZE;
+        }
+        if (!JOB_PAGE_LIMIT_PROFILE.matcher(pageSizeText).matches()) {
+            throw new EtlRequestException(EtlRequestError.INVALID_JOB_PAGE_LIMIT);
+        }
+        int pageSize = Integer.parseInt(pageSizeText);
+        if (pageSize > MAX_JOB_PAGE_SIZE) {
+            throw new EtlRequestException(EtlRequestError.INVALID_JOB_PAGE_LIMIT);
+        }
+        return pageSize;
+    }
+
+    @Nullable
+    private static PageCursor decodeCursor(@Nullable String cursor) {
+        if (cursor == null) {
+            return null;
+        }
+        if (cursor.isEmpty() || cursor.length() > MAX_JOB_PAGE_CURSOR_CHARACTERS) {
+            throw new EtlRequestException(EtlRequestError.INVALID_JOB_PAGE_CURSOR);
+        }
+
+        final String decoded;
+        try {
+            byte[] cursorBytes = Base64.getUrlDecoder().decode(cursor);
+            decoded = new String(cursorBytes, StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException exception) {
+            throw new EtlRequestException(EtlRequestError.INVALID_JOB_PAGE_CURSOR, exception);
+        }
+
+        String[] cursorParts = decoded.split("\\|", -1);
+        if (cursorParts.length != 2) {
+            throw new EtlRequestException(EtlRequestError.INVALID_JOB_PAGE_CURSOR);
+        }
+
+        final PageCursor pageCursor;
+        try {
+            pageCursor = new PageCursor(
+                    Instant.parse(cursorParts[0]),
+                    UUID.fromString(cursorParts[1])
+            );
+        } catch (DateTimeParseException | IllegalArgumentException exception) {
+            throw new EtlRequestException(EtlRequestError.INVALID_JOB_PAGE_CURSOR, exception);
+        }
+        if (!cursor.equals(encodeCursor(pageCursor.createdAt(), pageCursor.jobRecordId()))) {
+            throw new EtlRequestException(EtlRequestError.INVALID_JOB_PAGE_CURSOR);
+        }
+        return pageCursor;
+    }
+
+    private static String encodeCursor(EtlJobSnapshot snapshot) {
+        EtlJobSnapshot requiredSnapshot = Objects.requireNonNull(
+                snapshot,
+                "snapshot must not be null"
+        );
+        return encodeCursor(requiredSnapshot.createdAt(), requiredSnapshot.jobRecordId());
+    }
+
+    private static String encodeCursor(Instant createdAt, UUID jobRecordId) {
+        String cursorPayload = Objects.requireNonNull(
+                createdAt,
+                "createdAt must not be null"
+        ) + "|" + Objects.requireNonNull(jobRecordId, "jobRecordId must not be null");
+        return Base64.getUrlEncoder()
+                .withoutPadding()
+                .encodeToString(cursorPayload.getBytes(StandardCharsets.UTF_8));
     }
 
     private String validatePayload(@Nullable String requestPayload) {
@@ -384,6 +554,13 @@ public class EtlJobService {
         private StoredJobRecord {
             Objects.requireNonNull(requestDigest, "requestDigest must not be null");
             Objects.requireNonNull(snapshot, "snapshot must not be null");
+        }
+    }
+
+    private record PageCursor(Instant createdAt, UUID jobRecordId) {
+        private PageCursor {
+            Objects.requireNonNull(createdAt, "createdAt must not be null");
+            Objects.requireNonNull(jobRecordId, "jobRecordId must not be null");
         }
     }
 }
