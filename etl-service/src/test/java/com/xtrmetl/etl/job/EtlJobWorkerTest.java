@@ -32,6 +32,9 @@ import static org.mockito.Mockito.when;
 class EtlJobWorkerTest {
 
     private static final String OWNER_ID = "worker-alpha";
+    private static final String PRINCIPAL_SCOPE_HASH = "a".repeat(64);
+    private static final String SUBMISSION_KEY_HASH = "b".repeat(64);
+    private static final String REQUEST_DIGEST = "c".repeat(64);
     private static final String PAYLOAD = "[{\"id\":\"record_alpha\"}]";
 
     @Mock
@@ -256,6 +259,9 @@ class EtlJobWorkerTest {
                 UUID.randomUUID(),
                 UUID.randomUUID(),
                 OWNER_ID,
+                PRINCIPAL_SCOPE_HASH,
+                SUBMISSION_KEY_HASH,
+                REQUEST_DIGEST,
                 PAYLOAD,
                 attemptCount,
                 Instant.now().plusSeconds(300)
