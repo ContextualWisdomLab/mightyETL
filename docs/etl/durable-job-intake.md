@@ -127,11 +127,13 @@ principal, raw submission key, internal hashes, lease identifiers, SQL, and resp
 Flyway migrations create descriptive multi-word `snake_case` objects:
 
 - `V2__create_etl_job_records.sql` creates `etl_job_records` and the submission uniqueness contract;
-- `V3__add_etl_job_lease_fencing.sql` adds `lease_claim_id`, `lease_owner_id`,
-  `lease_expires_at`, lifecycle constraints, and `etl_job_claim_eligibility_index`;
-- `V4__add_etl_job_owner_pagination_index.sql` adds `etl_job_owner_pagination_index` on
-  `principal_scope_hash`, `created_at DESC`, and `job_record_id DESC` for the exact owner-scoped
-  ordering contract.
+- `V3__add_etl_job_lease_fencing.sql` transactionally adds `lease_claim_id`, `lease_owner_id`,
+  `lease_expires_at`, legacy-data repair, and lifecycle constraints;
+- `V4__add_etl_job_claim_eligibility_index.sql` concurrently adds
+  `etl_job_claim_eligibility_index` for oldest eligible queue-like claims without blocking writers;
+- `V5__add_etl_job_owner_pagination_index.sql` concurrently adds
+  `etl_job_owner_pagination_index` on `principal_scope_hash`, `created_at DESC`, and
+  `job_record_id DESC` for the exact owner-scoped ordering contract.
 
 The stable lifecycle is `PENDING`, `RUNNING`, `SUCCEEDED`, and `FAILED`.
 
@@ -182,35 +184,40 @@ retained.
 List and status representations exclude payloads, raw principals, raw keys, hashes, lease identifiers,
 SQL, and exception messages. Metrics and ordinary logs must not include those values or unbounded
 error classes. Operational procedures and metric contracts are authoritative in
-`docs/operations/durable-job-worker.md`.
+`docs/operations/durable-job-worker.md`. Claim-index deployment and invalid-index recovery are
+specified in `docs/operations/durable-job-claim-index-rollout.md`.
 
 ## Migration and rollback
 
-Apply Flyway migrations in version order. `V4__add_etl_job_owner_pagination_index.sql` is additive and
-does not change row contents or the API state machine. It uses PostgreSQL `CREATE INDEX CONCURRENTLY`
-so inserts, updates, and deletes remain available while the index is built. Its companion
-`V4__add_etl_job_owner_pagination_index.sql.conf` contains `executeInTransaction=false` because
-PostgreSQL rejects concurrent index creation inside a transaction block and Flyway otherwise executes
-SQL migrations transactionally by default.
+Apply Flyway migrations in version order. V3 remains transactional so lease columns, legacy-data
+repair, and lifecycle constraints commit together. V4 and V5 are isolated additive index migrations.
+Both use PostgreSQL `CREATE INDEX CONCURRENTLY` so inserts, updates, and deletes remain available while
+the indexes are built. Their matching `.sql.conf` files contain `executeInTransaction=false` because
+PostgreSQL rejects concurrent index creation inside a transaction block. The application also sets
+`spring.flyway.postgresql.transactional-lock=false`, selecting Flyway's PostgreSQL session-lock mode
+required for concurrent index DDL.
 
-Concurrent index creation performs more work and can wait for transactions that could affect the
+Concurrent index creation performs more work and can wait for transactions that could affect an
 index. Measure duration, I/O, replication lag, and transaction age in a representative staging
-environment, then schedule production rollout with explicit monitoring. If the build fails,
-PostgreSQL can leave an invalid `etl_job_owner_pagination_index`; inspect catalog validity, remove the
-invalid object concurrently, correct the root cause, and rerun the migration under the repository's
-repair procedure rather than treating schema-history evidence as a usable index.
+environment, then schedule production rollout with explicit monitoring. If a build fails, PostgreSQL
+can leave an invalid index. Inspect catalog validity rather than treating a matching object name or
+schema-history row as usable evidence. The claim-index recovery procedure is documented separately;
+the same fail-closed catalog inspection, concurrent removal, root-cause correction, approved Flyway
+repair, and unchanged migration replay applies to the pagination index.
 
-Application rollback is compatible with the additional index because older binaries ignore it. After
-rolling back all binaries that depend on the list endpoint, run the database-only rollback outside a
-transaction block:
+Application rollback is compatible with either additional index because older binaries ignore them.
+After rolling back every binary that depends on the relevant access path, run the database-only
+rollback outside a transaction block:
 
 ```sql
 DROP INDEX CONCURRENTLY etl_job_owner_pagination_index;
+DROP INDEX CONCURRENTLY etl_job_claim_eligibility_index;
 ```
 
-Dropping the index while the pagination endpoint is still active preserves query correctness but can
-cause an unacceptable owner-list scan cost. Do not remove it until traffic is withdrawn and an
-execution-plan review confirms the rollback boundary.
+Dropping the pagination index while the list endpoint is active preserves query correctness but can
+cause an unacceptable owner-list scan cost. Dropping the claim index while workers are active can
+cause expensive claim scans and contention. Do not remove either index until its traffic is withdrawn
+and an execution-plan review confirms the rollback boundary.
 
 ## Standards basis
 
@@ -230,6 +237,8 @@ execution-plan review confirms the rollback boundary.
   avoiding contention among multiple consumers of a queue-like table.
 - Flyway script configuration supports a migration-matched `.sql.conf` file and the
   `executeInTransaction=false` override required for non-transactional PostgreSQL DDL.
+- Flyway's PostgreSQL integration documents session-level migration locking for statements such as
+  `CREATE INDEX CONCURRENTLY`.
 - Spring fixed-delay scheduling measures each delay from completion of the preceding invocation.
 - OpenTelemetry SQL/PostgreSQL semantic conventions define stable database telemetry fields; raw
   query text and parameters remain privacy-sensitive opt-in data.
@@ -258,20 +267,8 @@ https://www.postgresql.org/docs/18/sql-createindex.html
 PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: Introduction to indexes*.
 https://www.postgresql.org/docs/18/indexes-intro.html
 
-PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: Multicolumn indexes*.
-https://www.postgresql.org/docs/18/indexes-multicolumn.html
+Redgate Software. (2026). *Flyway PostgreSQL transactional lock setting*.
+https://documentation.red-gate.com/fd/flyway-postgresql-transactional-lock-setting-277579114.html
 
-PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: SELECT*.
-https://www.postgresql.org/docs/18/sql-select.html
-
-PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: Sorting rows (ORDER BY)*.
-https://www.postgresql.org/docs/18/queries-order.html
-
-Redgate Software. (2026, July 20). *Flyway execute in transaction setting*.
-https://documentation.red-gate.com/fd/flyway-execute-in-transaction-setting-277578997.html
-
-Redgate Software. (2026, July 20). *Script configuration*.
+Redgate Software. (2026). *Flyway script configuration*.
 https://documentation.red-gate.com/flyway/reference/script-configuration
-
-Spring Authors. (2026). *Task execution and scheduling*. Broadcom.
-https://docs.spring.io/spring-framework/reference/integration/scheduling.html
