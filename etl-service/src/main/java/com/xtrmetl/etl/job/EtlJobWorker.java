@@ -163,6 +163,8 @@ public class EtlJobWorker {
             return STALE_OUTCOME;
         } catch (TransientDataAccessException exception) {
             return handleTransientFailure(lease);
+        } catch (EtlJobIntegrityException exception) {
+            return markFailedOrStale(lease, exception.failureCode());
         } catch (EtlRequestException exception) {
             return markFailedOrStale(lease, exception.error().errorCode());
         } catch (DataAccessException exception) {
