@@ -3,6 +3,7 @@ package com.xtrmetl.etl.job;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Duration;
@@ -24,6 +25,11 @@ import java.util.regex.Pattern;
  * claim token, owner, running status, and database-time expiry predicates so stale workers cannot
  * mutate lifecycle state. Public callers cannot create leases longer than the worker's one-day
  * operational ceiling, even when they bypass Spring configuration binding.</p>
+ *
+ * <p>Terminal success is intentionally stricter than retry or failure bookkeeping: it is accepted
+ * only inside the caller-owned transaction that also contains the target effects and durable
+ * response-ledger write. This prevents a direct repository call from publishing false success
+ * independently of the data it claims to have committed.</p>
  */
 @Repository
 public class EtlJobLeaseRepository {
@@ -243,14 +249,16 @@ public class EtlJobLeaseRepository {
     }
 
     /**
-     * Commits terminal success only for the exact live claim.
+     * Commits terminal success only for the exact live claim in the atomic execution transaction.
      *
      * @param lease exact claim whose target effects completed in the same transaction
      * @throws NullPointerException when the lease is {@code null}
+     * @throws IllegalStateException when no actual Spring transaction is active
      * @throws StaleEtlJobLeaseException when the claim is expired or no longer authoritative
      */
     public void markSucceeded(EtlJobLease lease) {
         EtlJobLease requiredLease = Objects.requireNonNull(lease, "lease must not be null");
+        requireActiveSuccessTransaction();
         requireTransition(jdbcTemplate.update(
                 MARK_SUCCEEDED_SQL,
                 requiredLease.jobRecordId(),
@@ -350,6 +358,14 @@ public class EtlJobLeaseRepository {
             );
         }
         return requiredFailureCode;
+    }
+
+    private static void requireActiveSuccessTransaction() {
+        if (!TransactionSynchronizationManager.isActualTransactionActive()) {
+            throw new IllegalStateException(
+                    "Durable ETL success requires an active transaction"
+            );
+        }
     }
 
     private static void requireTransition(int updatedRows) {
