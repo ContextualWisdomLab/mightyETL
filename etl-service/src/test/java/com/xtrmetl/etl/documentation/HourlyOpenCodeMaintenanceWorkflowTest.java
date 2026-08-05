@@ -18,13 +18,13 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Guards the credential, authority, and supply-chain boundaries of the scheduled OpenCode
- * maintenance workflow.
+ * Guards the credential, authority, supply-chain, and exact-head validation boundaries of the
+ * scheduled OpenCode maintenance workflow.
  *
- * <p>The scheduled agent is allowed to prepare feature-branch pull requests. It is not a
- * reviewer or merger. These tests make that separation visible to beginners and prevent a
- * later workflow edit from silently adding a fallback provider, mutable tool version, elevated
- * token permission, protected-branch push, self-approval path, or deprecated hosted model.</p>
+ * <p>The scheduled agent is allowed to prepare feature-branch pull requests. It is not a reviewer
+ * or merger. These tests make that separation visible to beginners and prevent a later workflow
+ * edit from silently adding a fallback provider, mutable tool version, protected-branch push,
+ * self-approval path, workflow-code auto-approval, or unvalidated agent-generated head.</p>
  */
 class HourlyOpenCodeMaintenanceWorkflowTest {
 
@@ -156,11 +156,9 @@ class HourlyOpenCodeMaintenanceWorkflowTest {
     /**
      * Requires a currently available free NVIDIA endpoint suited to repository-scale coding.
      *
-     * <p>The previous Qwen3 Coder trial endpoint was deprecated by NVIDIA. A scheduled agent
-     * that pins a deprecated hosted endpoint is not durable automation even when its workflow
-     * and credential handling are otherwise correct. DeepSeek V4 Pro is explicitly exposed by
-     * NVIDIA as a free endpoint with one-million-token context, agentic tool use, and software-
-     * engineering support, so the workflow pins that provider/model identifier.</p>
+     * <p>The previous Qwen3 Coder trial endpoint was deprecated by NVIDIA. DeepSeek V4 Pro is
+     * exposed by NVIDIA as a free endpoint with long-context coding and tool-use capabilities, so
+     * the workflow pins that provider/model identifier and fails instead of silently falling back.</p>
      */
     @Test
     void usesCurrentFreeAgenticCodingModel() {
@@ -170,15 +168,16 @@ class HourlyOpenCodeMaintenanceWorkflowTest {
 
     /**
      * Verifies least-privilege repository access, scopes write authority to the sole maintenance
-     * job instead of every future job, and rejects an unnecessary OIDC token path.
+     * job, and permits only the Actions write capability needed to authorize exact-head CI that
+     * GitHub deliberately places in approval-required state after a {@code GITHUB_TOKEN} PR update.
      */
     @Test
-    void grantsOnlyRepositoryMaintenancePermissions() {
+    void grantsOnlyRepositoryMaintenanceAndCheckRevalidationPermissions() {
         assertTrue(workflow.contains("permissions:\n  contents: read\n\njobs:"));
         assertTrue(workflow.contains(
                 "maintain-repository:\n"
                         + "    permissions:\n"
-                        + "      actions: read\n"
+                        + "      actions: write\n"
                         + "      checks: read\n"
                         + "      contents: write\n"
                         + "      issues: write\n"
@@ -187,8 +186,39 @@ class HourlyOpenCodeMaintenanceWorkflowTest {
                         + "      statuses: read"
         ));
         assertFalse(workflow.contains("id-token:"));
-        assertFalse(workflow.contains("actions: write"));
         assertFalse(workflow.contains("security-events: write"));
+    }
+
+    /**
+     * Requires exact-head CI authorization after the agent creates or updates a same-repository PR.
+     *
+     * <p>GitHub prevents ordinary events produced with {@code GITHUB_TOKEN} from recursively
+     * starting workflows. Current GitHub behavior creates {@code opened}, {@code synchronize}, and
+     * {@code reopened} PR runs in an approval-required state instead. The trusted default-branch
+     * scheduler must snapshot heads before the agent, detect only heads changed by this run, refuse
+     * workflow or CODEOWNERS changes, bind every decision to the still-current SHA, and authorize
+     * only those exact-head runs. This step starts validation; it does not approve or merge the PR.</p>
+     */
+    @Test
+    void authorizesExactHeadChecksForAgentChangedPullRequests() {
+        assertTrue(workflow.contains("name: Snapshot open pull-request heads"));
+        assertTrue(workflow.contains("open-pr-heads-before.json"));
+        assertTrue(workflow.contains(
+                "name: Authorize exact-head checks for agent-updated pull requests"
+        ));
+        assertTrue(workflow.contains("if: ${{ always() && !cancelled() }}"));
+        assertTrue(workflow.contains("head.repo.full_name == $repo"));
+        assertTrue(workflow.contains(".base.ref == \"develop\""));
+        assertTrue(workflow.contains(".github/workflows/"));
+        assertTrue(workflow.contains("CODEOWNERS"));
+        assertTrue(workflow.contains("head_sha=${head_sha}"));
+        assertTrue(workflow.contains("event=pull_request"));
+        assertTrue(workflow.contains("/actions/runs/${run_id}/approve"));
+        assertTrue(workflow.contains("current_head"));
+        assertTrue(workflow.contains("expected_head"));
+        assertTrue(workflow.contains("No pull-request workflow run materialized"));
+        assertFalse(workflow.contains("gh pr review --approve"));
+        assertFalse(workflow.contains("/pulls/${number}/merge"));
     }
 
     /**
