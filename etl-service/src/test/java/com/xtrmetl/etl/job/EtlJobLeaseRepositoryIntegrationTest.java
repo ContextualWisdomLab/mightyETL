@@ -13,6 +13,7 @@ import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseType;
 import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
+import org.springframework.transaction.annotation.Transactional;
 
 import javax.sql.DataSource;
 import java.time.Duration;
@@ -193,6 +194,7 @@ class EtlJobLeaseRepositoryIntegrationTest {
     }
 
     @Test
+    @Transactional
     void exactLiveLeaseCanSucceedRetryOrFailAndClearsTheRightFields() {
         UUID successJobId = insertPending(Instant.parse("2026-08-05T00:00:00Z"), 0);
         EtlJobLease successLease = repository.claimNext(OWNER_ALPHA, LEASE_DURATION, 3)
@@ -226,6 +228,7 @@ class EtlJobLeaseRepositoryIntegrationTest {
     }
 
     @Test
+    @Transactional
     void rejectsExpiredSupersededOrExhaustedTransitions() {
         UUID jobRecordId = insertPending(Instant.now(), 0);
         EtlJobLease lease = repository.claimNext(OWNER_ALPHA, LEASE_DURATION, 1).orElseThrow();
