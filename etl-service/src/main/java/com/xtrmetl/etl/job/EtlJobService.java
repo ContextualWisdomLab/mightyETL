@@ -9,6 +9,7 @@ import com.xtrmetl.etl.service.EtlRequestError;
 import com.xtrmetl.etl.service.EtlRequestException;
 import com.xtrmetl.etl.service.EtlRequestLock;
 import com.xtrmetl.etl.service.PostgresEtlRequestLock;
+import com.xtrmetl.etl.service.Sha256Digest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.lang.Nullable;
@@ -17,12 +18,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.HashSet;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -168,10 +166,12 @@ public class EtlJobService {
         String validatedPayload = validatePayload(requestPayload);
         requireActiveTransaction();
 
-        String principalScopeHash = sha256(validatedScope);
-        String submissionKeyHash = sha256(validatedKey);
-        String submissionLockHash = sha256(principalScopeHash + ":" + submissionKeyHash);
-        String requestDigest = sha256(validatedPayload);
+        String principalScopeHash = Sha256Digest.digest(validatedScope);
+        String submissionKeyHash = Sha256Digest.digest(validatedKey);
+        String submissionLockHash = Sha256Digest.digest(
+                principalScopeHash + ":" + submissionKeyHash
+        );
+        String requestDigest = Sha256Digest.digest(validatedPayload);
 
         if (!requestLock.tryLock(submissionLockHash)) {
             throw new EtlRequestException(EtlRequestError.JOB_SUBMISSION_IN_PROGRESS);
@@ -219,7 +219,7 @@ public class EtlJobService {
             @Nullable String principalScope
     ) {
         UUID validatedJobId = Objects.requireNonNull(jobRecordId, "jobRecordId must not be null");
-        String principalScopeHash = sha256(validatePrincipalScope(principalScope));
+        String principalScopeHash = Sha256Digest.digest(validatePrincipalScope(principalScope));
         List<EtlJobSnapshot> jobs = jdbcTemplate.query(
                 SELECT_OWNED_JOB_SQL,
                 (resultSet, rowNumber) -> mapSnapshot(resultSet.getObject("job_record_id", UUID.class),
@@ -310,7 +310,7 @@ public class EtlJobService {
         return requestPayload;
     }
 
-    private static void validateRecord(@Nullable JsonNode record) {
+    static void validateRecord(@Nullable JsonNode record) {
         if (record == null || !record.isObject()) {
             throw new EtlRequestException(EtlRequestError.INVALID_RECORD);
         }
@@ -377,16 +377,6 @@ public class EtlJobService {
             throw new IllegalStateException(
                     "Durable ETL job submission requires an active transaction"
             );
-        }
-    }
-
-    private static String sha256(String value) {
-        try {
-            MessageDigest messageDigest = MessageDigest.getInstance("SHA-256");
-            byte[] digest = messageDigest.digest(value.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(digest);
-        } catch (NoSuchAlgorithmException exception) {
-            throw new IllegalStateException("SHA-256 is required by the Java platform", exception);
         }
     }
 

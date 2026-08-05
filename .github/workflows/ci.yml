@@ -46,6 +46,60 @@ jobs:
         if: runner.os == 'Windows'
         run: .\\mvnw.cmd -B test
 
+      - name: Report uncovered JaCoCo branches
+        if: failure()
+        shell: bash
+        run: |
+          python_command="python3"
+          if ! command -v "${python_command}" >/dev/null 2>&1; then
+            python_command="python"
+          fi
+          "${python_command}" - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ElementTree
+
+          class_name = "com/xtrmetl/etl/job/EtlJobService"
+          source_name = "EtlJobService.java"
+          reports = sorted(Path(".").glob("**/target/site/jacoco/jacoco.xml"))
+          if not reports:
+              raise SystemExit("No JaCoCo XML report was produced")
+
+          found_class = False
+          for report_path in reports:
+              report_root = ElementTree.parse(report_path).getroot()
+              for class_element in report_root.findall(f".//class[@name='{class_name}']"):
+                  found_class = True
+                  print(f"JaCoCo branch diagnostics from {report_path}:")
+                  for method_element in class_element.findall("method"):
+                      for counter in method_element.findall("counter"):
+                          if counter.get("type") != "BRANCH":
+                              continue
+                          missed = int(counter.get("missed", "0"))
+                          if missed > 0:
+                              print(
+                                  "  method="
+                                  f"{method_element.get('name')}{method_element.get('desc')} "
+                                  f"first_line={method_element.get('line')} "
+                                  f"missed_branches={missed} "
+                                  f"covered_branches={counter.get('covered', '0')}"
+                              )
+
+              for source_element in report_root.findall(
+                  f".//sourcefile[@name='{source_name}']"
+              ):
+                  for line_element in source_element.findall("line"):
+                      missed = int(line_element.get("mb", "0"))
+                      if missed > 0:
+                          print(
+                              f"  source_line={line_element.get('nr')} "
+                              f"missed_branches={missed} "
+                              f"covered_branches={line_element.get('cb', '0')}"
+                          )
+
+          if not found_class:
+              raise SystemExit(f"{class_name} was not present in any JaCoCo XML report")
+          PY
+
   test_self_hosted:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.use_self_hosted == true }}
     runs-on: self-hosted

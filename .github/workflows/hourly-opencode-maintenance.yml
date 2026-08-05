@@ -42,6 +42,7 @@ jobs:
           install_dir="${RUNNER_TEMP}/opencode-bin"
 
           command -v curl >/dev/null
+          command -v install >/dev/null
           command -v rg >/dev/null
           command -v sha256sum >/dev/null
           command -v tar >/dev/null
@@ -52,11 +53,25 @@ jobs:
           printf '%s  %s\n' "${OPENCODE_SHA256}" "${archive}" \
             | sha256sum --check --strict
 
+          mapfile -t archive_members < <(tar --list --gzip --file "${archive}")
+          if [[ "${#archive_members[@]}" -ne 1 || "${archive_members[0]}" != "opencode" ]]; then
+            echo "OpenCode archive contains unexpected members" >&2
+            exit 1
+          fi
+
+          archive_entry_metadata="$(LC_ALL=C tar --list --verbose --numeric-owner --gzip --file "${archive}")"
+          if [[ "${archive_entry_metadata:0:1}" != "-" ]]; then
+            echo "OpenCode archive member is not a regular file" >&2
+            exit 1
+          fi
+
           rm -rf "${install_dir}"
-          mkdir -p "${install_dir}"
+          install -d -m 0700 "${install_dir}"
           tar --extract --gzip --no-same-owner --no-same-permissions \
+            --no-overwrite-dir --keep-old-files \
             --file "${archive}" --directory "${install_dir}"
           test -f "${install_dir}/opencode"
+          test ! -L "${install_dir}/opencode"
           chmod 0755 "${install_dir}/opencode"
           test "$("${install_dir}/opencode" --version)" = "${OPENCODE_VERSION}"
           printf '%s\n' "${install_dir}" >> "${GITHUB_PATH}"
@@ -67,7 +82,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           GH_TOKEN: ${{ github.token }}
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_NIM_API_KEY }}
-          MODEL: nvidia/qwen/qwen3-coder-480b-a35b-instruct
+          MODEL: nvidia/deepseek-ai/deepseek-v4-pro
           SHARE: "false"
           USE_GITHUB_TOKEN: "true"
           PROMPT: |
