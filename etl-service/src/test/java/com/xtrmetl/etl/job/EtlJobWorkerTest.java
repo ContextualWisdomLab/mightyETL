@@ -157,7 +157,7 @@ class EtlJobWorkerTest {
     }
 
     @Test
-    void treatsAnExecutionOrTransitionFenceFailureAsStaleEvidence() {
+    void treatsAnExecutionFenceFailureAsStaleEvidence() {
         EtlJobLease executionStaleLease = lease(1);
         when(leaseRepository.claimNext(anyString(), any(), anyInt()))
                 .thenReturn(Optional.of(executionStaleLease));
@@ -185,6 +185,22 @@ class EtlJobWorkerTest {
 
         assertMetric("stale", 1.0, 1L);
         assertMetric("retried", 0.0, 0L);
+    }
+
+    @Test
+    void treatsAStaleTerminalTransitionAsStaleEvidence() {
+        EtlJobLease lease = lease(1);
+        when(leaseRepository.claimNext(anyString(), any(), anyInt()))
+                .thenReturn(Optional.of(lease));
+        doThrow(new EtlRequestException(EtlRequestError.INVALID_JSON))
+                .when(executionService).execute(lease);
+        doThrow(new StaleEtlJobLeaseException())
+                .when(leaseRepository).markFailed(lease, "etl_invalid_json");
+
+        worker.pollOnce();
+
+        assertMetric("stale", 1.0, 1L);
+        assertMetric("failed", 0.0, 0L);
     }
 
     @Test
