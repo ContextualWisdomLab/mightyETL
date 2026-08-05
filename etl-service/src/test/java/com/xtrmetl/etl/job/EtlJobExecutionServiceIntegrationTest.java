@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xtrmetl.etl.service.EtlBatchProperties;
 import com.xtrmetl.etl.service.EtlRequestLock;
 import com.xtrmetl.etl.service.EtlService;
+import com.xtrmetl.etl.service.Sha256Digest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * Proves that target writes and exact-live-lease success commit or roll back together.
+ * Proves that ledger, target writes, and exact-live-lease success commit or roll back together.
  */
 @SpringJUnitConfig(EtlJobExecutionServiceIntegrationTest.TestConfiguration.class)
 class EtlJobExecutionServiceIntegrationTest {
@@ -38,25 +39,26 @@ class EtlJobExecutionServiceIntegrationTest {
 
     private final EtlJobExecutionService executionService;
     private final EtlJobLeaseRepository leaseRepository;
-    private final EtlService etlService;
+    private final EtlJobIdempotencyService idempotencyService;
     private final JdbcTemplate jdbcTemplate;
 
     @Autowired
     EtlJobExecutionServiceIntegrationTest(
             EtlJobExecutionService executionService,
             EtlJobLeaseRepository leaseRepository,
-            EtlService etlService,
+            EtlJobIdempotencyService idempotencyService,
             JdbcTemplate jdbcTemplate
     ) {
         this.executionService = executionService;
         this.leaseRepository = leaseRepository;
-        this.etlService = etlService;
+        this.idempotencyService = idempotencyService;
         this.jdbcTemplate = jdbcTemplate;
     }
 
     @BeforeEach
     void createTables() {
         jdbcTemplate.execute("DROP TABLE IF EXISTS processed_data");
+        jdbcTemplate.execute("DROP TABLE IF EXISTS etl_idempotency_records");
         jdbcTemplate.execute("DROP TABLE IF EXISTS etl_job_records");
         jdbcTemplate.execute("""
                 CREATE TABLE etl_job_records (
@@ -81,10 +83,18 @@ class EtlJobExecutionServiceIntegrationTest {
                     data VARCHAR(8192) NOT NULL
                 )
                 """);
+        jdbcTemplate.execute("""
+                CREATE TABLE etl_idempotency_records (
+                    idempotency_key_hash CHAR(64) PRIMARY KEY,
+                    request_digest CHAR(64) NOT NULL,
+                    response_body CLOB NOT NULL,
+                    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """);
     }
 
     @Test
-    void commitsTargetRowsAndTerminalSuccessInOneTransaction() {
+    void commitsLedgerTargetRowsAndTerminalSuccessInOneTransaction() {
         UUID jobRecordId = insertPendingJob();
         EtlJobLease lease = leaseRepository.claimNext(
                 OWNER_ID,
@@ -95,7 +105,8 @@ class EtlJobExecutionServiceIntegrationTest {
         executionService.execute(lease);
 
         assertEquals(jobRecordId, lease.jobRecordId());
-        assertEquals(1, processedRowCount());
+        assertEquals(1, tableCount("processed_data"));
+        assertEquals(1, tableCount("etl_idempotency_records"));
         assertEquals(
                 "ID:record_alpha,NAME:ACCEPTED,EMAIL:user@example.com,",
                 jdbcTemplate.queryForObject("SELECT data FROM processed_data", String.class)
@@ -105,7 +116,7 @@ class EtlJobExecutionServiceIntegrationTest {
     }
 
     @Test
-    void rollsBackTargetRowsWhenTheClaimWasSuperseded() {
+    void rollsBackLedgerAndTargetRowsWhenTheClaimWasSuperseded() {
         UUID jobRecordId = insertPendingJob();
         EtlJobLease lease = leaseRepository.claimNext(
                 OWNER_ID,
@@ -120,7 +131,8 @@ class EtlJobExecutionServiceIntegrationTest {
 
         assertThrows(StaleEtlJobLeaseException.class, () -> executionService.execute(lease));
 
-        assertEquals(0, processedRowCount());
+        assertEquals(0, tableCount("processed_data"));
+        assertEquals(0, tableCount("etl_idempotency_records"));
         assertEquals("RUNNING", jobStatus(jobRecordId));
         assertEquals(1, retainedPayloadCount(jobRecordId));
     }
@@ -133,7 +145,7 @@ class EtlJobExecutionServiceIntegrationTest {
         );
         assertThrows(
                 NullPointerException.class,
-                () -> new EtlJobExecutionService(etlService, null)
+                () -> new EtlJobExecutionService(idempotencyService, null)
         );
         assertThrows(NullPointerException.class, () -> executionService.execute(null));
     }
@@ -152,7 +164,7 @@ class EtlJobExecutionServiceIntegrationTest {
                 jobRecordId,
                 "a".repeat(64),
                 "b".repeat(64),
-                "c".repeat(64),
+                Sha256Digest.digest(PAYLOAD),
                 PAYLOAD,
                 now,
                 now
@@ -160,9 +172,9 @@ class EtlJobExecutionServiceIntegrationTest {
         return jobRecordId;
     }
 
-    private int processedRowCount() {
+    private int tableCount(String tableName) {
         Integer count = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM processed_data",
+                "SELECT COUNT(*) FROM " + tableName,
                 Integer.class
         );
         return count == null ? 0 : count;
@@ -191,7 +203,7 @@ class EtlJobExecutionServiceIntegrationTest {
     }
 
     /**
-     * Transaction-enabled execution context using one database for source state and target effects.
+     * Transaction-enabled execution context using one database for job, ledger, and target effects.
      */
     @Configuration
     @EnableTransactionManagement
@@ -241,6 +253,15 @@ class EtlJobExecutionServiceIntegrationTest {
         }
 
         @Bean
+        EtlJobIdempotencyService etlJobIdempotencyService(
+                JdbcTemplate jdbcTemplate,
+                EtlService etlService,
+                EtlRequestLock requestLock
+        ) {
+            return new EtlJobIdempotencyService(jdbcTemplate, etlService, requestLock);
+        }
+
+        @Bean
         EtlJobLeaseRepository etlJobLeaseRepository(
                 JdbcTemplate jdbcTemplate,
                 PlatformTransactionManager transactionManager
@@ -250,10 +271,10 @@ class EtlJobExecutionServiceIntegrationTest {
 
         @Bean
         EtlJobExecutionService etlJobExecutionService(
-                EtlService etlService,
+                EtlJobIdempotencyService idempotencyService,
                 EtlJobLeaseRepository leaseRepository
         ) {
-            return new EtlJobExecutionService(etlService, leaseRepository);
+            return new EtlJobExecutionService(idempotencyService, leaseRepository);
         }
     }
 }
