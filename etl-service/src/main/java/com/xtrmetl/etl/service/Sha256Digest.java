@@ -27,13 +27,27 @@ public final class Sha256Digest {
      * @throws IllegalStateException when the Java runtime lacks mandatory SHA-256 support
      */
     public static String digest(String value) {
+        return digest(value, () -> MessageDigest.getInstance("SHA-256"));
+    }
+
+    static String digest(String value, MessageDigestFactory messageDigestFactory) {
         String requiredValue = Objects.requireNonNull(value, "value must not be null");
+        MessageDigestFactory requiredFactory = Objects.requireNonNull(
+                messageDigestFactory,
+                "messageDigestFactory must not be null"
+        );
         try {
-            MessageDigest messageDigest = MessageDigest.getInstance("SHA-256");
+            MessageDigest messageDigest = requiredFactory.create();
             byte[] digest = messageDigest.digest(requiredValue.getBytes(StandardCharsets.UTF_8));
             return HexFormat.of().formatHex(digest);
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("SHA-256 is required by the Java platform", exception);
         }
+    }
+
+    @FunctionalInterface
+    interface MessageDigestFactory {
+
+        MessageDigest create() throws NoSuchAlgorithmException;
     }
 }
