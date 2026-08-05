@@ -9,6 +9,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
 import org.springframework.context.annotation.EnableAspectJAutoProxy;
 import org.springframework.retry.annotation.EnableRetry;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * Bootstraps the mightyETL transformation and loading service.
@@ -17,6 +18,7 @@ import org.springframework.retry.annotation.EnableRetry;
 @EnableDiscoveryClient
 @EnableAspectJAutoProxy(proxyTargetClass = true)
 @EnableRetry
+@EnableScheduling
 @EnableConfigurationProperties({
         ConnectorProperties.class,
         EtlBatchProperties.class,
