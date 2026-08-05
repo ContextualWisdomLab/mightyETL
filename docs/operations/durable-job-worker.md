@@ -25,11 +25,16 @@ payloads are acceptable. Enable the worker without intake only to drain already 
 | Preferred property | Environment variable | Default | Constraint |
 | --- | --- | ---: | --- |
 | `mightyetl.etl.jobs.worker.enabled` | `ETL_JOB_WORKER_ENABLED` | `false` | explicit opt-in |
-| `mightyetl.etl.jobs.worker.fixed-delay-milliseconds` | `ETL_JOB_WORKER_FIXED_DELAY_MILLISECONDS` | `5000` | greater than zero |
-| `mightyetl.etl.jobs.worker.initial-delay-milliseconds` | `ETL_JOB_WORKER_INITIAL_DELAY_MILLISECONDS` | `5000` | zero or greater |
-| `mightyetl.etl.jobs.worker.lease-duration-seconds` | `ETL_JOB_WORKER_LEASE_DURATION_SECONDS` | `300` | greater than zero |
+| `mightyetl.etl.jobs.worker.fixed-delay-milliseconds` | `ETL_JOB_WORKER_FIXED_DELAY_MILLISECONDS` | `5000` | 1 through 86,400,000 |
+| `mightyetl.etl.jobs.worker.initial-delay-milliseconds` | `ETL_JOB_WORKER_INITIAL_DELAY_MILLISECONDS` | `5000` | 0 through 86,400,000 |
+| `mightyetl.etl.jobs.worker.lease-duration-seconds` | `ETL_JOB_WORKER_LEASE_DURATION_SECONDS` | `300` | 1 through 86,400 |
 | `mightyetl.etl.jobs.worker.max-attempts` | `ETL_JOB_WORKER_MAX_ATTEMPTS` | `3` | 1 through 100 |
 | `mightyetl.etl.jobs.worker.lease-owner-id` | deployment-specific | generated | 8–128 safe ASCII characters |
+
+Scheduler delays and lease durations have a one-day safety ceiling. Configuration binding and the
+lease repository enforce the same limit, so direct repository callers cannot bypass it. Values above
+the ceiling fail application binding or claim validation rather than creating an effectively
+permanent polling pause, arithmetic overflow, or multi-day stale-work recovery delay.
 
 Set an explicit `lease-owner-id` only when the deployment platform can guarantee one stable,
 non-sensitive value per process. Never use a hostname containing customer data, a pod annotation
@@ -37,7 +42,9 @@ containing credentials, an email address, a tenant identifier, or a raw infrastr
 
 Choose a lease duration longer than the normal high-percentile execution time plus database and
 network variance. The current slice does not renew leases. A lease that expires during execution
-causes the final success transition to fail and rolls back target and response-ledger writes.
+causes the final success transition to fail and rolls back target and response-ledger writes. If a
+normal execution can exceed one day, do not increase the ceiling silently; implement and validate
+lease renewal as a separate fenced capability first.
 
 ## Claim, execution, and recovery
 
@@ -117,7 +124,8 @@ and query parameters as opt-in sensitive telemetry requiring a separate privacy 
 2. Check clock-independent database latency and long-running statements; lease decisions use database
    time.
 3. Verify every process has a safe, distinct lease owner identifier.
-4. Increase the lease duration only after confirming that crash recovery delay remains acceptable.
+4. Increase the lease duration only within the one-day ceiling and only after confirming that crash
+   recovery delay remains acceptable; implement lease renewal instead of exceeding the ceiling.
 
 ### Integrity failure
 
