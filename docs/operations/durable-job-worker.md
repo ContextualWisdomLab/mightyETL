@@ -83,14 +83,15 @@ stable failure code, attempt count, lifecycle state, and timestamps to the authe
 
 The worker publishes finite-cardinality metrics only:
 
-- `etl.jobs.worker.outcomes{outcome=idle|claimed|succeeded|retried|failed|stale}`;
+- `etl.jobs.worker.outcomes{outcome=idle|succeeded|retried|failed|stale}`;
 - `etl.jobs.execution.duration{outcome=idle|succeeded|retried|failed|stale}`.
 
-Every completed poll increments one terminal outcome counter and records one matching duration
-sample. `claimed` is an additional progress counter for polls that acquired work. Idle polls count as
-`idle`; a database failure while persisting a retry or terminal transition counts as `failed`, leaves
-the fenced row recoverable through lease expiry, and is never mislabeled as `retried`, `succeeded`,
-or `stale`.
+Every completed poll increments exactly one terminal outcome counter and records exactly one matching
+duration sample. Idle polls count as `idle`; a database failure while persisting a retry or terminal
+transition counts as `failed`, leaves the fenced row recoverable through lease expiry, and is never
+mislabeled as `retried`, `succeeded`, or `stale`. Claim acquisition is an internal phase, not a second
+outcome series, so summing the outcome counters yields the completed poll count without double
+counting work-bearing polls.
 
 Do not add payloads, raw principals, raw idempotency keys, hashes, job identifiers, lease identifiers,
 SQL text, exception messages, or unbounded exception classes as metric tags or log fields.
@@ -146,12 +147,19 @@ and query parameters as opt-in sensitive telemetry requiring a separate privacy 
 
 Before enabling the worker:
 
-1. Apply and validate Flyway migration `V3__add_etl_job_lease_fencing.sql`.
-2. Confirm the application principal has only the required table and advisory-lock permissions.
-3. Run migration, claim-contention, stale-lease rollback, response-replay, and target compatibility
+1. Apply the transactional `V3__add_etl_job_lease_fencing.sql` migration and then the nonblocking
+   `V4__add_etl_job_claim_eligibility_index.sql` migration.
+2. Confirm V4 uses `CREATE INDEX CONCURRENTLY`, its companion configuration contains
+   `executeInTransaction=false`, Flyway PostgreSQL transactional locking is disabled, and
+   `etl_job_claim_eligibility_index` is valid in the PostgreSQL catalog.
+3. Confirm the application principal has only the required table and advisory-lock permissions.
+4. Run migration, claim-contention, stale-lease rollback, response-replay, and target compatibility
    tests against a production-equivalent PostgreSQL environment.
-4. Deploy with the worker disabled, inspect health and schema evidence, then enable a canary replica.
-5. Verify target, response-ledger, and terminal state atomicity before widening rollout.
+5. Deploy with the worker disabled, inspect health and schema evidence, then enable a canary replica.
+6. Verify target, response-ledger, and terminal state atomicity before widening rollout.
+
+The dedicated rollout, invalid-index recovery, and concurrent rollback procedure is
+`docs/operations/durable-job-claim-index-rollout.md`.
 
 Rollback order is fail-closed:
 
@@ -175,6 +183,15 @@ https://opentelemetry.io/docs/specs/semconv/db/sql/
 
 PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: SELECT*.
 https://www.postgresql.org/docs/18/sql-select.html
+
+PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: CREATE INDEX*.
+https://www.postgresql.org/docs/18/sql-createindex.html
+
+Redgate Software. (2026). *Flyway PostgreSQL transactional lock setting*.
+https://documentation.red-gate.com/fd/flyway-postgresql-transactional-lock-setting-277579114.html
+
+Redgate Software. (2026). *Flyway script configuration*.
+https://documentation.red-gate.com/flyway/reference/script-configuration
 
 Spring Authors. (2026). *Task execution and scheduling*. Broadcom.
 https://docs.spring.io/spring-framework/reference/integration/scheduling.html
