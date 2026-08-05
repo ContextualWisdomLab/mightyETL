@@ -57,7 +57,9 @@ class EtlJobMigrationDocumentationTest {
                         + "V4__add_etl_job_owner_pagination_index.sql"
         ).replaceAll("\\s+", " ");
 
-        assertTrue(migration.contains("CREATE INDEX etl_job_owner_pagination_index"));
+        assertTrue(migration.contains(
+                "CREATE INDEX CONCURRENTLY etl_job_owner_pagination_index"
+        ));
         assertTrue(migration.contains(
                 "ON etl_job_records ( principal_scope_hash, created_at DESC, job_record_id DESC )"
         ));
@@ -122,7 +124,10 @@ class EtlJobMigrationDocumentationTest {
         assertTrue(runbook.contains("etl_invalid_job_page_limit"));
         assertTrue(runbook.contains("etl_invalid_job_page_cursor"));
         assertTrue(runbook.contains("V4__add_etl_job_owner_pagination_index.sql"));
-        assertTrue(runbook.contains("DROP INDEX etl_job_owner_pagination_index"));
+        assertTrue(runbook.contains("executeInTransaction=false"));
+        assertTrue(runbook.contains(
+                "DROP INDEX CONCURRENTLY etl_job_owner_pagination_index"
+        ));
         assertTrue(runbook.contains("RFC 8288"));
     }
 
