@@ -118,6 +118,19 @@ class EtlJobWorkerTest {
     }
 
     @Test
+    void terminalizesIntegrityFailureWithItsStableCode() {
+        EtlJobLease lease = lease(1);
+        when(leaseRepository.claimNext(anyString(), any(), anyInt()))
+                .thenReturn(Optional.of(lease));
+        doThrow(new EtlJobIntegrityException()).when(executionService).execute(lease);
+
+        worker.pollOnce();
+
+        verify(leaseRepository).markFailed(lease, "etl_job_integrity_failure");
+        assertMetric("failed", 1.0, 1L);
+    }
+
+    @Test
     void terminalizesDeterministicRequestFailureWithItsStableCode() {
         EtlJobLease lease = lease(1);
         when(leaseRepository.claimNext(anyString(), any(), anyInt()))
