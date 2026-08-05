@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>The scheduled agent is allowed to prepare feature-branch pull requests. It is not a
  * reviewer or merger. These tests make that separation visible to beginners and prevent a
  * later workflow edit from silently adding a fallback provider, mutable tool version, elevated
- * token permission, protected-branch push, or self-approval path.</p>
+ * token permission, protected-branch push, self-approval path, or deprecated hosted model.</p>
  */
 class HourlyOpenCodeMaintenanceWorkflowTest {
 
@@ -139,13 +139,10 @@ class HourlyOpenCodeMaintenanceWorkflowTest {
      * mapped to the environment variable documented by OpenCode's NVIDIA provider.
      */
     @Test
-    void usesOnlyTheNvidiaNimCredentialAndExplicitModel() {
+    void usesOnlyTheNvidiaNimCredential() {
         assertEquals(Set.of("NVIDIA_NIM_API_KEY"), referencedSecrets());
         assertTrue(workflow.contains(
                 "NVIDIA_API_KEY: ${{ secrets.NVIDIA_NIM_API_KEY }}"
-        ));
-        assertTrue(workflow.contains(
-                "MODEL: nvidia/qwen/qwen3-coder-480b-a35b-instruct"
         ));
         assertTrue(workflow.contains("SHARE: \"false\""));
         assertTrue(workflow.contains("USE_GITHUB_TOKEN: \"true\""));
@@ -154,6 +151,21 @@ class HourlyOpenCodeMaintenanceWorkflowTest {
         assertFalse(lowerCaseWorkflow.contains("copilot"));
         assertFalse(workflow.contains("ANTHROPIC_API_KEY"));
         assertFalse(workflow.contains("OPENAI_API_KEY"));
+    }
+
+    /**
+     * Requires a currently available free NVIDIA endpoint suited to repository-scale coding.
+     *
+     * <p>The previous Qwen3 Coder trial endpoint was deprecated by NVIDIA. A scheduled agent
+     * that pins a deprecated hosted endpoint is not durable automation even when its workflow
+     * and credential handling are otherwise correct. DeepSeek V4 Pro is explicitly exposed by
+     * NVIDIA as a free endpoint with one-million-token context, agentic tool use, and software-
+     * engineering support, so the workflow pins that provider/model identifier.</p>
+     */
+    @Test
+    void usesCurrentFreeAgenticCodingModel() {
+        assertTrue(workflow.contains("MODEL: nvidia/deepseek-ai/deepseek-v4-pro"));
+        assertFalse(workflow.contains("qwen/qwen3-coder-480b-a35b-instruct"));
     }
 
     /**
