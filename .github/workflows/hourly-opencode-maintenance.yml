@@ -82,7 +82,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           GH_TOKEN: ${{ github.token }}
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_NIM_API_KEY }}
-          MODEL: nvidia/qwen/qwen3-coder-480b-a35b-instruct
+          MODEL: nvidia/deepseek-ai/deepseek-v4-pro
           SHARE: "false"
           USE_GITHUB_TOKEN: "true"
           PROMPT: |
