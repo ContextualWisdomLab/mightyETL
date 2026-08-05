@@ -37,7 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Principal-scoped durable asynchronous ETL job intake and owner-scoped status resources, Flyway `etl_job_records` migration, deterministic replay/conflict coverage, and the authoritative lifecycle contract in `docs/etl/durable-job-intake.md`.
 - Durable idempotency ledger migration, PostgreSQL transaction advisory-lock adapter, deterministic concurrency/rollback coverage, and the operator/client contract `docs/etl/idempotent-retries.md`.
 - ETL problem-details client and operator contract: `docs/api/problem-details.md`.
-- Operator-configurable ETL admission limits under `mightyetl.etl.*` / `xtrmetl.*`, backed by `ETL_MAX_PAYLOAD_BYTES` and `ETL_MAX_BATCH_RECORDS` environment variables with hard safety ceilings.
+- Operator-configurable ETL admission limits under `mightyetl.etl.*` / `xtrmetl.etl.*`, backed by `ETL_MAX_PAYLOAD_BYTES` and `ETL_MAX_BATCH_RECORDS` environment variables with hard safety ceilings.
 - ETL transaction rollback integration coverage and the operator runbook `docs/etl/bounded-atomic-batches.md`.
 - Connector scaffolds (contracts + docs only): Qlik Sense, Databricks, Snowflake under `docs/connectors/` and `etl-service` SPI stubs.
 - Any-to-any CDC design notes and source SPI scaffold: `docs/cdc/any-to-any-cdc.md`, `cdc-service` SPI stubs.
@@ -131,7 +131,7 @@ existing xtrmETL platform.
    - Key features overview
    - System architecture summary
    - Technology stack
-   - Use cases
+   - Use cases and scenarios
    - API specifications
    - Quick start guide
    - Future improvements
