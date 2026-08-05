@@ -12,21 +12,18 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Specifies the additive Flyway contract for exact durable-job lease fencing.
+ * Specifies the transactional Flyway contract for exact durable-job lease fencing.
  */
 class EtlJobLeaseMigrationTest {
 
     @Test
-    void addsDescriptiveLeaseColumnsAndEligibilityIndex() throws IOException {
+    void addsDescriptiveLeaseColumnsWithoutNonTransactionalIndexDdl() throws IOException {
         String migration = readMigration();
 
         assertTrue(migration.contains("ADD COLUMN lease_claim_id UUID"));
         assertTrue(migration.contains("ADD COLUMN lease_owner_id VARCHAR(128)"));
         assertTrue(migration.contains("ADD COLUMN lease_expires_at TIMESTAMPTZ"));
-        assertTrue(migration.contains("CREATE INDEX etl_job_claim_eligibility_index"));
-        assertTrue(migration.contains(
-                "(job_status, lease_expires_at, created_at, job_record_id)"
-        ));
+        assertFalse(migration.contains("CREATE INDEX"));
         assertFalse(migration.contains(" ADD COLUMN owner "));
         assertFalse(migration.contains(" ADD COLUMN lease "));
     }
@@ -67,6 +64,9 @@ class EtlJobLeaseMigrationTest {
         return value.replaceAll("\\s+", " ").trim();
     }
 
+    /**
+     * Finds the reactor root from either repository-root or module-local Maven execution.
+     */
     private static Path projectRoot() {
         Path current = Paths.get(System.getProperty("user.dir")).toAbsolutePath();
         Path lastPomParent = null;
