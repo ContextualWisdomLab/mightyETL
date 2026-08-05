@@ -51,6 +51,21 @@ class EtlJobMigrationDocumentationTest {
     }
 
     @Test
+    void paginationMigrationUsesTheOwnerAndCompleteStableOrderingKey() throws IOException {
+        String migration = read(
+                "etl-service/src/main/resources/db/migration/"
+                        + "V4__add_etl_job_owner_pagination_index.sql"
+        ).replaceAll("\\s+", " ");
+
+        assertTrue(migration.contains("CREATE INDEX etl_job_owner_pagination_index"));
+        assertTrue(migration.contains(
+                "ON etl_job_records ( principal_scope_hash, created_at DESC, job_record_id DESC )"
+        ));
+        assertFalse(migration.contains(" OFFSET "));
+        assertFalse(migration.contains("principal_name"));
+    }
+
+    @Test
     void runbookDocumentsAcceptedSemanticsOwnershipAndLeaseFencedExecution() throws IOException {
         String runbook = read("docs/etl/durable-job-intake.md").replaceAll("\\s+", " ");
 
@@ -68,6 +83,22 @@ class EtlJobMigrationDocumentationTest {
         assertTrue(runbook.contains("mightyetl.etl.jobs.intake-enabled=false"));
         assertTrue(runbook.contains("mightyetl.etl.jobs.worker.enabled=false"));
         assertTrue(runbook.contains("xtrmetl.*"));
+    }
+
+    @Test
+    void runbookDocumentsOwnerScopedKeysetPaginationAndRollback() throws IOException {
+        String runbook = read("docs/etl/durable-job-intake.md").replaceAll("\\s+", " ");
+
+        assertTrue(runbook.contains("GET /api/etl/jobs?limit=50"));
+        assertTrue(runbook.contains("created_at DESC, job_record_id DESC"));
+        assertTrue(runbook.contains("strict tuple boundary"));
+        assertTrue(runbook.contains("Link: <"));
+        assertTrue(runbook.contains("rel=\"next\""));
+        assertTrue(runbook.contains("etl_invalid_job_page_limit"));
+        assertTrue(runbook.contains("etl_invalid_job_page_cursor"));
+        assertTrue(runbook.contains("V4__add_etl_job_owner_pagination_index.sql"));
+        assertTrue(runbook.contains("DROP INDEX etl_job_owner_pagination_index"));
+        assertTrue(runbook.contains("RFC 8288"));
     }
 
     private static String read(String relativePath) throws IOException {
