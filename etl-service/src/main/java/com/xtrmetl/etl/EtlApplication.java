@@ -1,6 +1,7 @@
 package com.xtrmetl.etl;
 
 import com.xtrmetl.etl.connector.ConnectorProperties;
+import com.xtrmetl.etl.job.EtlJobWorkerProperties;
 import com.xtrmetl.etl.service.EtlBatchProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -16,7 +17,11 @@ import org.springframework.retry.annotation.EnableRetry;
 @EnableDiscoveryClient
 @EnableAspectJAutoProxy(proxyTargetClass = true)
 @EnableRetry
-@EnableConfigurationProperties({ConnectorProperties.class, EtlBatchProperties.class})
+@EnableConfigurationProperties({
+        ConnectorProperties.class,
+        EtlBatchProperties.class,
+        EtlJobWorkerProperties.class
+})
 public class EtlApplication {
 
     /**
