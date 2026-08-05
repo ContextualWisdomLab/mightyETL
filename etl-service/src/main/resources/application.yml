@@ -32,8 +32,10 @@ xtrmetl:
       worker:
         # Execution remains fail-closed until an operator enables the worker explicitly.
         enabled: ${ETL_JOB_WORKER_ENABLED:false}
+        # Scheduler delays are bounded to one day (86,400,000 milliseconds).
         fixed-delay-milliseconds: ${ETL_JOB_WORKER_FIXED_DELAY_MILLISECONDS:5000}
         initial-delay-milliseconds: ${ETL_JOB_WORKER_INITIAL_DELAY_MILLISECONDS:5000}
+        # Leases are bounded to one day (86,400 seconds); longer jobs require lease renewal.
         lease-duration-seconds: ${ETL_JOB_WORKER_LEASE_DURATION_SECONDS:300}
         max-attempts: ${ETL_JOB_WORKER_MAX_ATTEMPTS:3}
   # Warehouse/BI targets: SPI + config binding + validation + catalog; writes remain SCAFFOLD.
