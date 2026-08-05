@@ -40,7 +40,7 @@ class EtlJobClaimIndexMigrationTest {
                 "CREATE INDEX CONCURRENTLY etl_job_claim_eligibility_index"
         ));
         assertTrue(indexMigration.contains(
-                "ON etl_job_records (job_status, lease_expires_at, created_at, job_record_id)"
+                "ON etl_job_records ( job_status, lease_expires_at, created_at, job_record_id )"
         ));
     }
 
@@ -48,8 +48,8 @@ class EtlJobClaimIndexMigrationTest {
     void disablesFlywayTransactionsAndPostgresqlTransactionalLocksForConcurrentDdl()
             throws IOException {
         Path configurationPath = projectRoot().resolve(V4_CONFIGURATION);
-        String application = normalize(
-                read("etl-service/src/main/resources/application.yml")
+        String applicationProperties = read(
+                "etl-service/src/main/resources/application.properties"
         );
 
         assertTrue(
@@ -60,7 +60,9 @@ class EtlJobClaimIndexMigrationTest {
                 Files.readString(configurationPath, StandardCharsets.UTF_8)
                         .contains("executeInTransaction=false")
         );
-        assertTrue(application.contains("postgresql: transactional-lock: false"));
+        assertTrue(applicationProperties.contains(
+                "spring.flyway.postgresql.transactional-lock=false"
+        ));
     }
 
     @Test
