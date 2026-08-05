@@ -14,7 +14,7 @@ The maintenance workflow will:
 - pin `actions/checkout` by full SHA with persisted credentials disabled;
 - install OpenCode 1.18.13 from an immutable release asset verified by SHA-256;
 - accept exactly one regular archive member named `opencode` before extraction;
-- extract into a fresh mode-`0700` directory with ownership, archived permissions, and overwrites disabled;
+- extract into a fresh mode-`0700` directory without restoring archive ownership or permissions and with overwrites disabled;
 - reject non-regular or symbolic-link output and verify the exact executable version;
 - map only `${{ secrets.NVIDIA_NIM_API_KEY }}` to `NVIDIA_API_KEY`;
 - select `nvidia/deepseek-ai/deepseek-v4-pro`, a current NVIDIA free endpoint documented for coding, agentic tool use, function calling, and long-context software-engineering work;
