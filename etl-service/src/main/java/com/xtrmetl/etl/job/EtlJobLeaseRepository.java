@@ -59,6 +59,9 @@ public class EtlJobLeaseRepository {
 
     private static final String SELECT_CANDIDATE_SQL = """
             SELECT job_record_id,
+                   principal_scope_hash,
+                   submission_key_hash,
+                   request_digest,
                    request_payload,
                    attempt_count,
                    CURRENT_TIMESTAMP AS database_now
@@ -197,6 +200,9 @@ public class EtlJobLeaseRepository {
                     SELECT_CANDIDATE_SQL,
                     (resultSet, rowNumber) -> new ClaimCandidate(
                             resultSet.getObject("job_record_id", UUID.class),
+                            resultSet.getString("principal_scope_hash"),
+                            resultSet.getString("submission_key_hash"),
+                            resultSet.getString("request_digest"),
                             resultSet.getString("request_payload"),
                             resultSet.getInt("attempt_count"),
                             resultSet.getObject("database_now", OffsetDateTime.class).toInstant()
@@ -225,6 +231,9 @@ public class EtlJobLeaseRepository {
                     candidate.jobRecordId(),
                     leaseClaimId,
                     validatedOwnerId,
+                    candidate.principalScopeHash(),
+                    candidate.submissionKeyHash(),
+                    candidate.requestDigest(),
                     candidate.requestPayload(),
                     candidate.attemptCount() + 1,
                     leaseExpiresAt
@@ -343,6 +352,9 @@ public class EtlJobLeaseRepository {
 
     private record ClaimCandidate(
             UUID jobRecordId,
+            String principalScopeHash,
+            String submissionKeyHash,
+            String requestDigest,
             String requestPayload,
             int attemptCount,
             Instant databaseNow
