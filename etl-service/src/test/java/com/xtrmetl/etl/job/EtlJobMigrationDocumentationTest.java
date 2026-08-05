@@ -51,21 +51,23 @@ class EtlJobMigrationDocumentationTest {
     }
 
     @Test
-    void runbookDocumentsAcceptedSemanticsOwnershipAndTheWorkerBoundary() throws IOException {
+    void runbookDocumentsAcceptedSemanticsOwnershipAndLeaseFencedExecution() throws IOException {
         String runbook = read("docs/etl/durable-job-intake.md").replaceAll("\\s+", " ");
 
         assertTrue(runbook.contains("202 Accepted"));
         assertTrue(runbook.contains("Location: /api/etl/jobs/{job_record_id}"));
         assertTrue(runbook.contains("same authenticated principal"));
-        assertTrue(runbook.contains("byte-for-byte same JSON text"));
-        assertTrue(runbook.contains("does not execute jobs yet"));
+        assertTrue(runbook.contains("byte-for-byte identical JSON text"));
+        assertTrue(runbook.contains("lease-fenced worker claims accepted jobs"));
+        assertTrue(runbook.contains("PostgreSQL, not scheduler uniqueness, distributes work"));
+        assertTrue(runbook.contains("same transaction"));
         assertTrue(runbook.contains("request payload"));
-        assertTrue(runbook.contains("worker and lease-fencing slice"));
         assertTrue(runbook.contains("Cache-Control: no-store"));
         assertTrue(runbook.contains("422 etl_job_submission_key_reused"));
-        assertTrue(runbook.contains("disabled by default"));
-        assertTrue(runbook.contains("mightyetl.etl.jobs.intake-enabled=true"));
-        assertTrue(runbook.contains("xtrmetl.etl.jobs.intake-enabled=true"));
+        assertTrue(runbook.contains("fail-closed"));
+        assertTrue(runbook.contains("mightyetl.etl.jobs.intake-enabled=false"));
+        assertTrue(runbook.contains("mightyetl.etl.jobs.worker.enabled=false"));
+        assertTrue(runbook.contains("xtrmetl.*"));
     }
 
     private static String read(String relativePath) throws IOException {
