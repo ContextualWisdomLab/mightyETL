@@ -22,7 +22,8 @@ import java.util.regex.Pattern;
  * oldest eligible row with {@code FOR UPDATE SKIP LOCKED}, and finally writes a fresh claim token,
  * owner, expiry, and incremented attempt count before commit. State transitions repeat the exact
  * claim token, owner, running status, and database-time expiry predicates so stale workers cannot
- * mutate lifecycle state.</p>
+ * mutate lifecycle state. Public callers cannot create leases longer than the worker's one-day
+ * operational ceiling, even when they bypass Spring configuration binding.</p>
  */
 @Repository
 public class EtlJobLeaseRepository {
@@ -174,7 +175,7 @@ public class EtlJobLeaseRepository {
      * Claims at most one oldest eligible job for one worker process.
      *
      * @param leaseOwnerId safe non-sensitive process identifier
-     * @param leaseDuration positive duration applied to database claim time
+     * @param leaseDuration duration from one second through one day
      * @param maxAttempts maximum permitted claim count from 1 through 100
      * @return a fresh claim, or an empty result when no row is eligible
      * @throws NullPointerException when an argument is {@code null}
@@ -318,8 +319,15 @@ public class EtlJobLeaseRepository {
                 leaseDuration,
                 "leaseDuration must not be null"
         );
-        if (requiredDuration.isZero() || requiredDuration.isNegative()) {
-            throw new IllegalArgumentException("leaseDuration must be positive");
+        Duration maximumDuration = Duration.ofSeconds(
+                EtlJobWorkerProperties.MAXIMUM_LEASE_DURATION_SECONDS
+        );
+        if (requiredDuration.isZero()
+                || requiredDuration.isNegative()
+                || requiredDuration.compareTo(maximumDuration) > 0) {
+            throw new IllegalArgumentException(
+                    "leaseDuration must be between one second and one day"
+            );
         }
         return requiredDuration;
     }
