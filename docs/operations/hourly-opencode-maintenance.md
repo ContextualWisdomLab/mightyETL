@@ -29,20 +29,21 @@ Never place the key in repository variables, source files, workflow output, issu
 | Control | Pinned value |
 | --- | --- |
 | Schedule | `43 * * * *` |
-| OpenCode release | `v1.18.13` immutable GitHub release |
+| OpenCode release | immutable GitHub release `v1.18.13` |
+| Linux x64 release asset | asset `501285078`, `opencode-linux-x64.tar.gz` |
 | Linux x64 archive SHA-256 | `8d500b20fed2d26e537e221895b1a575476571b4f0089bb29fb13eeb8eb9e937` |
-| Expected archive shape | exactly one root member named `opencode` |
+| Expected archive shape | exactly one root regular-file entry named `opencode` |
 | OpenCode provider/model | `nvidia/qwen/qwen3-coder-480b-a35b-instruct` |
-| OpenCode agent | Repository `default_agent`, with OpenCode 1.18.13 falling back to `build` |
+| OpenCode agent | repository `default_agent`, with OpenCode 1.18.13 falling back to `build` |
 | Checkout action | `actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0` |
 | OpenCode process timeout | `TERM` after 45 minutes, then `KILL` after a 30-second grace period |
 | GitHub job timeout | 50 minutes |
 | Session sharing | disabled |
 | Overlapping runs | disabled; an active run is not cancelled |
 
-The workflow downloads the immutable `opencode-linux-x64.tar.gz` release asset and verifies the authoritative SHA-256 published by the upstream release process. Before extraction it lists the archive and requires exactly one member named `opencode`. It then creates a fresh mode-`0700` installation directory, refuses overwrites, does not restore archived ownership or permissions, and verifies that the extracted object is a regular non-symbolic-link file whose reported version is exactly `1.18.13`. It does not execute an npm install command, invoke a mutable OpenCode GitHub Action tag, or use a floating `latest` reference. Checkout credentials are not persisted in the working tree.
+The workflow downloads the immutable `opencode-linux-x64.tar.gz` release asset and verifies its pinned SHA-256. Before extraction it lists the archive and requires exactly one member named `opencode`. It then reads the sole member's locale-stable GNU tar verbose metadata and requires the regular-file type character `-`, rejecting hard links, symbolic links, directories, device nodes, and other special entries before the filesystem is modified. It creates a fresh mode-`0700` installation directory, refuses overwrites, does not restore archived ownership or permissions, and verifies that the extracted object is a regular non-symbolic-link file whose reported version is exactly `1.18.13`. It does not execute an npm install command, invoke a mutable OpenCode GitHub Action tag, or use a floating `latest` reference. Checkout credentials are not persisted in the working tree.
 
-Checksum validation and member validation are separate controls. The checksum binds the bytes to the reviewed release asset; the member check constrains the extraction shape if a future pin is changed incorrectly or upstream packaging changes. The private empty extraction directory and post-extraction type checks provide additional containment.
+Checksum validation, member validation, entry-type validation, and post-extraction validation are separate controls. The checksum binds the bytes to the reviewed immutable release asset. Member-name and type checks constrain extraction when a future pin is changed incorrectly or upstream packaging changes. The private empty extraction directory, overwrite refusal, and post-extraction type checks provide further containment.
 
 OpenCode 1.18.13's raw `opencode github run` handler does not consume an `AGENT` environment variable. It deliberately omits an explicit agent from the session request, allowing repository `default_agent` configuration or the handler's `build` fallback. The workflow therefore does not set a misleading `AGENT` variable.
 
@@ -99,15 +100,16 @@ The agent must not:
 
 1. GitHub starts the workflow from the default branch.
 2. The workflow checks out a shallow copy with persisted credentials disabled.
-3. It downloads the OpenCode 1.18.13 Linux archive and verifies the pinned SHA-256.
-4. It requires exactly one archive member named `opencode`, extracts into a fresh private directory without archived ownership or permissions, and verifies a regular non-symbolic-link executable with the exact version.
-5. It checks that `NVIDIA_NIM_API_KEY` was supplied through `NVIDIA_API_KEY` and that the repository token aliases are present.
-6. It installs the repository-local Git author and GitHub CLI credential helper required by OpenCode's direct-token path.
-7. OpenCode inspects all current pull requests before selecting any work.
-8. The agent runs tests first, implements one bounded change, updates authoritative documentation and `CHANGELOG.md`, and leaves a feature branch and pull request.
-9. The shell `EXIT` trap removes the local Git credential helper.
-10. Independent review and repository checks evaluate the exact new head.
-11. The separate disposition workflow may merge only after every gate passes.
+3. It downloads the OpenCode 1.18.13 Linux x64 archive and verifies the pinned SHA-256.
+4. It requires exactly one archive member named `opencode` and confirms through locale-stable verbose metadata that the entry is a regular file before extraction.
+5. It extracts into a fresh private directory without archived ownership or permissions, refuses overwrites, and verifies a regular non-symbolic-link executable with the exact version.
+6. It checks that `NVIDIA_NIM_API_KEY` was supplied through `NVIDIA_API_KEY` and that the repository token aliases are present.
+7. It installs the repository-local Git author and GitHub CLI credential helper required by OpenCode's direct-token path.
+8. OpenCode inspects all current pull requests before selecting any work.
+9. The agent runs tests first, implements one bounded change, updates authoritative documentation and `CHANGELOG.md`, and leaves a feature branch and pull request.
+10. The shell `EXIT` trap removes the local Git credential helper.
+11. Independent review and repository checks evaluate the exact new head.
+12. The separate disposition workflow may merge only after every gate passes.
 
 ## Failure handling
 
@@ -117,9 +119,10 @@ The agent must not:
 | Repository token missing | Job fails before Git bootstrap | Restore normal GitHub Actions token availability; do not add a personal token |
 | GitHub CLI or Git bootstrap fails | Job fails before OpenCode starts or push fails visibly | Retain `persist-credentials: false`; verify the runner-provided `gh` executable and local helper entries |
 | Release archive unavailable | Installation step fails before extraction | Verify the immutable upstream release exists; do not substitute a floating version |
-| Archive checksum mismatches | Installation fails closed before extraction | Treat as a supply-chain incident; compare the upstream immutable release and generated tap checksum before changing any pin |
-| Archive has an unexpected member set | Installation fails closed before extraction | Treat the packaging change as a supply-chain review event; inspect the exact immutable asset before updating the member contract |
-| Extracted object is absent, non-regular, or a symbolic link | Installation fails before execution | Treat as a supply-chain incident; do not relax the file-type checks |
+| Archive checksum mismatches | Installation fails closed before extraction | Treat as a supply-chain incident; compare the immutable release record, asset metadata, and upstream publishing source before changing any pin |
+| Archive has an unexpected member name or count | Installation fails closed before extraction | Treat the packaging change as a supply-chain review event; inspect the exact immutable asset before updating the member contract |
+| Archive member is not a regular-file entry | Installation fails closed before extraction | Treat link, directory, or special-entry packaging as a supply-chain incident; do not relax the type gate |
+| Extracted object is absent, non-regular, or a symbolic link | Installation fails before execution | Treat as a supply-chain incident; do not relax post-extraction checks |
 | OpenCode version mismatches | Installation step fails | Investigate the verified archive contents; do not bypass the version assertion |
 | NVIDIA API unavailable or model rejected | OpenCode step fails | Check NVIDIA service health and model availability; retain the current PR state |
 | Process exceeds 45 minutes | `timeout` sends `TERM`, escalates to `KILL` after 30 seconds if necessary, the credential-cleanup trap runs, and the step fails | Inspect the incomplete feature branch or PR; reduce slice size if needed |
@@ -143,11 +146,12 @@ Before merging a workflow change, verify the exact current head has:
 - successful Windows, Ubuntu, and macOS CI;
 - successful dependency review, SBOM, Semgrep, Trivy, OSV, and Scorecard gates required by repository policy;
 - no unresolved current review thread;
-- independent approval;
+- independent approval anchored to the exact current head;
 - the `automerge-workflow` label required by the deterministic disposition workflow;
 - no new secret reference other than `NVIDIA_NIM_API_KEY`;
 - a full-SHA checkout pin and checksum-pinned immutable OpenCode release asset;
 - exactly one expected archive member validated before extraction;
+- a pre-extraction regular-file entry-type check under `LC_ALL=C`;
 - a fresh mode-`0700` extraction directory, overwrite refusal, and regular non-symbolic-link executable validation;
 - no npm install command, floating package tag, or mutable OpenCode action reference;
 - workflow-level read-only permission plus explicit job-scoped write permissions;
@@ -160,9 +164,9 @@ Before merging a workflow change, verify the exact current head has:
 
 Anomaly. (2026). *GitHub handler (Version 1.18.13)* [Source code]. GitHub. https://github.com/anomalyco/opencode/blob/v1.18.13/packages/opencode/src/cli/cmd/github.handler.ts
 
-Anomaly. (2026). *OpenCode release v1.18.13* [Software release]. GitHub. https://github.com/anomalyco/opencode/releases/tag/v1.18.13
+Anomaly. (2026). *OpenCode release publishing script* [Source code]. GitHub. https://github.com/anomalyco/opencode/blob/v1.18.13/packages/opencode/script/publish.ts
 
-Anomaly. (2026). *OpenCode Homebrew formula* [Source code]. GitHub. https://github.com/anomalyco/homebrew-tap/blob/master/opencode.rb
+Anomaly. (2026). *OpenCode release v1.18.13* [Software release]. GitHub. https://github.com/anomalyco/opencode/releases/tag/v1.18.13
 
 Anomaly. (2026). *GitHub integration*. OpenCode. https://opencode.ai/docs/github/
 
@@ -175,6 +179,8 @@ Free Software Foundation. (2026). *timeout: Run a command with a time limit*. GN
 GitHub, Inc. (2026). *Automatic token authentication*. GitHub Docs. https://docs.github.com/en/actions/security-for-github-actions/security-guides/automatic-token-authentication
 
 GitHub, Inc. (2026). *GitHub CLI manual: gh auth git-credential*. GitHub CLI Manual. https://cli.github.com/manual/gh_auth_git-credential
+
+GitHub, Inc. (2026). *OpenCode v1.18.13 Linux x64 release asset metadata* [JSON metadata]. GitHub REST API. https://api.github.com/repos/anomalyco/opencode/releases/assets/501285078
 
 GitHub, Inc. (2026). *Workflow syntax for GitHub Actions*. GitHub Docs. https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax
 
