@@ -2,125 +2,119 @@
 
 ## Purpose
 
-mightyETL needs a scheduled development loop that can inspect the current repository state, remediate one bounded item, and open or update a pull request without weakening the independent review and merge gates. The scheduled agent must use OpenCode with the repository secret `NVIDIA_NIM_API_KEY`; it must not use GitHub Copilot and must not change the credentials or configuration of the existing review agent.
+mightyETL needs a scheduled development loop that can inspect current repository state, remediate one bounded item, and open or update a pull request without weakening independent review and merge gates. The scheduled agent must use OpenCode with `NVIDIA_NIM_API_KEY`; it must not use GitHub Copilot or change the existing review agent's credentials, provider, workflow, or authority.
 
 ## Decision
 
-Add a separate `.github/workflows/hourly-opencode-maintenance.yml` workflow. Preserve `.github/workflows/hourly-pr-disposition.yml` as the deterministic, fail-closed merge-disposition boundary and require that boundary to recognize only a non-author approval anchored to the exact current head.
+Add a separate `.github/workflows/hourly-opencode-maintenance.yml` workflow. Preserve `.github/workflows/hourly-pr-disposition.yml` as the deterministic, fail-closed merge boundary and require a non-author approval anchored to the exact current head.
 
 The maintenance workflow will:
 
 - run at minute 43 of every hour and on manual dispatch;
-- use an immutable full-length SHA for `actions/checkout` and disable persisted checkout credentials;
-- download the immutable OpenCode `v1.18.13` Linux x64 release archive and verify SHA-256 `8d500b20fed2d26e537e221895b1a575476571b4f0089bb29fb13eeb8eb9e937` before extraction;
-- require the verified archive to contain exactly one root member named `opencode` and require its GNU tar entry type to be a regular file before extraction;
-- extract into a fresh mode-`0700` directory with overwrite refusal, then reject non-regular or symbolic-link output;
-- avoid npm install commands, floating package tags, and mutable OpenCode action references;
-- map `${{ secrets.NVIDIA_NIM_API_KEY }}` only to OpenCode's documented `NVIDIA_API_KEY` environment variable;
-- select `nvidia/qwen/qwen3-coder-480b-a35b-instruct` explicitly;
-- keep the workflow-level token default read-only and scope required write permissions to the sole maintenance job;
-- use the repository-scoped GitHub token, without OpenCode OIDC exchange, and grant only the write permissions needed to create branches, pull requests, and issues plus read access to checks, statuses, workflow outcomes, and security findings;
-- bootstrap a repository-local GitHub CLI credential helper and bot author identity because OpenCode 1.18.13 skips internal Git setup when direct `GITHUB_TOKEN` mode is selected;
-- remove the local helper through an `EXIT` trap after success, failure, or process timeout;
-- omit the ineffective `AGENT` environment variable because raw OpenCode 1.18.13 uses repository `default_agent` configuration or its `build` fallback;
+- pin `actions/checkout` by full SHA with persisted credentials disabled;
+- install OpenCode 1.18.13 from an immutable release asset verified by SHA-256;
+- accept exactly one regular archive member named `opencode` before extraction;
+- extract into a fresh mode-`0700` directory with ownership, archived permissions, and overwrites disabled;
+- reject non-regular or symbolic-link output and verify the exact executable version;
+- map only `${{ secrets.NVIDIA_NIM_API_KEY }}` to `NVIDIA_API_KEY`;
+- select `nvidia/deepseek-ai/deepseek-v4-pro`, a current NVIDIA free endpoint documented for coding, agentic tool use, function calling, and long-context software-engineering work;
+- configure no automatic model or provider fallback;
+- keep workflow-level permissions read-only and scope required write permissions to the sole maintenance job;
+- use the repository-scoped GitHub token without OpenCode OIDC exchange;
+- bootstrap a repository-local GitHub CLI credential helper and bot author because OpenCode 1.18.13 skips internal Git setup in direct-token mode;
+- remove the helper through an `EXIT` trap;
+- omit the ineffective `AGENT` environment variable, allowing repository `default_agent` or OpenCode's `build` fallback;
 - disable public session sharing;
-- cap each run with a 45-minute `TERM` timeout, 30-second `KILL` escalation, and 50-minute workflow timeout;
-- run from the protected default branch and never from pull-request code.
+- cap each run with a 45-minute `TERM` timeout, 30-second `KILL` escalation, and 50-minute job timeout;
+- run from protected default-branch source, never pull-request code.
+
+## Model selection boundary
+
+The previous Qwen3 Coder free endpoint is marked deprecated in NVIDIA's current catalog. A deprecated hosted endpoint makes the scheduler unreliable even if its workflow, credentials, and Git behavior are correct. DeepSeek V4 Pro is selected because NVIDIA currently exposes it through a free endpoint and documents coding, agentic AI, tool use, structured output, function calling, software-engineering use cases, and up to one million tokens of context.
+
+The model identifier is explicit and test-guarded. The workflow has no automatic fallback because invoking a second model after a partially completed session could operate on non-deterministic workspace state, create duplicate branches, or generate conflicting pull requests. Endpoint rejection fails visibly and requires a separate test-first model-selection change. The repository does not claim NVIDIA benchmarks as mightyETL performance and does not claim that raw OpenCode selects a maximum-reasoning variant.
 
 ## Supply-chain boundary
 
-An exact npm version is not a content identity and was reported by GitHub Advanced Security's Scorecard integration as an unpinned command dependency. The workflow therefore consumes the immutable upstream release asset directly.
+An exact npm version is not a content identity. The workflow therefore consumes the immutable upstream release asset directly.
 
 The installation step:
 
-1. downloads only over HTTPS with redirect failure handling and a TLS 1.2 minimum;
-2. verifies the archive against the pinned SHA-256 associated with the immutable GitHub release asset;
-3. lists the verified archive and requires exactly one member named `opencode` before extraction;
-4. obtains locale-stable GNU tar verbose metadata and requires the sole member's type character to be `-`, rejecting hard links, symbolic links, directories, device nodes, and other special entries;
-5. refuses extraction on a checksum, member-shape, or entry-type mismatch;
-6. creates a fresh mode-`0700` extraction directory and refuses overwrites;
-7. extracts without preserving archive ownership or permissions;
-8. requires the extracted object to be a regular file and not a symbolic link;
-9. applies executable mode only to the expected `opencode` file;
-10. verifies the binary reports exactly `1.18.13` before adding its directory to `GITHUB_PATH`.
+1. downloads only over HTTPS with failure handling and TLS 1.2 minimum;
+2. verifies SHA-256 `8d500b20fed2d26e537e221895b1a575476571b4f0089bb29fb13eeb8eb9e937`;
+3. requires exactly one archive member named `opencode`;
+4. under `LC_ALL=C`, requires GNU tar's regular-file type character `-` before extraction;
+5. refuses extraction on checksum, member-shape, or entry-type mismatch;
+6. recreates a private mode-`0700` directory and refuses overwrites;
+7. extracts without restoring archive ownership or permissions;
+8. requires a regular non-symbolic-link output file;
+9. applies executable mode only to that file;
+10. verifies version `1.18.13` before adding it to `GITHUB_PATH`.
 
-The checksum and archive controls serve different purposes. SHA-256 binds the downloaded bytes to the reviewed immutable upstream asset. Exact name and regular-entry validation constrain filesystem effects when a future pin is changed incorrectly or upstream packaging changes. Private-directory extraction and post-extraction file-type checks provide defense in depth.
-
-This closes the mutable npm-command finding without adding a package-manager bootstrap, lockfile-generation network step, floating release reference, or unconstrained archive extraction.
+Checksum binding, pre-extraction name and type checks, private extraction, overwrite refusal, and post-extraction file checks are cumulative controls. They close the mutable npm-command finding without a package-manager bootstrap, floating release, mutable action reference, or unconstrained extraction.
 
 ## Direct-token credential lifecycle
 
-OpenCode 1.18.13 reads `USE_GITHUB_TOKEN`, uses `GITHUB_TOKEN` for GitHub API access, and then deliberately bypasses its `configureGit` function. Its scheduled-event path later invokes ordinary `git commit` and `git push` commands to publish the generated branch before creating a pull request. With `persist-credentials: false`, those commands otherwise have neither a commit author nor a credential source.
+OpenCode 1.18.13 uses `GITHUB_TOKEN` for GitHub API access when `USE_GITHUB_TOKEN=true` and skips its internal `configureGit` function. Its scheduled-event path later uses ordinary `git commit` and `git push`. With `persist-credentials: false`, those commands otherwise lack both author identity and HTTPS credentials.
 
-The workflow resolves this version-specific gap without weakening checkout isolation:
+The workflow therefore:
 
-1. checkout still persists no credential;
-2. the run step fails closed if `NVIDIA_API_KEY`, `GITHUB_TOKEN`, or `GH_TOKEN` is empty;
-3. inherited GitHub credential helpers are reset for the repository-local scope;
-4. `!gh auth git-credential` is installed only as a repository-local helper and reads the ephemeral token from `GH_TOKEN` when Git requests credentials;
-5. local `user.name` and `user.email` identify infrastructure-created commits as `opencode-agent[bot]`;
-6. an `EXIT` trap removes the local helper even when OpenCode fails, exits after `TERM`, or is forcibly ended after the grace period;
-7. no encoded token, personal token, OIDC permission, model fallback, tracked credential file, or review-agent secret is introduced.
+1. fails closed if `NVIDIA_API_KEY`, `GITHUB_TOKEN`, or `GH_TOKEN` is empty;
+2. resets inherited GitHub credential helpers in repository-local configuration;
+3. installs `!gh auth git-credential`, which reads the ephemeral token from `GH_TOKEN` only when Git requests credentials;
+4. sets local `user.name` and `user.email` to `opencode-agent[bot]`;
+5. removes the helper through an `EXIT` trap after success, failure, timeout, or forced termination.
 
-The agent process already requires the repository token for GitHub API calls, so this bootstrap does not expand token scope. It makes the granted `contents: write` capability operational while keeping credential resolution bounded to the ephemeral runner and repository-local Git configuration.
+No encoded token, personal token, OIDC permission, tracked credential file, alternate model credential, or review-agent secret is introduced.
 
 ## Permission inheritance boundary
 
-GitHub applies workflow-level permissions to every job unless a job provides its own permission map. A top-level `contents: write` grant therefore creates avoidable future-job inheritance. The workflow sets only top-level `contents: read` and gives the sole `maintain-repository` job its explicit read/write map. This preserves current functionality while preventing a future observation or reporting job from silently inheriting write authority.
+GitHub applies workflow-level permissions to jobs unless a job provides its own map. The workflow sets only top-level `contents: read` and gives the sole `maintain-repository` job the minimum explicit map needed to inspect checks and security state, create a feature branch, update issues, and create or update a pull request. `contents: write` is necessary for the bounded branch operation; branch protection remains authoritative for `develop` and `main`.
 
 ## Agent authority boundary
 
-The prompt is part of the security boundary. The OpenCode agent may inspect, test, edit, commit, push a feature branch, update one existing pull request, or open one pull request. It must not:
+The prompt is part of the security boundary. The agent may inspect, test, edit, commit, push one feature branch, update one development pull request, or open one pull request. It must not:
 
 - approve or merge a pull request;
 - push directly to `develop` or `main`;
-- bypass checks, branch protection, security gates, or independent review;
-- alter review-agent workflows, review-agent secret names, `CODEOWNERS`, branch protection, or repository secrets;
-- modify its own workflow or other `.github/workflows/**` files unless an open issue explicitly carries the `automation-maintenance` label;
-- expose secret values, payloads, raw principals, raw idempotency keys, or internal exception details;
-- create a second development pull request while another development pull request is open.
+- bypass checks, branch protection, security gates, coverage, or independent review;
+- alter review-agent workflows, providers, credentials, secret names, `CODEOWNERS`, branch protection, or repository secrets;
+- modify `.github/workflows/**` unless an issue explicitly labeled `automation-maintenance` authorizes that exact bounded change;
+- expose secret values, request payloads, raw principals, raw idempotency keys, or internal exception details;
+- create a second development pull request while another one is open;
+- publish a release without a separate release-authorized workflow and every acceptance gate.
 
-The deterministic hourly disposition workflow remains responsible for exact-head merge eligibility. Branch protection remains authoritative even if the maintenance agent proposes a change.
+The deterministic disposition workflow independently evaluates reviews, current threads, named checks, status contexts, labels, mergeability, and expected head SHA.
 
-## Data and control flow
+## Data flow
 
-1. GitHub starts the scheduled workflow from `develop`.
-2. Checkout reads the default-branch source with credentials persistence disabled.
-3. The installer downloads the immutable OpenCode archive and verifies the pinned SHA-256.
-4. The installer validates the one-member archive shape and regular-file entry type before extraction.
-5. It extracts into a fresh private directory without archived ownership or permissions, refuses overwrites, and verifies a regular non-symbolic-link executable at the exact version.
-6. The shell validates required tokens, installs the repository-local bot author and GitHub CLI credential helper, and registers helper cleanup.
-7. `opencode github run` receives the bounded maintenance prompt, NVIDIA model selection, `GITHUB_TOKEN`, `GH_TOKEN`, and `NVIDIA_API_KEY` alias.
-8. The agent inspects every open pull request first. If one exists, it works only on the dependency-eligible current head. If none exists, it selects one bounded buyer-visible gap, preferring the durable worker lifecycle tracked in issue #120.
-9. OpenCode infrastructure commits and pushes the generated feature branch and opens or updates one pull request. It does not approve or merge.
-10. The shell removes the repository-local credential helper.
-11. Existing CI, security, independent review, and the deterministic disposition workflow evaluate the exact head independently.
+1. GitHub starts the workflow from `develop`.
+2. Checkout reads protected default-branch source without persisting credentials.
+3. The installer verifies the immutable OpenCode archive, member name, regular entry type, extraction boundary, output type, and executable version.
+4. The shell validates required secrets and token aliases, installs local Git identity and helper, and registers cleanup.
+5. OpenCode calls `nvidia/deepseek-ai/deepseek-v4-pro` with the bounded prompt.
+6. The agent inspects all open pull requests first. It repairs one dependency-eligible exact head or, when none exists, selects one bounded buyer-visible gap, preferring issue #120 while open and ready.
+7. OpenCode prepares one branch and pull request but does not approve or merge.
+8. The shell removes its credential helper.
+9. CI, security, independent review, branch protection, and deterministic disposition evaluate the exact head independently.
 
 ## Failure behavior
 
-- A missing `NVIDIA_NIM_API_KEY`, missing repository token alias, unavailable NVIDIA endpoint, release download failure, checksum mismatch, archive-member mismatch, non-regular archive entry, extracted-file type mismatch, version mismatch, Git bootstrap failure, timeout, test failure, or GitHub permission denial fails the scheduled job visibly.
-- The archive is never extracted after a checksum, member-shape, or entry-type mismatch.
-- Extraction occurs only in a newly recreated mode-`0700` directory and refuses overwrites.
-- No fallback provider or Copilot credential is configured.
-- Concurrency is serialized with `cancel-in-progress: false`, preventing overlapping maintenance runs from racing.
-- At 45 minutes, the process receives `TERM`; if it remains alive after 30 seconds, GNU `timeout` sends `KILL` so the shell can complete its credential-cleanup trap before the 50-minute workflow limit.
-- The workflow does not publish a release or merge partial work.
+Missing credentials, deprecated or rejected model, NVIDIA outage, download failure, checksum mismatch, archive mismatch, non-regular entry, extracted-file mismatch, version mismatch, Git bootstrap failure, timeout, test failure, or permission denial fails visibly. No provider fallback or partial-success claim is allowed. Concurrency is serialized. At 45 minutes, `TERM` is followed by `KILL` after 30 seconds if necessary; the job-level timeout remains 50 minutes.
 
 ## Verification
 
-Repository tests parse the workflow as text and fail unless they prove all of the following:
+Repository tests fail unless they prove:
 
-- hourly off-peak schedule, serialized concurrency, bounded graceful timeout, and forced termination;
-- full-SHA checkout pinning and disabled credential persistence;
-- immutable OpenCode release URL, exact SHA-256 verification, exact version verification, and no npm install command;
-- exact one-member archive validation and regular-file entry-type validation before extraction;
-- private extraction directory creation, overwrite refusal, and regular non-symbolic-link output checks;
-- exclusive use of `NVIDIA_NIM_API_KEY` through `NVIDIA_API_KEY` with the explicit NVIDIA model;
-- no Copilot, Anthropic, or OpenAI credential path;
-- private session setting and direct GitHub token mode;
-- repository-local GitHub CLI credential helper, bot author identity, `EXIT` cleanup, no persisted encoded authorization header, and no ineffective `AGENT: build` claim;
-- read-only workflow default plus job-scoped least-privilege permissions without `id-token`;
-- prompt prohibitions against approval, merge, protected-branch pushes, review-agent key changes, workflow self-modification, and duplicate pull requests.
+- hourly serialized scheduling and bounded forced termination;
+- immutable checkout and OpenCode content pins;
+- exact pre-extraction member name and regular-file type;
+- private extraction, overwrite refusal, and regular non-symbolic-link output;
+- exclusive use of `NVIDIA_NIM_API_KEY` and current `nvidia/deepseek-ai/deepseek-v4-pro` selection;
+- rejection of the deprecated Qwen3 Coder identifier and non-NVIDIA credential paths;
+- direct-token Git bootstrap and cleanup without stored encoded authorization;
+- workflow-level read-only and job-scoped least privilege without OIDC;
+- prompt prohibitions against approval, merge, protected-branch writes, review-agent changes, self-modification, and duplicate pull requests.
 
 ## References
 
@@ -130,22 +124,16 @@ Anomaly. (2026). *OpenCode release publishing script* [Source code]. GitHub. htt
 
 Anomaly. (2026). *OpenCode release v1.18.13* [Software release]. GitHub. https://github.com/anomalyco/opencode/releases/tag/v1.18.13
 
-Anomaly. (2026). *GitHub integration*. OpenCode. https://opencode.ai/docs/github/
-
-Anomaly. (2026). *Providers*. OpenCode. https://opencode.ai/docs/providers/
-
 Free Software Foundation. (2023). *GNU tar 1.35: Security*. https://www.gnu.org/software/tar/manual/html_section/Security.html
-
-Free Software Foundation. (2026). *timeout: Run a command with a time limit*. GNU Coreutils 9.11. https://www.gnu.org/software/coreutils/manual/html_node/timeout-invocation.html
 
 GitHub, Inc. (2026). *Automatic token authentication*. GitHub Docs. https://docs.github.com/en/actions/security-for-github-actions/security-guides/automatic-token-authentication
 
 GitHub, Inc. (2026). *GitHub CLI manual: gh auth git-credential*. GitHub CLI Manual. https://cli.github.com/manual/gh_auth_git-credential
 
-GitHub, Inc. (2026). *OpenCode v1.18.13 Linux x64 release asset metadata* [JSON metadata]. GitHub REST API. https://api.github.com/repos/anomalyco/opencode/releases/assets/501285078
-
 GitHub, Inc. (2026). *Workflow syntax for GitHub Actions*. GitHub Docs. https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax
 
-GitHub, Inc. (2026). *Security hardening for GitHub Actions*. GitHub Docs. https://docs.github.com/en/actions/security-for-github-actions/security-guides/security-hardening-for-github-actions
+NVIDIA Corporation. (2026). *DeepSeek V4 Pro*. NVIDIA NIM API catalog. https://build.nvidia.com/deepseek-ai/deepseek-v4-pro
 
-NVIDIA Corporation. (2026). *LLM APIs*. NVIDIA API documentation. https://docs.api.nvidia.com/nim/reference/llm-apis
+NVIDIA Corporation. (2026). *DeepSeek AI / DeepSeek V4 Pro*. NVIDIA NIM API reference. https://docs.api.nvidia.com/nim/reference/deepseek-ai-deepseek-v4-pro
+
+NVIDIA Corporation. (2026). *Qwen3-Coder-480B-A35B-Instruct*. NVIDIA NIM API catalog. https://build.nvidia.com/qwen/qwen3-coder-480b-a35b-instruct
