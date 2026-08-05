@@ -124,6 +124,28 @@ class EtlJobConditionalStatusTest {
     }
 
     @Test
+    void nullAndEmptyFailureCodesHaveDifferentRepresentationValidators() throws Exception {
+        when(etlJobService.findOwned(JOB_RECORD_ID, "tenant_alpha"))
+                .thenReturn(
+                        snapshot(EtlJobStatus.FAILED, 3, null, UPDATED_AT),
+                        snapshot(EtlJobStatus.FAILED, 3, "", UPDATED_AT)
+                );
+
+        String priorEntityTag = mockMvc.perform(statusRequest())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.failureCode").doesNotExist())
+                .andReturn()
+                .getResponse()
+                .getHeader(HttpHeaders.ETAG);
+        assertNotNull(priorEntityTag);
+
+        mockMvc.perform(statusRequest().header(HttpHeaders.IF_NONE_MATCH, priorEntityTag))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.ETAG, not(equalTo(priorEntityTag))))
+                .andExpect(jsonPath("$.failureCode").value(""));
+    }
+
+    @Test
     void wildcardIfNoneMatchRecognizesTheExistingOwnerScopedRepresentation() throws Exception {
         when(etlJobService.findOwned(JOB_RECORD_ID, "tenant_alpha"))
                 .thenReturn(snapshot(EtlJobStatus.SUCCEEDED, 1, null, UPDATED_AT));
