@@ -20,9 +20,9 @@ import java.util.Objects;
  *
  * <p>The advice is scoped to {@link EtlJobController}. When the durable worker is enabled, it
  * derives a positive whole-second {@code Retry-After} value from the validated fixed delay and
- * rounds any fractional second upward. Pending and running jobs advertise that cadence; succeeded
- * and failed jobs remove the header because their state is terminal. A disabled worker also removes
- * the header so maintenance-mode intake does not imply that execution is progressing.</p>
+ * rounds any fractional second upward. Pending and running jobs advertise that cadence; succeeded,
+ * failed, and cancelled jobs remove the header because their state is terminal. A disabled worker
+ * also removes the header so maintenance-mode intake does not imply that execution is progressing.</p>
  *
  * <p>The header is only client guidance. PostgreSQL lease fencing, principal-scoped authorization,
  * lifecycle validation, rate limiting, and client-side backoff remain independent correctness and
@@ -124,7 +124,9 @@ public class EtlJobPollingAdvice implements ResponseBodyAdvice<Object> {
                         response.getHeaders().remove(HttpHeaders.RETRY_AFTER);
                     }
                 }
-                case SUCCEEDED, FAILED -> response.getHeaders().remove(HttpHeaders.RETRY_AFTER);
+                case SUCCEEDED, FAILED, CANCELLED -> response.getHeaders().remove(
+                        HttpHeaders.RETRY_AFTER
+                );
             }
         }
         return body;
