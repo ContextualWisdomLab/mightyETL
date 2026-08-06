@@ -79,8 +79,20 @@ class EtlJobReplayBoundaryTest {
                 () -> service.replayOwned(SOURCE_ID, PAYLOAD, REPLAY_KEY, " ".repeat(513))
         );
         assertError(
+                EtlRequestError.IDEMPOTENCY_PRINCIPAL_REQUIRED,
+                () -> service.replayOwned(SOURCE_ID, PAYLOAD, REPLAY_KEY, "a".repeat(513))
+        );
+        assertError(
                 EtlRequestError.INVALID_JSON,
                 () -> service.replayOwned(SOURCE_ID, null, REPLAY_KEY, "tenant_alpha")
+        );
+        assertError(
+                EtlRequestError.INVALID_JSON,
+                () -> service.replayOwned(SOURCE_ID, "", REPLAY_KEY, "tenant_alpha")
+        );
+        assertError(
+                EtlRequestError.INVALID_JSON,
+                () -> service.replayOwned(SOURCE_ID, "null", REPLAY_KEY, "tenant_alpha")
         );
         assertError(
                 EtlRequestError.INVALID_JSON,
