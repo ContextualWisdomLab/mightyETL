@@ -18,13 +18,14 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Guards the credential, authority, supply-chain, and exact-head validation boundaries of the
- * scheduled OpenCode maintenance workflow.
+ * Guards the credential, authority, supply-chain, publication, and exact-head validation
+ * boundaries of the scheduled OpenCode maintenance workflow.
  *
- * <p>The scheduled agent is allowed to prepare feature-branch pull requests. It is not a reviewer
- * or merger. These tests make that separation visible to beginners and prevent a later workflow
- * edit from silently adding a fallback provider, mutable tool version, protected-branch push,
- * self-approval path, policy-code auto-authorization, or unvalidated agent-generated head.</p>
+ * <p>The model may edit and push one bounded feature branch. It never receives pull-request write
+ * authority. A deterministic non-checkout publisher may create one draft pull request, while a
+ * second isolated non-checkout job may authorize only approval-required workflow runs associated
+ * with that exact pull request and exact head. These tests keep those authorities physically
+ * separated from model and repository-code execution.</p>
  */
 class HourlyOpenCodeMaintenanceWorkflowTest {
 
@@ -35,9 +36,7 @@ class HourlyOpenCodeMaintenanceWorkflowTest {
     private static String workflow;
 
     /**
-     * Reads the workflow once after first producing an ordinary assertion failure when the
-     * production workflow has not yet been implemented. Line endings are normalized so the same
-     * structural contracts run deterministically on Windows, Linux, and macOS checkouts.
+     * Reads the workflow once and normalizes line endings for deterministic cross-platform tests.
      *
      * @throws IOException when the workflow exists but cannot be read as UTF-8 text
      */
@@ -46,18 +45,12 @@ class HourlyOpenCodeMaintenanceWorkflowTest {
         Path workflowPath = projectRoot().resolve(
                 ".github/workflows/hourly-opencode-maintenance.yml"
         );
-        assertTrue(
-                Files.exists(workflowPath),
-                "The hourly OpenCode maintenance workflow must exist"
-        );
+        assertTrue(Files.exists(workflowPath), "The hourly OpenCode workflow must exist");
         workflow = Files.readString(workflowPath, StandardCharsets.UTF_8)
                 .replace("\r\n", "\n");
     }
 
-    /**
-     * Verifies that runs are offset from the top of the hour, serialized, and time bounded,
-     * including forced termination when an agent ignores the graceful termination signal.
-     */
+    /** Verifies one serialized, bounded run every hour. */
     @Test
     void schedulesOneBoundedNonOverlappingRunPerHour() {
         assertTrue(workflow.contains("cron: \"43 * * * *\""));
@@ -65,15 +58,11 @@ class HourlyOpenCodeMaintenanceWorkflowTest {
         assertTrue(workflow.contains("cancel-in-progress: false"));
         assertTrue(workflow.contains("timeout-minutes: 50"));
         assertTrue(workflow.contains(
-                "timeout --signal=TERM --kill-after=30s 45m opencode github run"
+                "timeout --signal=TERM --kill-after=30s 45m opencode run"
         ));
     }
 
-    /**
-     * Verifies that repository source and the OpenCode executable are pinned by immutable
-     * content identifiers without retaining checkout credentials that a generated process could
-     * reuse implicitly.
-     */
+    /** Verifies immutable checkout and OpenCode installation without persisted credentials. */
     @Test
     void pinsCheckoutAndOpenCodeWithoutPersistedCredentials() {
         assertTrue(workflow.contains(
@@ -98,16 +87,7 @@ class HourlyOpenCodeMaintenanceWorkflowTest {
         assertFalse(workflow.contains("anomalyco/opencode/github@"));
     }
 
-    /**
-     * Verifies that direct-token mode can actually create commits and push a feature branch.
-     *
-     * <p>OpenCode 1.18.13 intentionally skips its internal Git credential and author setup when
-     * {@code USE_GITHUB_TOKEN=true}. Because checkout credentials remain disabled, the workflow
-     * must install a repository-local GitHub CLI credential helper and local author identity
-     * before starting OpenCode, then remove the helper even when the process fails or times out.
-     * The helper reads the short-lived token from {@code GH_TOKEN}; no encoded token is written
-     * to Git configuration.</p>
-     */
+    /** Verifies ephemeral Git credentials for branch pushes and deterministic cleanup. */
     @Test
     void bootstrapsAndRemovesDirectTokenGitCredentials() {
         assertTrue(workflow.contains("GH_TOKEN: ${{ github.token }}"));
@@ -131,151 +111,158 @@ class HourlyOpenCodeMaintenanceWorkflowTest {
                         + "\"opencode-agent[bot]@users.noreply.github.com\""
         ));
         assertFalse(workflow.contains("AUTHORIZATION: basic"));
-        assertFalse(workflow.contains("AGENT: build"));
     }
 
-    /**
-     * Verifies that the repository's NVIDIA NIM secret is the only model credential and is
-     * mapped to the environment variable documented by OpenCode's NVIDIA provider.
-     */
+    /** Verifies NVIDIA NIM is the sole model credential and plain OpenCode owns no PR lifecycle. */
     @Test
-    void usesOnlyTheNvidiaNimCredential() {
+    void usesOnlyNvidiaNimWithPlainOpenCodeRun() {
         assertEquals(Set.of("NVIDIA_NIM_API_KEY"), referencedSecrets());
         assertTrue(workflow.contains(
                 "NVIDIA_API_KEY: ${{ secrets.NVIDIA_NIM_API_KEY }}"
         ));
-        assertTrue(workflow.contains("SHARE: \"false\""));
-        assertTrue(workflow.contains("USE_GITHUB_TOKEN: \"true\""));
-
-        String lowerCaseWorkflow = workflow.toLowerCase(Locale.ROOT);
-        assertFalse(lowerCaseWorkflow.contains("copilot"));
+        assertTrue(workflow.contains("MODEL: nvidia/deepseek-ai/deepseek-v4-pro"));
+        assertTrue(workflow.contains("opencode run --model \"${MODEL}\" --auto"));
+        assertFalse(workflow.contains("opencode github run"));
+        assertFalse(workflow.contains("USE_GITHUB_TOKEN"));
+        assertFalse(workflow.toLowerCase(Locale.ROOT).contains("copilot"));
         assertFalse(workflow.contains("ANTHROPIC_API_KEY"));
         assertFalse(workflow.contains("OPENAI_API_KEY"));
     }
 
     /**
-     * Requires a currently available free NVIDIA endpoint suited to repository-scale coding.
-     *
-     * <p>The previous Qwen3 Coder trial endpoint was deprecated by NVIDIA. DeepSeek V4 Pro is
-     * exposed by NVIDIA as a free endpoint with long-context coding and tool-use capabilities, so
-     * the workflow pins that provider/model identifier and fails instead of silently falling back.</p>
+     * Proves the model has read-only pull-request authority and both PR-writing jobs are
+     * deterministic non-checkout jobs without the NVIDIA credential.
      */
     @Test
-    void usesCurrentFreeAgenticCodingModel() {
-        assertTrue(workflow.contains("MODEL: nvidia/deepseek-ai/deepseek-v4-pro"));
-        assertFalse(workflow.contains("qwen/qwen3-coder-480b-a35b-instruct"));
-    }
+    void isolatesPullRequestAndActionsWriteAuthorityFromTheAgent() {
+        String maintenance = maintenanceJob();
+        String publisher = publicationJob();
+        String authorizer = authorizationJob();
 
-    /**
-     * Verifies that the OpenCode process never receives Actions write authority.
-     *
-     * <p>The maintenance job owns only branch and pull-request preparation permissions. A separate
-     * job, which never checks out or executes repository code, receives the sole occurrence of
-     * {@code actions: write} needed to authorize approval-required exact-head workflow runs.</p>
-     */
-    @Test
-    void isolatesActionsWriteFromTheAgentProcess() {
         assertTrue(workflow.contains("permissions:\n  contents: read\n\njobs:"));
-        assertTrue(workflow.contains(
-                "maintain-repository:\n"
-                        + "    permissions:\n"
-                        + "      actions: read\n"
-                        + "      checks: read\n"
-                        + "      contents: write\n"
-                        + "      issues: write\n"
-                        + "      pull-requests: write\n"
-                        + "      security-events: read\n"
-                        + "      statuses: read"
-        ));
-        assertTrue(workflow.contains(
-                "authorize-exact-head-checks:\n"
-                        + "    needs: maintain-repository\n"
-                        + "    if: ${{ always() && !cancelled() }}\n"
-                        + "    permissions:\n"
-                        + "      actions: write\n"
-                        + "      contents: read\n"
-                        + "      pull-requests: read"
-        ));
+        assertTrue(maintenance.contains("actions: read"));
+        assertTrue(maintenance.contains("contents: write"));
+        assertTrue(maintenance.contains("pull-requests: read"));
+        assertFalse(maintenance.contains("pull-requests: write"));
+        assertFalse(maintenance.contains("actions: write"));
+
+        assertTrue(publisher.contains("pull-requests: write"));
+        assertTrue(publisher.contains("contents: read"));
+        assertFalse(publisher.contains("actions/checkout@"));
+        assertFalse(publisher.contains("NVIDIA_API_KEY"));
+        assertFalse(publisher.contains("/reviews"));
+        assertFalse(publisher.contains("/merge"));
+
+        assertTrue(authorizer.contains("actions: write"));
+        assertTrue(authorizer.contains("pull-requests: read"));
+        assertFalse(authorizer.contains("actions/checkout@"));
+        assertFalse(authorizer.contains("NVIDIA_API_KEY"));
+        assertFalse(authorizer.contains("pull-requests: write"));
+
         assertEquals(1, countOccurrences(workflow, "actions: write"));
         assertEquals(1, countOccurrences(workflow, "contents: write"));
-        assertFalse(authorizationJob().contains("actions/checkout@"));
-        assertFalse(authorizationJob().contains("NVIDIA_API_KEY"));
+        assertEquals(1, countOccurrences(workflow, "pull-requests: write"));
         assertFalse(workflow.contains("id-token:"));
         assertFalse(workflow.contains("security-events: write"));
     }
 
-    /**
-     * Requires exact-head CI authorization after the agent creates or updates a same-repository PR.
-     *
-     * <p>GitHub prevents ordinary events produced with {@code GITHUB_TOKEN} from recursively
-     * starting workflows. Current GitHub behavior creates {@code opened}, {@code synchronize}, and
-     * {@code reopened} PR runs in an approval-required state instead. The trusted default-branch
-     * workflow must snapshot heads before the agent, detect only heads changed by this run, refuse
-     * every {@code .github} or CODEOWNERS policy change, bind every decision to the still-current
-     * SHA, and authorize only those exact-head runs in a separate non-checkout job. This starts
-     * validation; it does not approve or merge the pull request.</p>
-     */
+    /** Verifies one strict branch or existing PR is selected before deterministic publication. */
     @Test
-    void authorizesExactHeadChecksForAgentChangedPullRequests() {
-        assertTrue(workflow.contains("id: snapshot_heads"));
-        assertTrue(workflow.contains("open_pr_heads_before: ${{ steps.snapshot_heads.outputs.open_pr_heads }}"));
-        assertTrue(workflow.contains("open-pr-heads-before.json"));
-        assertTrue(workflow.contains("BEFORE_HEADS: ${{ needs.maintain-repository.outputs.open_pr_heads_before }}"));
+    void publishesOnlyOneValidatedAgentCandidate() {
         assertTrue(workflow.contains(
-                "name: Authorize exact-head checks for agent-updated pull requests"
+                "automation_branch_heads_before: "
+                        + "${{ steps.snapshot_heads.outputs.automation_branch_heads }}"
         ));
-        assertTrue(workflow.contains("head.repo.full_name == $repo"));
-        assertTrue(workflow.contains(".base.ref == \"develop\""));
+        assertTrue(workflow.contains(
+                "agent_candidate: ${{ steps.detect_candidate.outputs.agent_candidate }}"
+        ));
+        assertTrue(workflow.contains("automation/opencode-"));
+        assertTrue(workflow.contains("Multiple agent publication candidates were detected"));
+        assertTrue(workflow.contains("kind: \"existing_pr\""));
+        assertTrue(workflow.contains("kind: \"new_branch\""));
+        assertTrue(workflow.contains("draft: true"));
         assertTrue(workflow.contains("startswith(\".github/\")"));
         assertTrue(workflow.contains("CODEOWNERS"));
-        assertTrue(workflow.contains("head_sha=${expected_head}"));
+        assertTrue(workflow.contains("Agent branch is not ahead of develop"));
+    }
+
+    /**
+     * Requires every workflow-run decision to bind the event, exact SHA, and associated pull
+     * request number before the isolated job can authorize a waiting run.
+     */
+    @Test
+    void authorizesOnlyRunsAssociatedWithTheExactPullRequestHead() {
+        assertTrue(workflow.contains("required_workflow_names="));
         assertTrue(workflow.contains("event=pull_request"));
-        assertTrue(workflow.contains("--arg expected_head \"${expected_head}\""));
+        assertTrue(workflow.contains("head_sha=${expected_head}"));
+        assertTrue(workflow.contains("--argjson pull_request_number \"${number}\""));
+        assertTrue(workflow.contains(
+                "any(.pull_requests[]?; .number == $pull_request_number)"
+        ));
         assertTrue(workflow.contains(".head_sha == $expected_head"));
         assertTrue(workflow.contains("/actions/runs/${run_id}/approve"));
-        assertTrue(workflow.contains("current_head"));
-        assertTrue(workflow.contains("expected_head"));
-        assertTrue(workflow.contains("No pull-request workflow run materialized"));
+        assertTrue(workflow.contains("Missing required exact-head workflows"));
+        assertTrue(workflow.contains("PR #${number} moved"));
         assertFalse(workflow.contains("gh pr review --approve"));
         assertFalse(workflow.contains("/pulls/${number}/merge"));
     }
 
-    /**
-     * Verifies that the model prompt preserves independent review and deterministic merge
-     * authority instead of granting the development agent governance powers.
-     */
+    /** Verifies the prompt itself mirrors the hard authority boundary and bounded branch contract. */
     @Test
-    void promptForbidsReviewMergeAndProtectedBranchBypass() {
+    void promptForbidsPullRequestMutationMergeAndProtectedBranchPushes() {
         assertTrue(workflow.contains("Start every run by inspecting every open pull request"));
         assertTrue(workflow.contains("exact current head"));
-        assertTrue(workflow.contains("Never approve or merge a pull request"));
+        assertTrue(workflow.contains(
+                "Do not create, update, approve, close, or merge a pull request directly"
+        ));
         assertTrue(workflow.contains("Never push directly to develop or main"));
+        assertTrue(workflow.contains("exactly one automation/opencode-"));
         assertTrue(workflow.contains("Do not bypass branch protection"));
         assertTrue(workflow.contains("Do not alter the existing review agent"));
         assertTrue(workflow.contains("Do not change any review-agent secret name"));
         assertTrue(workflow.contains("Do not modify .github/workflows/"));
         assertTrue(workflow.contains("automation-maintenance"));
-        assertTrue(workflow.contains("Do not create a second development pull request"));
         assertTrue(workflow.contains("Do not print, echo, summarize, or expose secret values"));
     }
 
-    /**
-     * Returns the text of the isolated workflow-run authorization job.
-     *
-     * @return workflow suffix beginning at the authorization job
-     */
+    /** @return workflow text for the OpenCode execution job only */
+    private static String maintenanceJob() {
+        return jobSection("  maintain-repository:", "  publish-agent-pull-request:");
+    }
+
+    /** @return workflow text for the deterministic draft-PR publisher only */
+    private static String publicationJob() {
+        return jobSection("  publish-agent-pull-request:", "  authorize-exact-head-checks:");
+    }
+
+    /** @return workflow text for the exact-head workflow-run authorizer */
     private static String authorizationJob() {
-        int jobStart = workflow.indexOf("  authorize-exact-head-checks:");
-        assertTrue(jobStart >= 0, "The isolated exact-head authorization job must exist");
-        return workflow.substring(jobStart);
+        int start = workflow.indexOf("  authorize-exact-head-checks:");
+        assertTrue(start >= 0, "The isolated exact-head authorization job must exist");
+        return workflow.substring(start);
     }
 
     /**
-     * Counts non-overlapping occurrences of one literal fragment.
+     * Extracts one job section between two top-level job keys.
      *
-     * @param text complete text to inspect
+     * @param startMarker first job marker
+     * @param endMarker following job marker
+     * @return exact workflow section
+     */
+    private static String jobSection(String startMarker, String endMarker) {
+        int start = workflow.indexOf(startMarker);
+        int end = workflow.indexOf(endMarker);
+        assertTrue(start >= 0, "Missing workflow job: " + startMarker);
+        assertTrue(end > start, "Invalid workflow job order for: " + startMarker);
+        return workflow.substring(start, end);
+    }
+
+    /**
+     * Counts non-overlapping literal occurrences.
+     *
+     * @param text complete text
      * @param fragment non-empty literal fragment
-     * @return number of non-overlapping occurrences
+     * @return occurrence count
      */
     private static int countOccurrences(String text, String fragment) {
         int count = 0;
@@ -287,11 +274,7 @@ class HourlyOpenCodeMaintenanceWorkflowTest {
         return count;
     }
 
-    /**
-     * Extracts every repository-secret name referenced by the workflow.
-     *
-     * @return immutable set of referenced GitHub Actions secret identifiers
-     */
+    /** @return immutable set of referenced repository-secret names */
     private static Set<String> referencedSecrets() {
         Matcher matcher = SECRET_REFERENCE.matcher(workflow);
         Set<String> secretNames = new java.util.HashSet<>();
@@ -302,10 +285,9 @@ class HourlyOpenCodeMaintenanceWorkflowTest {
     }
 
     /**
-     * Finds the reactor root from either root or module-local Maven execution.
+     * Finds the repository root from either reactor-root or module-local execution.
      *
-     * @return absolute path that contains the root Maven project
-     * @throws IllegalStateException when no repository or Maven root can be found
+     * @return absolute repository root
      */
     private static Path projectRoot() {
         Path current = Paths.get(System.getProperty("user.dir")).toAbsolutePath();
