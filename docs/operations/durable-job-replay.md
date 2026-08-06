@@ -73,7 +73,7 @@ concurrent request that cannot acquire it receives `409 etl_job_replay_in_progre
 first transaction commits returns the created job. The existing
 `etl_job_submission_scope_unique` constraint remains a second integrity boundary.
 
-## Immutable lineage
+## Immutable owner-scoped lineage
 
 `V7__add_etl_job_replay_lineage.sql` adds:
 
@@ -87,11 +87,24 @@ Root jobs have all fields null. Replay rows have all fields non-null, references
 own job identifier, and generation 1 through 100. Both self-referencing foreign keys use
 `ON DELETE RESTRICT`; deleting a source or root cannot silently cascade through audit history.
 
+The migration also adds the named support key:
+
+```text
+etl_job_owner_identity_unique
+UNIQUE (job_record_id, principal_scope_hash)
+```
+
+Both lineage relationships are composite owner-scoped foreign keys. They reference
+`(job_record_id, principal_scope_hash)` rather than only the opaque job identifier. The database
+therefore rejects cross-owner lineage even if application code, a maintenance script, or a future
+import path attempts to pair one tenant's new job with another tenant's source or root. Application
+owner predicates remain mandatory, but they are no longer the only tenant-integrity boundary.
+
 ```mermaid
 flowchart LR
-    R0[Root terminal job<br/>generation null] -->|replay| R1[Replay job<br/>generation 1]
-    R1 -->|later terminal + replay| R2[Replay job<br/>generation 2]
-    R0 -. root reference .-> R2
+    R0[Root terminal job<br/>generation null] -->|same-owner replay| R1[Replay job<br/>generation 1]
+    R1 -->|later terminal + same-owner replay| R2[Replay job<br/>generation 2]
+    R0 -. owner-scoped root reference .-> R2
 ```
 
 A replay of a root uses the source as root and generation 1. A replay of a replay inherits the root
@@ -122,15 +135,20 @@ or replay-key idempotency.
 
 ## Rollout
 
-1. Rehearse V7 on a representative PostgreSQL 18 copy and inspect existing row count and lock time.
+1. Rehearse V7 on a representative PostgreSQL 18 copy and inspect existing row count, support-index
+   build time, table lock duration, and foreign-key validation time.
 2. Verify exact-head cross-platform CI, full reactor tests, zero-missed configured coverage,
    dependency review, SBOM, SAST, security scan, review threads, and independent approval.
 3. Apply V7 before serving the replay route.
 4. Smoke-test a disposable failed source, exact payload acceptance, same-key retry, and key conflict.
 5. Confirm the source is unchanged and the new row has source/root/generation lineage.
-6. Claim the new pending row through the ordinary worker and verify no replay-only execution path.
-7. Monitor replay acceptance, in-progress conflicts, payload mismatches, generation exhaustion,
-   database lock waits, and failed foreign-key deletion attempts using fixed-cardinality signals.
+6. In an isolated migration rehearsal, attempt source and root references whose
+   `principal_scope_hash` differs from the new row and confirm PostgreSQL rejects both cross-owner
+   lineage writes.
+7. Claim the new pending row through the ordinary worker and verify no replay-only execution path.
+8. Monitor replay acceptance, in-progress conflicts, payload mismatches, generation exhaustion,
+   database lock waits, and failed foreign-key deletion or tenant-boundary attempts using
+   fixed-cardinality signals.
 
 Logs and metric labels must not contain payloads, raw principals, raw keys, hashes, source/new job
 identifiers, lineage identifiers, SQL, exception messages, or target identities.
@@ -153,7 +171,8 @@ for a deliberately separate replay.
 
 Stop replay admission. Preserve affected rows, deployed SHA, Flyway history, and backup evidence.
 Do not null lineage fields to make constraints pass. Repair requires a reviewed migration based on
-verified source/root ownership and generation.
+verified source/root ownership and generation. Treat any attempted cross-owner lineage write as a
+tenant-isolation incident even when PostgreSQL rejects it.
 
 ## Rollback
 
@@ -163,8 +182,8 @@ relationships.
 
 Do not drop V7 while replay rows exist. Archive or remove replay lineages from leaf to root under an
 approved retention policy, preserving external audit evidence. Then a separately reviewed migration
-may remove the constraints and columns. Never edit the applied V7 file or mutate terminal sources
-back to pending.
+may remove the composite foreign keys, `etl_job_owner_identity_unique`, and lineage columns. Never
+edit the applied V7 file or mutate terminal sources back to pending.
 
 The replay-key domain must remain readable while any replay-created row can receive an idempotent
 retry. A domain change requires a versioned migration or dual-read period, not a silent constant edit.
@@ -183,6 +202,9 @@ https://www.rfc-editor.org/rfc/rfc9110
 
 Nottingham, M., Wilde, E., & Dalal, S. (2023). *Problem details for HTTP APIs* (RFC 9457). RFC Editor.
 https://www.rfc-editor.org/rfc/rfc9457
+
+PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: Constraints*.
+https://www.postgresql.org/docs/18/ddl-constraints.html
 
 PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: INSERT*.
 https://www.postgresql.org/docs/18/sql-insert.html
