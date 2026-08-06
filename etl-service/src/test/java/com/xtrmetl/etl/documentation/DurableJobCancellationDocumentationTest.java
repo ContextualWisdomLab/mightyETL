@@ -51,7 +51,7 @@ class DurableJobCancellationDocumentationTest {
         ).replaceAll("\\s+", " ");
 
         assertTrue(design.contains("One conditional UPDATE is the cancellation authority"));
-        assertTrue(design.contains("Exactly one terminal outcome may win"));
+        assertTrue(design.contains("Exactly one terminal outcome wins"));
         assertTrue(design.contains("same-key replay"));
         assertTrue(design.contains("transactional target effects"));
         assertTrue(plan.contains("Added production statement and branch coverage remains 100%"));
