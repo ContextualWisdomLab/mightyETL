@@ -105,7 +105,7 @@ EtlJobReplay replayOwned(
 - [ ] Require source immutability, payload digest proof, lineage, concurrency, generation limit, connector limitation, rollout, and rollback documentation first.
 - [ ] Document W3C PROV mapping as an export contract, not a database-authority substitute.
 - [ ] Record APA 7th primary references and the versioned replay-key compatibility boundary.
-- [ ] Run `./mvnw -B test`, configured coverage gates, and `git diff --check` through exact-head CI.
+- [ ] Run all verification through exact-head CI: `./mvnw -B test`, configured coverage gates, and `git diff --check`.
 - [ ] Keep the PR draft until every stacked-target gate succeeds.
 
 ## Plan self-review
@@ -115,3 +115,4 @@ EtlJobReplay replayOwned(
 - Replay-key and payload conflicts are distinguished without disclosing source existence across principals.
 - New jobs enter the existing worker lifecycle rather than creating a second execution engine.
 - No placeholder, ambiguous public signature, or unbounded database object name remains.
+- Verification requires that no project test is skipped.
