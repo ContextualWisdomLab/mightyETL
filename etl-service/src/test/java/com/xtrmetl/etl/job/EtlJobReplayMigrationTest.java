@@ -12,12 +12,12 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Guards the complete, bounded, non-cascading durable job replay lineage schema.
+ * Guards the complete, bounded, owner-scoped, non-cascading durable job replay lineage schema.
  */
 class EtlJobReplayMigrationTest {
 
     @Test
-    void replayMigrationAddsCompleteRestrictedSelfReferencingLineage() throws IOException {
+    void replayMigrationAddsCompleteRestrictedOwnerScopedLineage() throws IOException {
         String migration = Files.readString(
                 projectRoot().resolve(
                         "etl-service/src/main/resources/db/migration/"
@@ -29,13 +29,21 @@ class EtlJobReplayMigrationTest {
         assertTrue(migration.contains("ADD COLUMN replay_source_job_record_id UUID"));
         assertTrue(migration.contains("ADD COLUMN replay_root_job_record_id UUID"));
         assertTrue(migration.contains("ADD COLUMN replay_generation_count INTEGER"));
+        assertTrue(migration.contains("CONSTRAINT etl_job_owner_identity_unique"));
+        assertTrue(migration.contains(
+                "UNIQUE (job_record_id, principal_scope_hash)"
+        ));
         assertTrue(migration.contains("CONSTRAINT etl_job_replay_source_reference"));
         assertTrue(migration.contains(
-                "FOREIGN KEY (replay_source_job_record_id) REFERENCES etl_job_records (job_record_id) ON DELETE RESTRICT"
+                "FOREIGN KEY (replay_source_job_record_id, principal_scope_hash) "
+                        + "REFERENCES etl_job_records (job_record_id, principal_scope_hash) "
+                        + "ON DELETE RESTRICT"
         ));
         assertTrue(migration.contains("CONSTRAINT etl_job_replay_root_reference"));
         assertTrue(migration.contains(
-                "FOREIGN KEY (replay_root_job_record_id) REFERENCES etl_job_records (job_record_id) ON DELETE RESTRICT"
+                "FOREIGN KEY (replay_root_job_record_id, principal_scope_hash) "
+                        + "REFERENCES etl_job_records (job_record_id, principal_scope_hash) "
+                        + "ON DELETE RESTRICT"
         ));
         assertTrue(migration.contains("CONSTRAINT etl_job_replay_lineage_complete_check"));
         assertTrue(migration.contains("replay_source_job_record_id IS NULL"));
@@ -46,6 +54,14 @@ class EtlJobReplayMigrationTest {
         assertTrue(migration.contains("replay_generation_count BETWEEN 1 AND 100"));
         assertTrue(migration.contains("replay_source_job_record_id <> job_record_id"));
         assertTrue(migration.contains("replay_root_job_record_id <> job_record_id"));
+        assertFalse(migration.contains(
+                "FOREIGN KEY (replay_source_job_record_id) "
+                        + "REFERENCES etl_job_records (job_record_id)"
+        ));
+        assertFalse(migration.contains(
+                "FOREIGN KEY (replay_root_job_record_id) "
+                        + "REFERENCES etl_job_records (job_record_id)"
+        ));
         assertFalse(migration.contains("ON DELETE CASCADE"));
         assertFalse(migration.contains("replay_payload"));
         assertFalse(migration.contains("principal_name"));
