@@ -29,6 +29,9 @@ class DurableJobReplayDocumentationTest {
         assertTrue(runbook.contains("replay_source_job_record_id"));
         assertTrue(runbook.contains("replay_root_job_record_id"));
         assertTrue(runbook.contains("replay_generation_count"));
+        assertTrue(runbook.contains("etl_job_owner_identity_unique"));
+        assertTrue(runbook.contains("(job_record_id, principal_scope_hash)"));
+        assertTrue(runbook.contains("cross-owner lineage"));
         assertTrue(runbook.contains("ON DELETE RESTRICT"));
         assertTrue(runbook.contains("generation 1 through 100"));
         assertTrue(runbook.contains("prov:wasDerivedFrom"));
@@ -36,6 +39,7 @@ class DurableJobReplayDocumentationTest {
         assertTrue(runbook.contains("does not prove that replaying a connector"));
         assertTrue(runbook.contains("RFC 9110"));
         assertTrue(runbook.contains("RFC 9457"));
+        assertTrue(runbook.contains("PostgreSQL 18 documentation: Constraints"));
         assertTrue(runbook.contains("PROV-O"));
     }
 
@@ -53,7 +57,9 @@ class DurableJobReplayDocumentationTest {
         assertTrue(design.contains("ordinary `PENDING` job"));
         assertTrue(design.contains("No replay-specific worker or scheduler exists"));
         assertTrue(design.contains("replay_generation_count"));
+        assertTrue(design.contains("composite owner-scoped foreign keys"));
         assertTrue(plan.contains("Never update a terminal source back to `PENDING`"));
+        assertTrue(plan.contains("composite owner-scoped foreign keys"));
         assertTrue(plan.contains("Run all verification"));
         assertTrue(plan.contains("no project test is skipped"));
     }
@@ -67,6 +73,8 @@ class DurableJobReplayDocumentationTest {
         assertTrue(changelog.contains("replay_source_job_record_id"));
         assertTrue(changelog.contains("replay_root_job_record_id"));
         assertTrue(changelog.contains("replay_generation_count"));
+        assertTrue(changelog.contains("etl_job_owner_identity_unique"));
+        assertTrue(changelog.contains("composite owner-scoped foreign keys"));
         assertTrue(changelog.contains("V7__add_etl_job_replay_lineage.sql"));
         assertTrue(changelog.contains("does not prove external connector safety"));
     }
