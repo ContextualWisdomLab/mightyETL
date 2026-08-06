@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Authenticated operators can now create an ordinary pending durable job from an immutable failed or cancelled source only after resupplying a byte-identical bounded JSON payload; the terminal source remains unchanged and succeeded sources remain non-replayable.
 - Authenticated operators can now perform owner-scoped durable-job cancellation for `PENDING` and `RUNNING` work through an idempotent action that commits terminal `CANCELLED`, clears payload and lease state, stores only `cancellation_key_hash` plus a fixed code and timestamp, and returns stable RFC 9457 conflicts when success or failure already won.
 - Cancellation-first races now make the former exact lease stale and roll back transactional target and response-ledger effects; success-first races remain `SUCCEEDED`, while same-key cancellation replays and different-key reuse fails closed.
 - Owner-scoped durable-job status responses now emit deterministic weak SHA-256 `ETag` validators; ordinary and wildcard `If-None-Match` requests return an empty RFC 9110 `304 Not Modified` response only after authenticated owner-safe lookup, while `Cache-Control: no-store` remains unchanged.
@@ -36,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Transactional migration `V7__add_etl_job_replay_lineage.sql`, owner-scoped replay admission, and immutable `replay_source_job_record_id`, `replay_root_job_record_id`, and `replay_generation_count` evidence with concurrency, lineage, worker-compatibility, rollout, incident, and rollback tests and documentation.
 - Transactional migration `V6__add_etl_job_cancellation.sql`, owner-safe cancellation API and replay model, exact lease-invalidation and cancellation-versus-success integration tests, plus rollout, incident, connector-limitation, and rollback evidence in `docs/operations/durable-job-cancellation.md`.
 - Deterministic ordinary, wildcard, changed-state, changed-failure-code, null-versus-empty, and unrelated-response conditional polling tests, complete controller Javadoc, privacy and rollback guidance, and APA 7th standards evidence in `docs/etl/durable-job-polling.md`.
 - Controller-scoped polling advice, deterministic active/terminal lifecycle tests, disabled-worker fail-closed behavior, sub-second rounding coverage, rollback guidance, and APA 7th standards evidence in `docs/etl/durable-job-polling.md`.
@@ -76,6 +78,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Replay uses owner-scoped source selection, byte-exact digest verification, a versioned principal-scoped key domain, and immutable relational lineage without retaining raw principals or replay keys; this evidence does not prove external connector safety, so connector-native idempotency, transaction participation, or compensation remains required.
 - Cancellation stores only a principal-scoped SHA-256 replay identity and a fixed machine code, exposes no raw principal, key, hash, payload, lease, SQL, exception, or target detail, and requires an owner-matched conditional database update before reporting success.
 - Conditional status validators are SHA-256 digests of only the complete owner-authorized operator-safe representation; payloads, raw principals, idempotency keys, internal hashes, leases, SQL, and exception text remain excluded, and wildcard evaluation occurs only after owner-safe lookup.
 - Polling advice exposes only a bounded delay integer and is omitted when local execution is disabled or terminal; it never contains job, lease, principal, key, hash, payload, SQL, exception, target, or queue-depth data.
