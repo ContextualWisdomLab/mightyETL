@@ -19,7 +19,7 @@ Content-Type: application/json
 
 A first accepted replay returns RFC 9110 `202 Accepted`, `Location` for the new job, `Cache-Control: no-store`, and `Idempotency-Replayed: false`. The same principal, replay key, source job, and byte-identical payload returns the same new job with `Idempotency-Replayed: true`.
 
-The source remains terminal and unchanged. Replay is allowed only from `FAILED` and `CANCELLED`. Active sources conflict because they still own or may own execution. `SUCCEEDED` conflicts because a first-slice replay could duplicate committed target effects.
+The source remains terminal and unchanged. Only `FAILED` and `CANCELLED` are replayable. Active sources conflict because they still own or may own execution. `SUCCEEDED` conflicts because a first-slice replay could duplicate committed target effects.
 
 ## Immutable relational lineage
 
@@ -102,7 +102,7 @@ All failures use the existing RFC 9457 problem model without payload, principal,
 
 ## Worker compatibility
 
-The new row is an ordinary `PENDING` job. Existing worker claim, lease fencing, retry, success, failure, cancellation, pagination, polling, and conditional-status contracts apply without a replay-specific execution path. Only lineage and admission differ.
+The new row is an ordinary `PENDING` job. Existing worker claim, lease fencing, retry, success, failure, cancellation, pagination, polling, and conditional-status contracts apply unchanged. No replay-specific worker or scheduler exists. Only lineage and admission differ.
 
 ## Provenance export
 
