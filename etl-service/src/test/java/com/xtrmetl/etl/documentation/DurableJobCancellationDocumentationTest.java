@@ -11,7 +11,8 @@ import java.nio.file.Paths;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Keeps the durable cancellation API, race contract, rollout, rollback, and changelog aligned.
+ * Keeps the durable cancellation API, race contract, replay identity, rollout, rollback, and
+ * changelog aligned.
  */
 class DurableJobCancellationDocumentationTest {
 
@@ -62,6 +63,25 @@ class DurableJobCancellationDocumentationTest {
     }
 
     @Test
+    void doctoringDocumentsDomainSeparatedReplayIdentityAndCompatibility() throws IOException {
+        String evidence = read(
+                "docs/doctoring/durable-job-cancellation-key-domain-separation.md"
+        ).replaceAll("\\s+", " ");
+
+        assertTrue(evidence.contains("mightyetl:durable-job-cancellation:v1:"));
+        assertTrue(evidence.contains("principal_scope_hash"));
+        assertTrue(evidence.contains("job_record_id"));
+        assertTrue(evidence.contains("normalized_cancellation_key"));
+        assertTrue(evidence.contains("same normalized raw key"));
+        assertTrue(evidence.contains("another job in the same principal namespace"));
+        assertTrue(evidence.contains("another principal namespace"));
+        assertTrue(evidence.contains("EtlJobCancellationKeyDomainIntegrationTest"));
+        assertTrue(evidence.contains("Changing it would make every existing cancelled row fail"));
+        assertTrue(evidence.contains("does not claim to use cSHAKE"));
+        assertTrue(evidence.contains("NIST Special Publication 800-185"));
+    }
+
+    @Test
     void changelogRecordsTheBuyerVisibleCancellationSlice() throws IOException {
         String changelog = read("CHANGELOG.md").replaceAll("\\s+", " ");
 
@@ -70,6 +90,7 @@ class DurableJobCancellationDocumentationTest {
         assertTrue(changelog.contains("cancellation_key_hash"));
         assertTrue(changelog.contains("Cancellation-first"));
         assertTrue(changelog.contains("transactional target and response-ledger effects"));
+        assertTrue(changelog.contains("domain-separated principal-and-job-scoped"));
     }
 
     private static String read(String relativePath) throws IOException {
