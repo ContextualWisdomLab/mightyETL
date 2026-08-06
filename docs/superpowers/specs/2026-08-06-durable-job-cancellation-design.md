@@ -4,7 +4,7 @@
 
 mightyETL already accepts, executes, discovers, polls, and conditionally validates durable ETL jobs. Enterprise operators also need to stop work that is no longer wanted without leaking cross-tenant existence, weakening lease fencing, or claiming that a cancellation succeeded before the database transition committed.
 
-This design adds an authenticated owner-scoped cancellation action and one terminal `CANCELLED` lifecycle state. The first slice is deliberately limited to target effects that participate in the same transaction as the durable response ledger and terminal job transition.
+This design adds an authenticated owner-scoped cancellation action and one terminal `CANCELLED` lifecycle state. The first slice is deliberately limited to transactional target effects that participate in the same transaction as the durable response ledger and terminal job transition.
 
 ## API contract
 
