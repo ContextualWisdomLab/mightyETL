@@ -18,11 +18,14 @@ jobs:
       checks: read
       contents: write
       issues: write
-      pull-requests: write
+      pull-requests: read
       security-events: read
       statuses: read
     outputs:
       open_pr_heads_before: ${{ steps.snapshot_heads.outputs.open_pr_heads }}
+      automation_branch_heads_before: ${{ steps.snapshot_heads.outputs.automation_branch_heads }}
+      develop_head_before: ${{ steps.snapshot_heads.outputs.develop_head }}
+      agent_candidate: ${{ steps.detect_candidate.outputs.agent_candidate }}
     runs-on: ubuntu-latest
     timeout-minutes: 50
     steps:
@@ -45,7 +48,7 @@ jobs:
 
           command -v curl >/dev/null
           command -v install >/dev/null
-          command -v rg >/dev/null
+          command -v jq >/dev/null
           command -v sha256sum >/dev/null
           command -v tar >/dev/null
 
@@ -78,49 +81,66 @@ jobs:
           test "$("${install_dir}/opencode" --version)" = "${OPENCODE_VERSION}"
           printf '%s\n' "${install_dir}" >> "${GITHUB_PATH}"
 
-      - name: Snapshot open pull-request heads
+      - name: Snapshot protected branch and publication candidates
         id: snapshot_heads
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          snapshot="${RUNNER_TEMP}/open-pr-heads-before.json"
+          repository="${GITHUB_REPOSITORY}"
+          open_pr_file="${RUNNER_TEMP}/open-pr-heads-before.json"
+          automation_branch_file="${RUNNER_TEMP}/automation-branch-heads-before.json"
+
+          develop_head="$(gh api "/repos/${repository}/git/ref/heads/develop" --jq '.object.sha')"
           gh api --paginate \
-            "/repos/${GITHUB_REPOSITORY}/pulls?state=open&base=develop&per_page=100" \
-            | jq -s --arg repo "${GITHUB_REPOSITORY}" '
+            "/repos/${repository}/pulls?state=open&base=develop&per_page=100" \
+            | jq -s --arg repo "${repository}" '
                 (add // [])
                 | map(select(.head.repo.full_name == $repo))
                 | map({key: (.number | tostring), value: .head.sha})
                 | from_entries
-              ' > "${snapshot}"
-          printf 'open_pr_heads=%s\n' "$(jq -c . "${snapshot}")" >> "${GITHUB_OUTPUT}"
+              ' > "${open_pr_file}"
+          gh api --paginate "/repos/${repository}/branches?per_page=100" \
+            | jq -s '
+                (add // [])
+                | map(select(.name | startswith("automation/opencode-")))
+                | map({key: .name, value: .commit.sha})
+                | from_entries
+              ' > "${automation_branch_file}"
+
+          {
+            printf 'develop_head=%s\n' "${develop_head}"
+            printf 'open_pr_heads=%s\n' "$(jq -c . "${open_pr_file}")"
+            printf 'automation_branch_heads=%s\n' "$(jq -c . "${automation_branch_file}")"
+          } >> "${GITHUB_OUTPUT}"
 
       - name: Run bounded NVIDIA OpenCode maintenance
+        id: run_opencode
+        continue-on-error: true
         shell: bash
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GH_TOKEN: ${{ github.token }}
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_NIM_API_KEY }}
           MODEL: nvidia/deepseek-ai/deepseek-v4-pro
-          SHARE: "false"
-          USE_GITHUB_TOKEN: "true"
+          OPENCODE_DISABLE_SHARE: "true"
           PROMPT: |
             Maintain ContextualWisdomLab/mightyETL toward defensible commercial and acquisition readiness.
 
-            Start every run by inspecting every open pull request and its exact current head. Review unresolved human, CodeRabbit, GitHub Advanced Security, Dependabot, and automated feedback. Inspect required checks, statuses, and workflow outcomes. Treat queued, pending, skipped-required, stale-head, cancelled, absent, or unsuccessful gates as not passing. Distinguish valid current findings from stale, duplicate, incorrect, or superseded feedback. Resolve only threads that the current exact head actually addresses.
+            Start every run by inspecting every open pull request and its exact current head. Review unresolved human, CodeRabbit, GitHub Advanced Security, Dependabot, and automated feedback. Inspect required checks, statuses, and workflow outcomes. Treat queued, pending, skipped-required, stale-head, cancelled, absent, or unsuccessful gates as not passing. Distinguish valid current findings from stale, duplicate, incorrect, or superseded feedback. Resolve only source defects; the deterministic publisher and independent reviewers own pull-request lifecycle operations.
 
-            If a development pull request is open, work only on the dependency-eligible exact current head of that pull request. Do not create a second development pull request while another development pull request is open. Implement valid fixes test-first, rerun relevant tests, update authoritative documentation and CHANGELOG.md, and update the existing feature branch and pull request. Close only clearly superseded duplicate pull requests with a precise reason.
+            When one dependency-eligible development pull request exists, check out that same-repository head branch, implement valid fixes test-first, rerun relevant tests, update authoritative documentation and CHANGELOG.md, commit, and push only that existing branch. Do not create another branch for the same work.
 
-            If no development pull request is open, inspect open issues, roadmap, architecture, security, privacy, reliability, observability, accessibility, packaging, interoperability, deployment, data governance, operational workflows, release evidence, and buyer-visible gaps. Select exactly one highest-impact bounded vertical slice. Prefer durable ETL execution, idempotency, replay, dead-letter handling, schema contracts, connector reliability, target warehouse support, tenancy, auditability, SLO evidence, and operator controls. Prefer issue #120 while its durable lease-fenced worker gap remains open and dependency-ready.
+            When no development pull request exists, inspect open issues, roadmap, architecture, security, privacy, reliability, observability, accessibility, packaging, interoperability, deployment, data governance, operational workflows, release evidence, and buyer-visible gaps. Select exactly one highest-impact bounded vertical slice. Create and push exactly one automation/opencode-YYYYMMDDTHHMMSSZ-short-slug branch. Do not create a second branch or pull request. Prefer durable ETL execution, idempotency, replay, dead-letter handling, schema contracts, connector reliability, target warehouse support, tenancy, auditability, SLO evidence, and operator controls.
 
-            Preserve standalone operation and modular MSA compatibility with ContextualWisdomLab/.github, naruon, and other CWL services. Database objects must contain at least two descriptive words and use snake_case by default. Public production APIs require complete beginner-readable documentation. Added production statements and branches require deterministic coverage. Use current authoritative standards, primary technical documentation, and peer-reviewed evidence where material, with APA 7th references in repository documentation.
+            Preserve standalone operation and modular MSA compatibility with ContextualWisdomLab/.github, naruon, and other CWL services. Database objects must contain at least two descriptive words and use snake_case by default. Public production APIs require complete beginner-readable documentation. Added production statements and branches require deterministic 100% statement and branch coverage. Use current authoritative standards, primary technical documentation, and peer-reviewed evidence where material, with APA 7th references in repository documentation.
 
-            Never approve or merge a pull request. Never push directly to develop or main. Do not bypass branch protection, independent approval, security gates, repository policy, required checks, or test coverage. Do not publish a release unless a separate release-authorized workflow and every acceptance gate explicitly permit it.
+            Do not create, update, approve, close, or merge a pull request directly. Never push directly to develop or main. Do not bypass branch protection, independent approval, security gates, repository policy, required checks, or test coverage. Do not publish a release unless a separate release-authorized workflow and every acceptance gate explicitly permit it.
 
-            Do not alter the existing review agent, its workflow, its provider configuration, or its credential flow. Do not change any review-agent secret name. Do not inspect secret values. Do not print, echo, summarize, or expose secret values. Do not modify .github/workflows/ or CODEOWNERS unless an open issue explicitly labeled automation-maintenance authorizes that exact bounded automation change; even then, prepare a pull request and leave approval and merge to an independent gate.
+            Do not alter the existing review agent, its workflow, its provider configuration, or its credential flow. Do not change any review-agent secret name. Do not inspect secret values. Do not print, echo, summarize, or expose secret values. Do not modify .github/workflows/ or CODEOWNERS unless an open issue explicitly labeled automation-maintenance authorizes that exact bounded automation change; even then, leave the policy change for explicit human workflow authorization.
 
-            Use the repository-scoped GitHub token only for the minimum branch, pull-request, issue, check, status, and security-read operations required by this run. Keep the working tree and pull-request description truthful about tests, skipped coverage, remaining risks, and release readiness. Leave one reviewable feature branch and pull request; never represent pending external gates as completed.
+            Use the repository-scoped token only for read operations and the one permitted feature-branch push. Keep the working tree truthful about tests, skipped coverage, remaining risks, and release readiness. The deterministic non-model publisher creates a draft pull request after validating the resulting branch.
         run: |
           set -euo pipefail
           if [[ -z "${NVIDIA_API_KEY}" ]]; then
@@ -143,11 +163,248 @@ jobs:
           git config --local user.name "opencode-agent[bot]"
           git config --local user.email "opencode-agent[bot]@users.noreply.github.com"
 
-          timeout --signal=TERM --kill-after=30s 45m opencode github run
+          printf '%s\n' "${PROMPT}" \
+            | timeout --signal=TERM --kill-after=30s 45m opencode run --model "${MODEL}" --auto
+
+      - name: Detect exactly one agent publication candidate
+        id: detect_candidate
+        if: ${{ always() && !cancelled() }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BEFORE_PR_HEADS: ${{ steps.snapshot_heads.outputs.open_pr_heads }}
+          BEFORE_AUTOMATION_BRANCH_HEADS: ${{ steps.snapshot_heads.outputs.automation_branch_heads }}
+          DEVELOP_HEAD_BEFORE: ${{ steps.snapshot_heads.outputs.develop_head }}
+        run: |
+          set -euo pipefail
+          repository="${GITHUB_REPOSITORY}"
+          after_pr_file="${RUNNER_TEMP}/open-pr-heads-after.json"
+          after_branch_file="${RUNNER_TEMP}/automation-branch-heads-after.json"
+
+          jq -e 'select(type == "object")' >/dev/null <<<"${BEFORE_PR_HEADS}"
+          jq -e 'select(type == "object")' >/dev/null <<<"${BEFORE_AUTOMATION_BRANCH_HEADS}"
+          current_develop="$(gh api "/repos/${repository}/git/ref/heads/develop" --jq '.object.sha')"
+          if [[ "${current_develop}" != "${DEVELOP_HEAD_BEFORE}" ]]; then
+            echo "Protected develop moved during the model job; publication evidence is indeterminate" >&2
+            exit 1
+          fi
+
+          gh api --paginate "/repos/${repository}/pulls?state=open&base=develop&per_page=100" \
+            | jq -s '(add // [])' > "${after_pr_file}"
+          gh api --paginate "/repos/${repository}/branches?per_page=100" \
+            | jq -s '(add // [])' > "${after_branch_file}"
+
+          changed_existing="$(
+            jq -c \
+              --arg repo "${repository}" \
+              --argjson before "${BEFORE_PR_HEADS}" '
+                [
+                  .[]
+                  | select(.head.repo.full_name == $repo and .base.ref == "develop")
+                  | (.number | tostring) as $number_key
+                  | select($before[$number_key] != null and $before[$number_key] != .head.sha)
+                  | {
+                      kind: "existing_pr",
+                      number: .number,
+                      head_ref: .head.ref,
+                      head_sha: .head.sha
+                    }
+                ]
+              ' "${after_pr_file}"
+          )"
+          changed_existing_refs="$(jq -c '[.[].head_ref]' <<<"${changed_existing}")"
+          changed_automation="$(
+            jq -c \
+              --argjson before "${BEFORE_AUTOMATION_BRANCH_HEADS}" \
+              --argjson existing_refs "${changed_existing_refs}" '
+                [
+                  .[]
+                  | select(.name | startswith("automation/opencode-"))
+                  | select(($before[.name] // null) != .commit.sha)
+                  | select(($existing_refs | index(.name)) == null)
+                  | select(.name | test("^automation/opencode-[0-9]{8}T[0-9]{6}Z-[a-z0-9][a-z0-9-]{0,48}$"))
+                  | {
+                      kind: "new_branch",
+                      head_ref: .name,
+                      head_sha: .commit.sha
+                    }
+                ]
+              ' "${after_branch_file}"
+          )"
+          candidates="$(jq -cn --argjson a "${changed_existing}" --argjson b "${changed_automation}" '$a + $b')"
+          candidate_count="$(jq 'length' <<<"${candidates}")"
+
+          if [[ "${candidate_count}" -gt 1 ]]; then
+            echo "Multiple agent publication candidates were detected; refusing ambiguous publication" >&2
+            jq . <<<"${candidates}" >&2
+            exit 1
+          fi
+          if [[ "${candidate_count}" -eq 0 ]]; then
+            printf 'agent_candidate=%s\n' '{"kind":"none"}' >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          candidate="$(jq -c '.[0]' <<<"${candidates}")"
+          printf 'agent_candidate=%s\n' "${candidate}" >> "${GITHUB_OUTPUT}"
+
+      - name: Preserve an OpenCode execution failure after candidate capture
+        if: ${{ steps.run_opencode.outcome == 'failure' }}
+        shell: bash
+        run: |
+          echo "OpenCode failed after any reviewable branch evidence was captured" >&2
+          exit 1
+
+  publish-agent-pull-request:
+    needs: maintain-repository
+    if: ${{ always() && !cancelled() && needs.maintain-repository.outputs.agent_candidate != '' }}
+    permissions:
+      contents: read
+      pull-requests: write
+    outputs:
+      pr_number: ${{ steps.publish.outputs.pr_number }}
+      head_ref: ${{ steps.publish.outputs.head_ref }}
+      head_sha: ${{ steps.publish.outputs.head_sha }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Publish one validated draft pull request or identify the updated pull request
+        id: publish
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AGENT_CANDIDATE: ${{ needs.maintain-repository.outputs.agent_candidate }}
+        run: |
+          set -euo pipefail
+          repository="${GITHUB_REPOSITORY}"
+          owner="${repository%%/*}"
+          base_branch="develop"
+          kind="$(jq -r '.kind' <<<"${AGENT_CANDIDATE}")"
+
+          if [[ "${kind}" == "none" ]]; then
+            exit 0
+          fi
+
+          head_ref="$(jq -r '.head_ref' <<<"${AGENT_CANDIDATE}")"
+          expected_head="$(jq -r '.head_sha' <<<"${AGENT_CANDIDATE}")"
+          if ! [[ "${expected_head}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Agent candidate has an invalid head SHA" >&2
+            exit 1
+          fi
+
+          if [[ "${kind}" == "existing_pr" ]]; then
+            number="$(jq -r '.number' <<<"${AGENT_CANDIDATE}")"
+            live="$(gh api "/repos/${repository}/pulls/${number}")"
+            jq -e \
+              --arg repo "${repository}" \
+              --arg base "${base_branch}" \
+              --arg head_ref "${head_ref}" \
+              --arg head_sha "${expected_head}" '
+                select(
+                  .state == "open"
+                  and .base.repo.full_name == $repo
+                  and .head.repo.full_name == $repo
+                  and .base.ref == $base
+                  and .head.ref == $head_ref
+                  and .head.sha == $head_sha
+                )
+              ' >/dev/null <<<"${live}"
+          elif [[ "${kind}" == "new_branch" ]]; then
+            if ! [[ "${head_ref}" =~ ^automation/opencode-[0-9]{8}T[0-9]{6}Z-[a-z0-9][a-z0-9-]{0,48}$ ]]; then
+              echo "Agent branch does not match the strict publication namespace" >&2
+              exit 1
+            fi
+            encoded_ref="$(jq -rn --arg value "${head_ref}" '$value | @uri')"
+            live_head="$(gh api "/repos/${repository}/branches/${encoded_ref}" --jq '.commit.sha')"
+            if [[ "${live_head}" != "${expected_head}" ]]; then
+              echo "Agent branch moved before deterministic publication" >&2
+              exit 1
+            fi
+
+            comparison="$(gh api "/repos/${repository}/compare/${base_branch}...${expected_head}")"
+            ahead_by="$(jq -r '.ahead_by' <<<"${comparison}")"
+            if [[ "${ahead_by}" -lt 1 ]]; then
+              echo "Agent branch is not ahead of develop" >&2
+              exit 1
+            fi
+            file_count="$(jq '.files | length' <<<"${comparison}")"
+            if [[ "${file_count}" -gt 50 ]]; then
+              echo "Agent branch exceeds the bounded 50-file publication limit" >&2
+              exit 1
+            fi
+            if jq -e '
+              any(
+                .files[].filename;
+                startswith(".github/")
+                or . == "CODEOWNERS"
+                or endswith("/CODEOWNERS")
+              )
+            ' >/dev/null <<<"${comparison}"; then
+              echo "Agent branch changes .github or CODEOWNERS policy and requires manual handling" >&2
+              exit 1
+            fi
+
+            existing="$(
+              gh api --method GET "/repos/${repository}/pulls" \
+                -f state=open \
+                -f base="${base_branch}" \
+                -f head="${owner}:${head_ref}"
+            )"
+            if [[ "$(jq 'length' <<<"${existing}")" -gt 0 ]]; then
+              number="$(jq -r '.[0].number' <<<"${existing}")"
+            else
+              title="$(gh api "/repos/${repository}/commits/${expected_head}" --jq '.commit.message | split("\n")[0]')"
+              title="${title//$'\r'/}"
+              if [[ -z "${title}" ]]; then
+                title="chore: bounded OpenCode maintenance"
+              fi
+              case "${title}" in
+                feat:*|fix:*|docs:*|test:*|refactor:*|perf:*|ci:*|chore:*|build:*|revert:*) ;;
+                *) title="chore: ${title}" ;;
+              esac
+              title="${title:0:180}"
+              body="$(printf '%s\n' \
+                "## Automated bounded development slice" \
+                "" \
+                "This draft pull request was published by a deterministic non-model job after OpenCode pushed exactly one validated branch." \
+                "" \
+                "- Exact head: \`${expected_head}\`" \
+                "- Base: \`${base_branch}\`" \
+                "- Model credential: repository \`NVIDIA_NIM_API_KEY\` mapped only inside the preceding OpenCode job" \
+                "- Pull-request approval and merge: explicitly outside the development agent's authority" \
+                "" \
+                "All tests, security checks, review threads, independent exact-head approvals, documentation, and release gates remain required. Pending or absent evidence is not passing." \
+              )"
+              payload="$(jq -cn \
+                --arg title "${title}" \
+                --arg head "${head_ref}" \
+                --arg base "${base_branch}" \
+                --arg body "${body}" \
+                '{title: $title, head: $head, base: $base, body: $body, draft: true}')"
+              created="$(gh api --method POST "/repos/${repository}/pulls" --input - <<<"${payload}")"
+              number="$(jq -r '.number' <<<"${created}")"
+            fi
+          else
+            echo "Unknown agent candidate kind: ${kind}" >&2
+            exit 1
+          fi
+
+          live="$(gh api "/repos/${repository}/pulls/${number}")"
+          live_head="$(jq -r '.head.sha' <<<"${live}")"
+          if [[ "${live_head}" != "${expected_head}" ]]; then
+            echo "Published pull request does not retain the expected exact head" >&2
+            exit 1
+          fi
+          {
+            printf 'pr_number=%s\n' "${number}"
+            printf 'head_ref=%s\n' "${head_ref}"
+            printf 'head_sha=%s\n' "${expected_head}"
+          } >> "${GITHUB_OUTPUT}"
 
   authorize-exact-head-checks:
-    needs: maintain-repository
-    if: ${{ always() && !cancelled() }}
+    needs:
+      - maintain-repository
+      - publish-agent-pull-request
+    if: ${{ always() && !cancelled() && needs.publish-agent-pull-request.result == 'success' && needs.publish-agent-pull-request.outputs.pr_number != '' }}
     permissions:
       actions: write
       contents: read
@@ -155,143 +412,109 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Authorize exact-head checks for agent-updated pull requests
+      - name: Authorize exact-head checks for the published or updated pull request
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          BEFORE_HEADS: ${{ needs.maintain-repository.outputs.open_pr_heads_before }}
+          PR_NUMBER: ${{ needs.publish-agent-pull-request.outputs.pr_number }}
+          HEAD_REF: ${{ needs.publish-agent-pull-request.outputs.head_ref }}
+          EXPECTED_HEAD: ${{ needs.publish-agent-pull-request.outputs.head_sha }}
         run: |
           set -euo pipefail
-          before_file="${RUNNER_TEMP}/open-pr-heads-before.json"
-          after_file="${RUNNER_TEMP}/open-pr-heads-after.json"
-          changed_file="${RUNNER_TEMP}/agent-changed-pr-heads.jsonl"
           repository="${GITHUB_REPOSITORY}"
+          number="${PR_NUMBER}"
+          head_ref="${HEAD_REF}"
+          expected_head="${EXPECTED_HEAD}"
           required_workflow_names='["CI","Dependency Review","SBOM (CycloneDX)","SAST Semgrep","Security Scan"]'
-          failed=0
+          all_runs_file="${RUNNER_TEMP}/pr-${number}-all-exact-head-runs.json"
+          runs_file="${RUNNER_TEMP}/pr-${number}-associated-exact-head-runs.json"
 
-          if [[ -z "${BEFORE_HEADS}" ]]; then
-            echo "Open pull-request head snapshot is unavailable" >&2
+          live="$(gh api "/repos/${repository}/pulls/${number}")"
+          jq -e \
+            --arg repo "${repository}" \
+            --arg head_ref "${head_ref}" \
+            --arg head_sha "${expected_head}" '
+              select(
+                .state == "open"
+                and .head.repo.full_name == $repo
+                and .base.ref == "develop"
+                and .head.ref == $head_ref
+                and .head.sha == $head_sha
+              )
+            ' >/dev/null <<<"${live}"
+
+          changed_files="$(
+            gh api --paginate "/repos/${repository}/pulls/${number}/files?per_page=100" \
+              | jq -s '(add // []) | map(.filename)'
+          )"
+          if jq -e '
+            any(
+              startswith(".github/")
+              or . == "CODEOWNERS"
+              or endswith("/CODEOWNERS")
+            )
+          ' >/dev/null <<<"${changed_files}"; then
+            echo "PR #${number} changes .github or CODEOWNERS policy; workflow runs require human authorization" >&2
             exit 1
           fi
-          printf '%s\n' "${BEFORE_HEADS}" \
-            | jq -e 'select(type == "object")' > "${before_file}"
 
-          gh api --paginate \
-            "/repos/${repository}/pulls?state=open&base=develop&per_page=100" \
-            | jq -s '(add // [])' > "${after_file}"
-          jq -c --arg repo "${repository}" --slurpfile before "${before_file}" '
-            .[]
-            | select(.head.repo.full_name == $repo)
-            | select(.base.ref == "develop")
-            | (.number | tostring) as $number_key
-            | ($before[0][$number_key] // null) as $previous_head
-            | select($previous_head != .head.sha)
-            | {
-                number: .number,
-                head_ref: .head.ref,
-                head_sha: .head.sha
-              }
-          ' "${after_file}" > "${changed_file}"
-
-          while IFS= read -r changed_pull_request; do
-            [[ -n "${changed_pull_request}" ]] || continue
-            number="$(jq -r '.number' <<<"${changed_pull_request}")"
-            head_ref="$(jq -r '.head_ref' <<<"${changed_pull_request}")"
-            expected_head="$(jq -r '.head_sha' <<<"${changed_pull_request}")"
-
-            changed_files="$(
-              gh api --paginate "/repos/${repository}/pulls/${number}/files?per_page=100" \
-                | jq -s '(add // []) | map(.filename)'
-            )"
-            if jq -e '
-              any(
-                startswith(".github/")
-                or . == "CODEOWNERS"
-                or endswith("/CODEOWNERS")
-              )
-            ' >/dev/null <<<"${changed_files}"; then
-              echo "PR #${number} changes .github or CODEOWNERS policy; exact-head runs require manual authorization" >&2
-              failed=1
-              continue
-            fi
-
+          missing_workflow_names="${required_workflow_names}"
+          for _ in $(seq 1 18); do
             current_head="$(gh api "/repos/${repository}/pulls/${number}" --jq '.head.sha')"
             if [[ "${current_head}" != "${expected_head}" ]]; then
-              echo "PR #${number} moved before workflow-run discovery" >&2
-              failed=1
-              continue
+              echo "PR #${number} moved while exact-head workflow runs were materializing" >&2
+              exit 1
             fi
 
-            runs_file="${RUNNER_TEMP}/pr-${number}-exact-head-runs.json"
-            observed_workflow_names='[]'
-            missing_workflow_names="${required_workflow_names}"
-            missing_workflow_count="$(jq 'length' <<<"${missing_workflow_names}")"
-
-            for _ in $(seq 1 18); do
-              current_head="$(gh api "/repos/${repository}/pulls/${number}" --jq '.head.sha')"
-              if [[ "${current_head}" != "${expected_head}" ]]; then
-                echo "PR #${number} moved while workflow runs were materializing" >&2
-                failed=1
-                break
-              fi
-
-              gh api --paginate \
-                "/repos/${repository}/actions/runs?event=pull_request&head_sha=${expected_head}&per_page=100" \
-                | jq -s '(map(.workflow_runs) | add) // []' > "${runs_file}"
-
-              while IFS= read -r run_id; do
-                [[ -n "${run_id}" ]] || continue
-                gh api --method POST \
-                  "/repos/${repository}/actions/runs/${run_id}/approve"
-              done < <(
-                jq -r --arg expected_head "${expected_head}" '
+            gh api --paginate \
+              "/repos/${repository}/actions/runs?event=pull_request&head_sha=${expected_head}&per_page=100" \
+              | jq -s '(map(.workflow_runs) | add) // []' > "${all_runs_file}"
+            jq -c \
+              --arg expected_head "${expected_head}" \
+              --argjson pull_request_number "${number}" '
+                [
                   .[]
-                  | select(
-                      .head_sha == $expected_head
-                      and (
-                        .conclusion == "action_required"
-                        or .status == "waiting"
-                      )
-                    )
-                  | .id
-                ' "${runs_file}"
-              )
+                  | select(.head_sha == $expected_head)
+                  | select(any(.pull_requests[]?; .number == $pull_request_number))
+                ]
+              ' "${all_runs_file}" > "${runs_file}"
 
-              observed_workflow_names="$(jq -c '[.[].name] | unique' "${runs_file}")"
-              missing_workflow_names="$(
-                jq -cn \
-                  --argjson required "${required_workflow_names}" \
-                  --argjson observed "${observed_workflow_names}" \
-                  '$required - $observed'
-              )"
-              missing_workflow_count="$(jq 'length' <<<"${missing_workflow_names}")"
-              if [[ "${missing_workflow_count}" -eq 0 ]]; then
-                echo "All required exact-head pull-request workflows materialized for PR #${number} at ${expected_head}"
-                break
-              fi
-              sleep 5
-            done
+            while IFS= read -r run_id; do
+              [[ -n "${run_id}" ]] || continue
+              gh api --method POST "/repos/${repository}/actions/runs/${run_id}/approve"
+            done < <(
+              jq -r '
+                .[]
+                | select(
+                    .conclusion == "action_required"
+                    or .status == "waiting"
+                  )
+                | .id
+              ' "${runs_file}"
+            )
 
-            if [[ "${failed}" -ne 0 ]]; then
-              continue
+            observed_workflow_names="$(jq -c '[.[].name] | unique' "${runs_file}")"
+            missing_workflow_names="$(
+              jq -cn \
+                --argjson required "${required_workflow_names}" \
+                --argjson observed "${observed_workflow_names}" \
+                '$required - $observed'
+            )"
+            if [[ "$(jq 'length' <<<"${missing_workflow_names}")" -eq 0 ]]; then
+              break
             fi
-            if [[ "${missing_workflow_count}" -gt 0 ]]; then
-              if [[ "$(jq 'length' <<<"${observed_workflow_names}")" -eq 0 ]]; then
-                echo "No pull-request workflow run materialized for PR #${number} exact head ${expected_head}" >&2
-              fi
-              echo "Required exact-head pull-request workflows did not materialize for PR #${number}: ${missing_workflow_names}" >&2
-              failed=1
-              continue
-            fi
+            sleep 5
+          done
 
-            current_head="$(gh api "/repos/${repository}/pulls/${number}" --jq '.head.sha')"
-            if [[ "${current_head}" != "${expected_head}" ]]; then
-              echo "PR #${number} moved before workflow-run authorization completed" >&2
-              failed=1
-              continue
-            fi
+          if [[ "$(jq 'length' <<<"${missing_workflow_names}")" -gt 0 ]]; then
+            echo "Missing required exact-head workflows for PR #${number}: ${missing_workflow_names}" >&2
+            exit 1
+          fi
 
-            echo "Authorized exact-head pull-request checks for PR #${number} branch ${head_ref} at ${expected_head}"
-          done < "${changed_file}"
+          current_head="$(gh api "/repos/${repository}/pulls/${number}" --jq '.head.sha')"
+          if [[ "${current_head}" != "${expected_head}" ]]; then
+            echo "PR #${number} moved before workflow-run authorization completed" >&2
+            exit 1
+          fi
 
-          exit "${failed}"
+          echo "Authorized exact-head pull-request checks for PR #${number} branch ${head_ref} at ${expected_head}"
