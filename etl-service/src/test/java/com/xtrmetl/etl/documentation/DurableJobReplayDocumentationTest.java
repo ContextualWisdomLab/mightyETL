@@ -59,6 +59,19 @@ class DurableJobReplayDocumentationTest {
     }
 
     @Test
+    void changelogRecordsReplayAdmissionLineageAndSafety() throws IOException {
+        String changelog = read("CHANGELOG.md").replaceAll("\\s+", " ");
+
+        assertTrue(changelog.contains("immutable failed or cancelled source"));
+        assertTrue(changelog.contains("byte-identical bounded JSON payload"));
+        assertTrue(changelog.contains("replay_source_job_record_id"));
+        assertTrue(changelog.contains("replay_root_job_record_id"));
+        assertTrue(changelog.contains("replay_generation_count"));
+        assertTrue(changelog.contains("V7__add_etl_job_replay_lineage.sql"));
+        assertTrue(changelog.contains("does not prove external connector safety"));
+    }
+
+    @Test
     void doctoringPinsVersionedReplayAndLockDomains() throws IOException {
         String evidence = read(
                 "docs/doctoring/durable-job-replay-key-domain-separation.md"
