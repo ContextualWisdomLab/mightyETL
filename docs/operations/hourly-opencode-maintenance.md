@@ -2,35 +2,35 @@
 
 ## Purpose
 
-`.github/workflows/hourly-opencode-maintenance.yml` runs at minute 43 of every hour, in UTC. It uses a checksum-pinned OpenCode 1.18.13 executable and the repository's existing `NVIDIA_NIM_API_KEY` to repair one dependency-eligible development pull request or prepare one bounded buyer-visible product improvement.
+`.github/workflows/hourly-opencode-maintenance.yml` runs at minute 43 of every UTC hour. It uses a checksum-pinned OpenCode 1.18.13 executable and the existing `NVIDIA_NIM_API_KEY` repository secret to repair one dependency-eligible development branch or prepare one bounded buyer-visible improvement.
 
-The workflow is separate from independent review and deterministic merge disposition. It never approves or merges a pull request, pushes to `develop` or `main`, weakens branch protection, changes the review agent's credential path, or publishes a release.
+The workflow is not a reviewer or merger. Independent review, required checks, branch protection, the central CWL review workflows, and deterministic expected-head merge disposition remain authoritative.
 
-## Required secret and model
+## Credential and model boundary
 
-The only model secret referenced by this workflow is:
+The only model secret referenced by the workflow is:
 
 ```text
 NVIDIA_NIM_API_KEY
 ```
 
-The OpenCode step maps it to:
+It is mapped only inside the model-execution step to:
 
 ```text
 NVIDIA_API_KEY
 ```
 
-A step-level environment variable is visible to that step's Bash shell and every child process, including OpenCode. The workflow has no GitHub Copilot, Anthropic, OpenAI, partner-only NVIDIA, or automatic model fallback. A missing secret fails before the agent starts.
+The selected model is `nvidia/deepseek-ai/deepseek-v4-pro`. There is no GitHub Copilot credential, `COPILOT_GITHUB_TOKEN`, Anthropic or OpenAI key, partner-only endpoint, or automatic provider fallback. A missing NVIDIA credential fails before model execution.
 
-The pinned provider/model is:
+The workflow invokes the plain non-interactive command:
 
 ```text
-nvidia/deepseek-ai/deepseek-v4-pro
+opencode run --model "${MODEL}" --auto
 ```
 
-Current model-selection evidence and replacement rules are recorded in `docs/doctoring/nvidia-opencode-model-selection-evidence.md`.
+It deliberately does not invoke `opencode github run`. OpenCode's GitHub schedule handler can create a pull request itself, which would require giving the model process coarse `pull-requests: write` authority. Plain `opencode run` lets the model edit, test, commit, and push one branch while deterministic non-model jobs own publication and workflow-run authorization.
 
-## Immutable execution contract
+## Immutable OpenCode installation
 
 | Control | Value |
 | --- | --- |
@@ -40,58 +40,81 @@ Current model-selection evidence and replacement rules are recorded in `docs/doc
 | SHA-256 | `8d500b20fed2d26e537e221895b1a575476571b4f0089bb29fb13eeb8eb9e937` |
 | Archive shape | exactly one regular-file member named `opencode` |
 | Checkout | full-SHA-pinned `actions/checkout` |
-| OpenCode timeout | `TERM` at 45 minutes, `KILL` after 30 seconds |
+| OpenCode timeout | `TERM` after 45 minutes; `KILL` after 30 seconds |
 | Job timeout | 50 minutes |
-| Overlap | serialized, active run not cancelled |
-| Session sharing | disabled |
+| Overlap | serialized; an active run is not cancelled |
 
-The installer downloads only the immutable GitHub release asset over HTTPS, verifies its checksum, requires exactly one member, requires GNU tar's regular-file type before extraction, extracts into a fresh mode-`0700` directory without restoring archive ownership or permissions, refuses overwrite, rejects symbolic links and non-regular output, and verifies the exact executable version. It does not use npm installation, a floating package version, or a mutable OpenCode action reference. Detailed evidence is in `docs/doctoring/opencode-archive-extraction-evidence.md`.
+The installer verifies the immutable archive checksum, member count, member name, GNU tar regular-file type, private mode-`0700` extraction directory, overwrite refusal, non-symbolic-link output, and exact executable version before running OpenCode. Checkout keeps `persist-credentials: false`.
 
-## Direct-token Git bootstrap
+## Three-job authority separation
 
-`USE_GITHUB_TOKEN=true` makes OpenCode use the repository-scoped token rather than an OpenCode App or OIDC token. Checkout keeps `persist-credentials: false`. Before OpenCode starts, the maintenance job:
-
-1. requires `GITHUB_TOKEN` and `GH_TOKEN`;
-2. removes inherited repository-local GitHub credential helpers;
-3. installs a repository-local `!gh auth git-credential` helper;
-4. sets the local author to `opencode-agent[bot]`;
-5. registers an `EXIT` trap that removes the helper after success, failure, or timeout.
-
-No plaintext or encoded token is stored in Git configuration. No personal token or additional repository secret is introduced.
-
-## Split-job permission model
-
-The workflow-level permission is only `contents: read`.
+```mermaid
+flowchart LR
+    A[maintain-repository<br/>model + checked-out source] -->|candidate JSON only| B[publish-agent-pull-request<br/>no checkout, no model secret]
+    B -->|PR number + exact SHA| C[authorize-exact-head-checks<br/>no checkout, no model secret]
+    C --> D[CI and security checks]
+    D --> E[independent review and merge disposition]
+```
 
 ### `maintain-repository`
 
-This job checks out and executes repository and agent code. It receives:
+This is the only job that executes checked-out repository code and OpenCode. Its pull-request permission is read-only:
 
-- `actions: read`
-- `checks: read`
-- `contents: write`
-- `issues: write`
-- `pull-requests: write`
-- `security-events: read`
-- `statuses: read`
+```text
+actions: read
+checks: read
+contents: write
+issues: write
+pull-requests: read
+security-events: read
+statuses: read
+```
 
-It does **not** receive Actions write permission. Therefore OpenCode, generated code, and checked-out repository scripts cannot authorize workflow runs.
+`contents: write` permits one feature-branch push. It does not grant pull-request review or merge endpoints. The model prompt additionally forbids direct pull-request creation, update, approval, closure, or merge, but the permission map—not the prompt—is the primary authorization boundary.
+
+Before OpenCode starts, the job snapshots:
+
+- the `develop` head;
+- every same-repository open pull request targeting `develop` and its exact head;
+- every existing `automation/opencode-*` branch and its exact head.
+
+After OpenCode exits, the job requires `develop` to remain unchanged and selects at most one candidate:
+
+- one existing pull request whose head moved; or
+- one new or advanced branch matching `automation/opencode-YYYYMMDDTHHMMSSZ-short-slug`.
+
+Multiple candidates fail closed. No candidate is represented as a no-op, not as successful product development.
+
+### `publish-agent-pull-request`
+
+This job has `contents: read` and the workflow's sole `pull-requests: write` grant. It never checks out or executes repository code and never receives `NVIDIA_API_KEY`.
+
+For an existing pull request, it only re-reads and validates repository, base branch, head branch, state, and exact SHA. For a new branch, it additionally requires:
+
+- the strict `automation/opencode-*` namespace;
+- the live branch SHA to equal the candidate SHA;
+- at least one commit ahead of `develop`;
+- no more than 50 changed files;
+- no `.github/**` or `CODEOWNERS` change;
+- a same-repository branch and `develop` base.
+
+It then creates one draft pull request through a fixed script-generated payload. Commit text may supply the title, but no untrusted source is executed. The job contains no review submission or merge endpoint.
 
 ### `authorize-exact-head-checks`
 
-This separate job receives:
+This job has `actions: write`, `contents: read`, and `pull-requests: read`. It never checks out repository code and never receives the model credential. Its only write operation is approval of GitHub Actions workflow runs that GitHub has placed in `action_required` or `waiting` state.
 
-- `actions: write`
-- `contents: read`
-- `pull-requests: read`
+Every eligible run must satisfy all of the following:
 
-It never checks out or executes repository code and never receives `NVIDIA_API_KEY`. Its only write operation is the GitHub workflow-run approval endpoint for an approval-required run bound to a verified exact head. It contains no pull-request review approval or merge operation.
+1. event is `pull_request`;
+2. `head_sha` equals the publisher's exact SHA;
+3. the run's `pull_requests` association contains the exact pull-request number;
+4. the pull request still has the expected repository, base, head branch, and SHA;
+5. the pull request does not change `.github/**` or `CODEOWNERS`.
 
-## Why exact-head run authorization is required
+The pull-request association check matters because two pull requests can reference the same commit SHA. SHA-only filtering could authorize another pull request's waiting workflow.
 
-GitHub prevents most events created with `GITHUB_TOKEN` from recursively triggering workflows. Pull-request runs created after an Actions-authored open or synchronize event can remain approval-required. Without explicit authorization, an agent could push a valid repair whose exact head never receives CI, dependency review, SBOM, SAST, or security scans.
-
-GitHub materializes those workflows asynchronously. Seeing and authorizing only the first run is not sufficient: later workflows can appear after the authorization step exits and remain waiting forever. The isolated job therefore requires this complete workflow-name set for a direct `develop` pull request:
+The job repeatedly discovers and authorizes runs until all of the following names materialize or the bounded wait expires:
 
 ```text
 CI
@@ -101,125 +124,76 @@ SAST Semgrep
 Security Scan
 ```
 
-These names prove only that the runs exist for the head. They do not make a run successful and do not replace the named check requirements enforced by merge disposition.
+Run authorization starts validation only. It does not make a check successful, approve the pull request, or permit merge.
 
-The maintenance job snapshots same-repository pull requests targeting `develop` before OpenCode starts and exports only the compact pull-request-number-to-head-SHA map. The isolated authorization job runs after the maintenance job succeeds or fails without cancellation and:
+## Agent development contract
 
-1. requires the snapshot to exist and parse as a JSON object;
-2. enumerates the same pull-request set after the agent run;
-3. selects only a new pull request or a head changed by that run;
-4. refuses automatic authorization for any `.github/**` or `CODEOWNERS` change;
-5. verifies that the current head equals the expected SHA;
-6. repeatedly discovers only `pull_request` workflow runs for that exact SHA;
-7. authorizes every visible run still in `action_required` or `waiting` state on each pass;
-8. compares observed names with the complete five-workflow set;
-9. continues bounded discovery until all five materialize;
-10. fails if no run appears or any required workflow remains missing;
-11. verifies the head again immediately before authorization is declared complete.
+When an eligible pull request exists, OpenCode may update only that same-repository head branch. When none exists, it may create exactly one strict `automation/opencode-*` branch. It must work test-first, preserve 100% configured production statement and branch coverage, add beginner-readable public documentation, update `CHANGELOG.md`, use descriptive multi-word `snake_case` database names, and record current primary standards or peer-reviewed evidence in APA 7th form where material.
 
-The expected SHA and workflow-name arrays are passed to `jq` as data, not interpolated into jq source. Authorization only starts validation. Every check must still complete successfully, all review threads must be resolved, a non-author approval must be anchored to the same head, and branch protection and expected-head merge disposition must still permit merge.
+The model must not:
 
-Test-first, least-privilege, complete-materialization, time-of-check/time-of-use, and rollback evidence is recorded in `docs/doctoring/github-token-exact-head-check-authorization-evidence.md`.
-
-## Agent authority boundary
-
-The agent may inspect open pull requests and their exact heads, fix one dependency-eligible development pull request, or create one bounded product pull request when no development pull request exists. It must use current authoritative standards and primary documentation, add APA 7th references where material, preserve modular MSA operation, use descriptive multiword `snake_case` database names, add beginner-readable production documentation, maintain deterministic statement and branch coverage, update `CHANGELOG.md`, and report incomplete gates truthfully.
-
-The agent must not:
-
-- approve or merge a pull request;
-- push directly to protected branches;
-- treat pending, absent, cancelled, skipped-required, stale, neutral-required, or failed checks as passing;
-- bypass review, security, coverage, or branch-protection policy;
+- mutate pull-request lifecycle state;
+- push to `develop` or `main`;
+- bypass checks, reviews, security gates, or branch protection;
+- modify the existing review agent or its credential names;
 - inspect or disclose secret values;
-- change the existing review agent, its provider, workflow, credential flow, or secret names;
-- create a second development pull request while one is dependency-eligible;
-- modify workflow policy without a specifically authorized `automation-maintenance` issue;
-- publish a release without a separately authorized release workflow and complete acceptance evidence.
+- modify `.github/**` or `CODEOWNERS` without a specifically authorized automation-maintenance issue;
+- publish a release.
 
-Even with an authorized automation issue, `.github/**` and `CODEOWNERS` changes are excluded from automatic run authorization and require human action.
+## Failure behavior
 
-## Normal sequence
+| Failure | Result |
+| --- | --- |
+| NVIDIA credential missing | fail before model execution |
+| OpenCode archive or checksum mismatch | fail before extraction or execution |
+| protected `develop` head moves during the run | fail as indeterminate publication evidence |
+| more than one candidate branch or PR changes | fail as ambiguous model output |
+| candidate branch is not ahead of `develop` | refuse publication |
+| candidate changes `.github/**` or `CODEOWNERS` | require explicit human handling |
+| live PR or branch SHA differs from the captured SHA | fail closed |
+| workflow run lacks exact PR association | exclude it from authorization |
+| required workflow name never materializes | fail and list missing names |
+| exact PR head moves during discovery | fail and require re-evaluation |
+| any check or independent review fails | leave the PR unmerged |
 
-1. GitHub starts the scheduled workflow from protected default-branch source.
-2. OpenCode is installed from the immutable checksum-pinned archive.
-3. The maintenance job snapshots current same-repository `develop` pull-request heads.
-4. The NVIDIA and GitHub credential boundaries are validated and the removable Git helper is installed.
-5. OpenCode reviews the current queue, executes one bounded test-first change, and leaves a feature branch or pull request.
-6. The credential cleanup trap removes the local helper.
-7. The isolated authorization job compares before and after heads.
-8. Policy-changing pull requests are rejected from automatic run authorization.
-9. Exact-head approval-required runs are repeatedly authorized while all five required workflow names materialize.
-10. CI, security, coverage, independent review, and merge disposition operate separately.
-
-## Failure handling
-
-| Failure | Result | Required response |
-| --- | --- | --- |
-| NVIDIA secret missing | Fail before OpenCode | Restore `NVIDIA_NIM_API_KEY`; add no fallback |
-| Repository token or Git helper unavailable | Fail visibly | Preserve `persist-credentials: false`; inspect runner tooling |
-| Archive unavailable, checksum mismatch, unexpected member/type, or version mismatch | Fail before execution | Treat as supply-chain review; never relax the pin silently |
-| Model endpoint unavailable or deprecated | Fail without fallback | Research a current NVIDIA endpoint and submit a reviewed test-first change |
-| OpenCode exceeds 45 minutes | TERM then KILL; cleanup trap executes | Reduce slice size and inspect partial branch state |
-| Pre-agent head output missing or invalid | Authorization job fails | Never authorize from an unknown baseline |
-| Agent changes `.github/**` or `CODEOWNERS` | Automatic authorization refused | Require explicit human workflow-run authorization |
-| Head moves during discovery or authorization | Authorization refused | Re-evaluate the new exact head |
-| No exact-head run materializes | Workflow fails | Diagnose event and Actions policy; do not merge the head |
-| A required workflow name remains absent | Workflow fails and lists missing names | Diagnose trigger filters or renamed workflows; update the contract only through review |
-| Workflow-run approval is rejected | Workflow fails | Verify repository policy and token permissions; add no personal-token workaround |
-| Checks or review fail | Pull request remains blocked | Fix the exact head without weakening the gate |
-| A prior hourly run remains active | New run waits | Investigate only if the prior run is stuck |
-
-A failed run can leave a reviewable feature branch or pull request, but it cannot claim successful validation, approval, merge, or release.
+A failed OpenCode step is preserved as a failed job after candidate evidence is captured. A deterministic publisher may still expose a valid partial branch as a draft for review, but the workflow never calls that a successful maintenance run.
 
 ## Rollback
 
-Disable **Hourly OpenCode maintenance** to stop execution immediately. Permanent rollback must revert the workflow, contract tests, operations document, doctoring evidence, plan/design documents, and `CHANGELOG.md` through a reviewed pull request.
+Disable **Hourly OpenCode maintenance** to stop the schedule immediately. Permanent rollback must revert the workflow, contract tests, this operations document, doctoring evidence, design and plan records, and corresponding changelog material through an independently reviewed pull request.
 
-Do not remove exact-head authorization while retaining agent writes through `GITHUB_TOKEN`, and do not move `actions: write` into the OpenCode job. A GitHub App replacement requires separately reviewed evidence for installation permissions, recursive triggers, actor identity, secret lifecycle, complete exact-head validation, and independent review.
+Do not restore `pull-requests: write` to the model job. Do not remove exact pull-request association from workflow-run authorization. A replacement GitHub App or token broker requires separate evidence for endpoint-level capability, actor identity, secret lifecycle, exact-head binding, and independent review.
 
 ## Verification checklist
 
-Before merge, verify on the exact current head:
+Before merge, verify on the exact head:
 
-- Ubuntu, macOS, and Windows CI succeeded;
-- dependency review, SBOM, Semgrep, Trivy, OSV, Scorecard, and required security gates succeeded;
-- no current unresolved review thread or requested change remains;
-- a non-author approval is anchored to the exact head;
-- required workflow-change labels are present;
+- Ubuntu, macOS, and Windows CI succeed;
+- dependency review, SBOM, Semgrep, Trivy, OSV, Scorecard, and required security gates succeed;
+- all current review threads are resolved;
+- a non-author approval is anchored to the exact current SHA;
 - only `NVIDIA_NIM_API_KEY` is referenced as a model secret;
-- the current NVIDIA endpoint and immutable OpenCode pin remain valid;
-- archive member, type, private extraction, overwrite, output-type, and version checks remain intact;
-- OpenCode retains no Actions write authority;
-- the isolated authorization job is the only holder of `actions: write` and performs no checkout;
-- the before/after head output, `.github/**` and `CODEOWNERS` exclusion, exact-head run filter, double head check, and visible absent-run failure remain intact;
-- all five required pull-request workflows must materialize before the authorization job reports completion;
-- the development workflow contains no review approval, merge, protected-branch push, fallback credential, or review-agent modification.
+- the immutable OpenCode archive and action pins remain unchanged;
+- the model job has `pull-requests: read`, not write;
+- the publisher is the only holder of `pull-requests: write` and performs no checkout;
+- the authorizer is the only holder of `actions: write` and performs no checkout;
+- every authorized run is associated with the exact pull-request number and SHA;
+- the workflow contains no pull-request review or merge operation.
 
 ## References — APA 7th
 
 Anomaly. (2026). *GitHub handler (Version 1.18.13)* [Source code]. GitHub. https://github.com/anomalyco/opencode/blob/v1.18.13/packages/opencode/src/cli/cmd/github.handler.ts
 
+Anomaly. (2026). *Run command (Version 1.18.13)* [Source code]. GitHub. https://github.com/anomalyco/opencode/blob/v1.18.13/packages/opencode/src/cli/cmd/run.ts
+
 Anomaly. (2026). *OpenCode release v1.18.13* [Software release]. GitHub. https://github.com/anomalyco/opencode/releases/tag/v1.18.13
-
-Anomaly. (2026). *GitHub integration*. OpenCode. https://opencode.ai/docs/github/
-
-Anomaly. (2026). *Providers*. OpenCode. https://opencode.ai/docs/providers/
 
 Free Software Foundation. (2023). *GNU tar 1.35: Security*. https://www.gnu.org/software/tar/manual/html_section/Security.html
 
-Free Software Foundation. (2026). *timeout: Run a command with a time limit*. GNU Coreutils 9.11. https://www.gnu.org/software/coreutils/manual/html_node/timeout-invocation.html
-
 GitHub, Inc. (2026). *GITHUB_TOKEN*. GitHub Docs. https://docs.github.com/en/actions/concepts/security/github_token
-
-GitHub, Inc. (2026). *GitHub CLI manual: gh auth git-credential*. GitHub CLI Manual. https://cli.github.com/manual/gh_auth_git-credential
 
 GitHub, Inc. (2026). *REST API endpoints for workflow runs*. GitHub Docs. https://docs.github.com/en/rest/actions/workflow-runs
 
 GitHub, Inc. (2026). *Security hardening for GitHub Actions*. GitHub Docs. https://docs.github.com/en/actions/security-for-github-actions/security-guides/security-hardening-for-github-actions
 
-GitHub, Inc. (2026). *Triggering a workflow*. GitHub Docs. https://docs.github.com/en/actions/using-workflows/triggering-a-workflow
-
 NVIDIA Corporation. (2026). *DeepSeek V4 Pro*. NVIDIA NIM API catalog. https://build.nvidia.com/deepseek-ai/deepseek-v4-pro
-
-NVIDIA Corporation. (2026). *DeepSeek AI / DeepSeek V4 Pro*. NVIDIA NIM API reference. https://docs.api.nvidia.com/nim/reference/deepseek-ai-deepseek-v4-pro
