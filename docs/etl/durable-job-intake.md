@@ -5,7 +5,8 @@
 `POST /api/etl/jobs` creates a durable, authenticated-principal-scoped ETL job resource. A separate
 lease-fenced worker claims accepted jobs across replicas, replays or writes the durable response
 ledger, writes target rows, and commits terminal state atomically. Authenticated operators can also
-list recent jobs in their own principal namespace through deterministic keyset pagination.
+list recent jobs in their own principal namespace through deterministic keyset pagination, inspect
+status, and cancel pending or running work through a database-owned terminal transition.
 
 Both intake and execution capabilities are fail-closed:
 
@@ -122,6 +123,31 @@ The representation exposes only the opaque job identifier, stable lifecycle stat
 count, stable failure code where applicable, and timestamps. It excludes request payload, raw
 principal, raw submission key, internal hashes, lease identifiers, SQL, and response-ledger data.
 
+## Cancel owned work
+
+```http
+POST /api/etl/jobs/{job_record_id}/cancellation HTTP/1.1
+Authorization: Basic <credentials>
+Idempotency-Key: "70dc8b50-e8b2-4e1a-8c5f-d84814708a77"
+```
+
+The endpoint can move only an owner-matched `PENDING` or `RUNNING` row to terminal `CANCELLED`. The
+same update clears the retained payload and every lease field, stores only a SHA-256 cancellation-key
+identity, a fixed `etl_job_cancelled_by_owner` code, and a database timestamp, and then returns the
+existing operator-safe status representation. It never persists the raw principal or raw key.
+
+A first transition returns `Idempotency-Replayed: false`; the same normalized key returns the existing
+cancelled resource with `Idempotency-Replayed: true`. Another key returns
+`422 etl_job_cancellation_key_reused`. A cancellation after committed success or failure returns
+`409 etl_job_already_succeeded` or `409 etl_job_already_failed`. Malformed, missing, and foreign-owned
+identifiers retain the same `404 etl_job_not_found` surface.
+
+The conditional database update is the authority. If cancellation commits before exact-lease success,
+the former worker's success predicate updates zero rows and Spring rolls back target and
+`etl_idempotency_records` effects. If success commits first, cancellation cannot rewrite it. The
+complete operational race, rollout, incident, connector-limitation, and rollback contract is in
+`docs/operations/durable-job-cancellation.md`.
+
 ## Lifecycle and distribution
 
 Flyway migrations create descriptive multi-word `snake_case` objects:
@@ -133,9 +159,11 @@ Flyway migrations create descriptive multi-word `snake_case` objects:
   `etl_job_claim_eligibility_index` for oldest eligible queue-like claims without blocking writers;
 - `V5__add_etl_job_owner_pagination_index.sql` concurrently adds
   `etl_job_owner_pagination_index` on `principal_scope_hash`, `created_at DESC`, and
-  `job_record_id DESC` for the exact owner-scoped ordering contract.
+  `job_record_id DESC` for the exact owner-scoped ordering contract;
+- `V6__add_etl_job_cancellation.sql` transactionally adds `cancellation_key_hash`,
+  `cancellation_code`, `job_cancelled_at`, and the five-state terminal lifecycle constraints.
 
-The stable lifecycle is `PENDING`, `RUNNING`, `SUCCEEDED`, and `FAILED`.
+The stable lifecycle is `PENDING`, `RUNNING`, `SUCCEEDED`, `FAILED`, and `CANCELLED`.
 
 Each fixed-delay poll handles at most one job. PostgreSQL, not scheduler uniqueness, distributes work:
 
@@ -149,11 +177,12 @@ Each fixed-delay poll handles at most one job. PostgreSQL, not scheduler uniquen
 5. an existing matching response is replayed, or target rows and `etl_idempotency_records` are written;
 6. `SUCCEEDED` is committed only for the exact unexpired claim in the same transaction.
 
-If the lease is expired or superseded, the final transition fails and rolls back target and ledger
-writes. An expired row can be reclaimed with a new claim identifier. A stale worker therefore cannot
-commit duplicate target effects or terminalize a newer owner's work.
+If the lease is expired, superseded, or cleared by cancellation, the final transition fails and rolls
+back target and ledger writes. An expired row can be reclaimed with a new claim identifier. A stale
+worker therefore cannot commit duplicate target effects, overwrite a cancelled job, or terminalize a
+newer owner's work.
 
-## Retry and failure behavior
+## Retry, failure, and cancellation behavior
 
 Transient database failures return the job to `PENDING` while attempts remain. At the configured
 limit they become `FAILED` with `etl_target_unavailable`. Non-transient database failures use
@@ -162,8 +191,10 @@ limit they become `FAILED` with `etl_target_unavailable`. Non-transient database
 validation retains its existing stable `etl_*` request code. Eligible rows already at the attempt
 limit use `etl_worker_attempts_exhausted`.
 
-Every retry or terminal transition repeats the exact live lease predicate. A zero-row transition is
-stale evidence and does not overwrite the authoritative owner.
+Owner cancellation is not a worker failure. It commits `CANCELLED` with a fixed cancellation code and
+no failure code. Every retry, success, failure, or cancellation transition repeats an authoritative
+state and owner predicate. A zero-row transition is stale or concurrent evidence and does not
+overwrite the committed outcome.
 
 ## Validation, privacy, and retention
 
@@ -172,25 +203,27 @@ bounds. The complete body must be a JSON array, duplicate JSON fields are reject
 must be an object with a safe textual `id`, and normalized field names must remain unique.
 
 The database stores an opaque UUID, SHA-256 hashes of principal scope, semantic submission key, and
-exact JSON text, the retained request payload while nonterminal, lifecycle and attempt fields, and
-lease metadata while running. Raw principal names and raw idempotency keys are never persisted.
+exact JSON text, the retained request payload while nonterminal, lifecycle and attempt fields, lease
+metadata while running, and a hashed cancellation identity plus fixed code and timestamp only while
+cancelled. Raw principal names and raw idempotency or cancellation keys are never persisted.
 
 The request payload inherits the source records' data classification. Database constraints require a
 payload for nonterminal rows and require it to be null for terminal rows. Success, deterministic
-failure, attempts exhaustion, and non-retryable failure clear the payload in their terminal
-transition. Apply least privilege, encryption, backup, restore, and retention controls while data is
-retained.
+failure, attempts exhaustion, non-retryable failure, and cancellation clear the payload in their
+terminal transition. Apply least privilege, encryption, backup, restore, and retention controls while
+data is retained.
 
-List and status representations exclude payloads, raw principals, raw keys, hashes, lease identifiers,
-SQL, and exception messages. Metrics and ordinary logs must not include those values or unbounded
-error classes. Operational procedures and metric contracts are authoritative in
-`docs/operations/durable-job-worker.md`. Claim-index deployment and invalid-index recovery are
+List, status, and cancellation representations exclude payloads, raw principals, raw keys, hashes,
+lease identifiers, SQL, and exception messages. Metrics and ordinary logs must not include those
+values or unbounded error classes. Worker procedures and metric contracts are authoritative in
+`docs/operations/durable-job-worker.md`; cancellation procedures are in
+`docs/operations/durable-job-cancellation.md`. Claim-index deployment and invalid-index recovery are
 specified in `docs/operations/durable-job-claim-index-rollout.md`.
 
 ## Migration and rollback
 
-Apply Flyway migrations in version order. V3 remains transactional so lease columns, legacy-data
-repair, and lifecycle constraints commit together. V4 and V5 are isolated additive index migrations.
+Apply Flyway migrations in version order. V3 and V6 remain transactional so lease or cancellation
+columns and lifecycle constraints commit together. V4 and V5 are isolated additive index migrations.
 Both use PostgreSQL `CREATE INDEX CONCURRENTLY` so inserts, updates, and deletes remain available while
 the indexes are built. Their matching `.sql.conf` files contain `executeInTransaction=false` because
 PostgreSQL rejects concurrent index creation inside a transaction block. The application also sets
@@ -219,10 +252,17 @@ cause an unacceptable owner-list scan cost. Dropping the claim index while worke
 cause expensive claim scans and contention. Do not remove either index until its traffic is withdrawn
 and an execution-plan review confirms the rollback boundary.
 
+V6 is not backward-compatible while cancelled rows exist because an older binary recognizes only the
+four earlier states. Stop serving cancellation before application rollback. Preserve the V6 schema
+until cancelled rows and audit evidence have been archived under an approved retention policy. Never
+silently map `CANCELLED` to `FAILED` or `SUCCEEDED`, and never edit an applied Flyway migration in
+place.
+
 ## Standards basis
 
 - RFC 9110 Section 15.3.3 defines `202 Accepted` as noncommittal and recommends a current-status
-  representation and status monitor.
+  representation and status monitor; Section 15.5.10 defines `409 Conflict` for a request that
+  conflicts with the target resource's current state.
 - RFC 8288 defines the Web Linking model and the HTTP `Link` header used for the optional next-page
   relationship.
 - RFC 9457 supplies deterministic problem-details representations.
@@ -235,6 +275,8 @@ and an execution-plan review confirms the rollback boundary.
   construction preserves writes with additional scans, waits, and invalid-index recovery caveats.
 - PostgreSQL 18 documents `SKIP LOCKED` as unsuitable for a general consistent view but useful for
   avoiding contention among multiple consumers of a queue-like table.
+- PostgreSQL 18 documents that `UPDATE` acquires row-level writer exclusion and reports only rows that
+  satisfy the authoritative predicate.
 - Flyway script configuration supports a migration-matched `.sql.conf` file and the
   `executeInTransaction=false` override required for non-transactional PostgreSQL DDL.
 - Flyway's PostgreSQL integration documents session-level migration locking for statements such as
@@ -251,7 +293,7 @@ https://www.rfc-editor.org/rfc/rfc9110
 Nottingham, M. (2017). *Web linking* (RFC 8288). RFC Editor.
 https://doi.org/10.17487/RFC8288
 
-Nottingham, M., & Wilde, E. (2023). *Problem details for HTTP APIs* (RFC 9457). RFC Editor.
+Nottingham, M., Wilde, E., & Dalal, S. (2023). *Problem details for HTTP APIs* (RFC 9457). RFC Editor.
 https://www.rfc-editor.org/rfc/rfc9457
 
 Nottingham, M., & Kamp, P. (2024). *Structured field values for HTTP* (RFC 9651). RFC Editor.
@@ -266,6 +308,9 @@ https://www.postgresql.org/docs/18/sql-createindex.html
 
 PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: Introduction to indexes*.
 https://www.postgresql.org/docs/18/indexes-intro.html
+
+PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: UPDATE*.
+https://www.postgresql.org/docs/18/sql-update.html
 
 Redgate Software. (2026). *Flyway PostgreSQL transactional lock setting*.
 https://documentation.red-gate.com/fd/flyway-postgresql-transactional-lock-setting-277579114.html
