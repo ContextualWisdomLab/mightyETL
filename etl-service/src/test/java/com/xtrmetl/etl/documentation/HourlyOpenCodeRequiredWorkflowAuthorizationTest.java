@@ -21,7 +21,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class HourlyOpenCodeRequiredWorkflowAuthorizationTest {
 
     /**
-     * Requires the authorization loop to wait for, and account for, every required workflow.
+     * Requires the authorization loop to wait for, associate, and account for every required
+     * workflow without coupling the test to incidental shell-variable or log-message wording.
      *
      * @throws IOException when the production workflow cannot be read
      */
@@ -38,11 +39,15 @@ class HourlyOpenCodeRequiredWorkflowAuthorizationTest {
         ));
         assertTrue(workflow.contains("observed_workflow_names"));
         assertTrue(workflow.contains("missing_workflow_names"));
-        assertTrue(workflow.contains("missing_workflow_count"));
         assertTrue(workflow.contains("for _ in $(seq 1 18); do"));
+        assertTrue(workflow.contains(".head_sha == $expected_head"));
+        assertTrue(workflow.contains(
+                "any(.pull_requests[]?; .number == $pull_request_number)"
+        ));
         assertTrue(workflow.contains("/actions/runs/${run_id}/approve"));
-        assertTrue(workflow.contains("All required exact-head pull-request workflows materialized"));
-        assertTrue(workflow.contains("Required exact-head pull-request workflows did not materialize"));
+        assertTrue(workflow.contains("jq 'length' <<<\"${missing_workflow_names}\""));
+        assertTrue(workflow.contains("Missing required exact-head workflows for PR"));
+        assertTrue(workflow.contains("Authorized exact-head pull-request checks for PR"));
     }
 
     /**
