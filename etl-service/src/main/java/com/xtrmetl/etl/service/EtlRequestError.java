@@ -167,6 +167,69 @@ public enum EtlRequestError {
             "The durable job failed before cancellation could commit."
     ),
 
+    /** The replay key is absent or outside the bounded safe idempotency profile. */
+    JOB_REPLAY_KEY_REQUIRED(
+            HttpStatus.BAD_REQUEST,
+            "etl_job_replay_key_required",
+            "urn:mightyetl:problem:etl-job-replay-key-required",
+            "ETL job replay key required",
+            "Replay requires a supported principal-scoped Idempotency-Key."
+    ),
+
+    /** The resupplied payload does not match the immutable terminal source digest. */
+    JOB_REPLAY_PAYLOAD_MISMATCH(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "etl_job_replay_payload_mismatch",
+            "urn:mightyetl:problem:etl-job-replay-payload-mismatch",
+            "ETL job replay payload mismatch",
+            "The replay payload does not match the immutable source job payload digest."
+    ),
+
+    /** The replay identity already belongs to another source or payload. */
+    JOB_REPLAY_KEY_REUSED(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "etl_job_replay_key_reused",
+            "urn:mightyetl:problem:etl-job-replay-key-reused",
+            "ETL job replay key reused",
+            "The Idempotency-Key already identifies a different durable job replay."
+    ),
+
+    /** Another transaction owns the same principal-scoped replay identity. */
+    JOB_REPLAY_IN_PROGRESS(
+            HttpStatus.CONFLICT,
+            "etl_job_replay_in_progress",
+            "urn:mightyetl:problem:etl-job-replay-in-progress",
+            "ETL job replay in progress",
+            "A durable job replay with the same principal-scoped Idempotency-Key is being created."
+    ),
+
+    /** A pending or running source is still active and cannot be replayed. */
+    JOB_REPLAY_SOURCE_ACTIVE(
+            HttpStatus.CONFLICT,
+            "etl_job_replay_source_active",
+            "urn:mightyetl:problem:etl-job-replay-source-active",
+            "ETL job replay source active",
+            "Pending or running durable jobs cannot be replayed."
+    ),
+
+    /** A succeeded source is excluded to prevent silent duplicate target effects. */
+    JOB_REPLAY_SOURCE_SUCCEEDED(
+            HttpStatus.CONFLICT,
+            "etl_job_replay_source_succeeded",
+            "urn:mightyetl:problem:etl-job-replay-source-succeeded",
+            "ETL job replay source succeeded",
+            "A succeeded durable job cannot be replayed through this endpoint."
+    ),
+
+    /** The bounded immutable replay lineage cannot create another generation. */
+    JOB_REPLAY_GENERATION_EXHAUSTED(
+            HttpStatus.CONFLICT,
+            "etl_job_replay_generation_exhausted",
+            "urn:mightyetl:problem:etl-job-replay-generation-exhausted",
+            "ETL job replay generation exhausted",
+            "The durable job replay lineage reached its maximum generation."
+    ),
+
     /** The requested job does not exist in the authenticated principal's namespace. */
     JOB_NOT_FOUND(
             HttpStatus.NOT_FOUND,
@@ -196,47 +259,27 @@ public enum EtlRequestError {
         this.detail = Objects.requireNonNull(detail, "detail must not be null");
     }
 
-    /**
-     * Returns the HTTP status for this deterministic request failure.
-     *
-     * @return immutable HTTP status
-     */
+    /** @return HTTP status for this deterministic request failure */
     public HttpStatus status() {
         return status;
     }
 
-    /**
-     * Returns the stable snake_case machine code.
-     *
-     * @return compatibility-safe error code
-     */
+    /** @return stable snake_case compatibility-safe machine code */
     public String errorCode() {
         return errorCode;
     }
 
-    /**
-     * Returns the stable RFC 9457 problem type URI.
-     *
-     * @return problem type URI
-     */
+    /** @return stable RFC 9457 problem type URI */
     public URI type() {
         return type;
     }
 
-    /**
-     * Returns the fixed human-readable category title.
-     *
-     * @return problem title
-     */
+    /** @return fixed human-readable problem title */
     public String title() {
         return title;
     }
 
-    /**
-     * Returns the fixed non-sensitive client guidance.
-     *
-     * @return problem detail
-     */
+    /** @return fixed non-sensitive client guidance */
     public String detail() {
         return detail;
     }
