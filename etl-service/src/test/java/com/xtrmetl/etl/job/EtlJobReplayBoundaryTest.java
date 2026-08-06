@@ -110,7 +110,7 @@ class EtlJobReplayBoundaryTest {
         JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
         EtlJobReplayService service = service(jdbcTemplate, lockHash -> true);
 
-        IllegalStateException exception = assertThrows(
+        IllegalStateException nonEmptyBatch = assertThrows(
                 IllegalStateException.class,
                 () -> service.replayOwned(
                         SOURCE_ID,
@@ -119,8 +119,21 @@ class EtlJobReplayBoundaryTest {
                         "tenant_alpha"
                 )
         );
+        IllegalStateException emptyBatch = assertThrows(
+                IllegalStateException.class,
+                () -> service.replayOwned(
+                        SOURCE_ID,
+                        "[]",
+                        REPLAY_KEY,
+                        "tenant_alpha"
+                )
+        );
 
-        assertEquals("Durable ETL job replay requires an active transaction", exception.getMessage());
+        assertEquals(
+                "Durable ETL job replay requires an active transaction",
+                nonEmptyBatch.getMessage()
+        );
+        assertEquals(nonEmptyBatch.getMessage(), emptyBatch.getMessage());
         verifyNoInteractions(jdbcTemplate);
     }
 
