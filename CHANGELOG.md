@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Authenticated operators can now perform owner-scoped durable-job cancellation for `PENDING` and `RUNNING` work through an idempotent action that commits terminal `CANCELLED`, clears payload and lease state, stores only `cancellation_key_hash` plus a fixed code and timestamp, and returns stable RFC 9457 conflicts when success or failure already won.
+- Cancellation-first races now make the former exact lease stale and roll back transactional target and response-ledger effects; success-first races remain `SUCCEEDED`, while same-key cancellation replays and different-key reuse fails closed.
 - Owner-scoped durable-job status responses now emit deterministic weak SHA-256 `ETag` validators; ordinary and wildcard `If-None-Match` requests return an empty RFC 9110 `304 Not Modified` response only after authenticated owner-safe lookup, while `Cache-Control: no-store` remains unchanged.
 - Active durable-job status responses now emit an RFC 9110 `Retry-After` delay for `PENDING` and `RUNNING` states only when local worker execution is enabled, derived from the bounded worker fixed-delay configuration with upward whole-second rounding; terminal states and intake-only maintenance mode omit the advisory.
 - The durable job pagination index now uses PostgreSQL `CREATE INDEX CONCURRENTLY` with a migration-local Flyway `executeInTransaction=false` companion configuration, preserving production writers and documenting invalid-index recovery and concurrent rollback.
@@ -34,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Transactional migration `V6__add_etl_job_cancellation.sql`, owner-safe cancellation API and replay model, exact lease-invalidation and cancellation-versus-success integration tests, plus rollout, incident, connector-limitation, and rollback evidence in `docs/operations/durable-job-cancellation.md`.
 - Deterministic ordinary, wildcard, changed-state, changed-failure-code, null-versus-empty, and unrelated-response conditional polling tests, complete controller Javadoc, privacy and rollback guidance, and APA 7th standards evidence in `docs/etl/durable-job-polling.md`.
 - Controller-scoped polling advice, deterministic active/terminal lifecycle tests, disabled-worker fail-closed behavior, sub-second rounding coverage, rollback guidance, and APA 7th standards evidence in `docs/etl/durable-job-polling.md`.
 - Owner-scoped durable job list models and HTTP contract, strict cursor and page-limit validation, one-extra-row next-page detection, the descriptive `etl_job_owner_pagination_index`, deterministic tenant-isolation and equal-timestamp tests, migration rollback guidance, and APA 7th standards evidence in `docs/etl/durable-job-intake.md`.
@@ -73,6 +76,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Cancellation stores only a principal-scoped SHA-256 replay identity and a fixed machine code, exposes no raw principal, key, hash, payload, lease, SQL, exception, or target detail, and requires an owner-matched conditional database update before reporting success.
 - Conditional status validators are SHA-256 digests of only the complete owner-authorized operator-safe representation; payloads, raw principals, idempotency keys, internal hashes, leases, SQL, and exception text remain excluded, and wildcard evaluation occurs only after owner-safe lookup.
 - Polling advice exposes only a bounded delay integer and is omitted when local execution is disabled or terminal; it never contains job, lease, principal, key, hash, payload, SQL, exception, target, or queue-depth data.
 - Job-list cursors contain only ordering keys, never authority or sensitive values; every page query independently binds the hashed authenticated principal, malformed and non-canonical cursors fail before database access, and list responses exclude payloads, principals, keys, hashes, lease identifiers, SQL, and exception text.
@@ -280,5 +284,5 @@ This changelog will be updated:
 ---
 
 **Changelog Version**: 1.0  
-**Last Updated**: 2026-08-05  
+**Last Updated**: 2026-08-06  
 **Maintained By**: Development Team
