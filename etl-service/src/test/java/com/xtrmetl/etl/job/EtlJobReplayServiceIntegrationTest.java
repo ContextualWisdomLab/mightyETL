@@ -161,6 +161,16 @@ class EtlJobReplayServiceIntegrationTest {
                 REPLAY_KEY,
                 "tenant_alpha"
         );
+        assertError(
+                EtlRequestError.JOB_REPLAY_KEY_REUSED,
+                () -> replayService.replayOwned(
+                        sourceId,
+                        OTHER_PAYLOAD,
+                        REPLAY_KEY,
+                        "tenant_alpha"
+                )
+        );
+
         UUID otherSource = insertTerminalSource(
                 EtlJobStatus.FAILED,
                 "tenant_alpha",
@@ -272,6 +282,46 @@ class EtlJobReplayServiceIntegrationTest {
                         "tenant_alpha"
                 )
         );
+    }
+
+    @Test
+    void rejectsIncompleteOrForeignRootLineage() {
+        UUID incompleteRoot = insertSource(
+                EtlJobStatus.FAILED,
+                "tenant_alpha",
+                PAYLOAD,
+                null,
+                1
+        );
+        IllegalStateException incomplete = assertThrows(
+                IllegalStateException.class,
+                () -> replayService.replayOwned(
+                        incompleteRoot,
+                        PAYLOAD,
+                        REPLAY_KEY,
+                        "tenant_alpha"
+                )
+        );
+        assertEquals("Replay source has incomplete root lineage", incomplete.getMessage());
+
+        UUID absentRoot = insertSource(
+                EtlJobStatus.FAILED,
+                "tenant_alpha",
+                PAYLOAD,
+                UUID.randomUUID(),
+                1
+        );
+        IllegalStateException absent = assertThrows(
+                IllegalStateException.class,
+                () -> replayService.replayOwned(
+                        absentRoot,
+                        PAYLOAD,
+                        OTHER_REPLAY_KEY,
+                        "tenant_alpha"
+                )
+        );
+        assertEquals("Replay root is absent from the owner namespace", absent.getMessage());
+        assertEquals(0, replayRowCount());
     }
 
     private UUID insertTerminalSource(
