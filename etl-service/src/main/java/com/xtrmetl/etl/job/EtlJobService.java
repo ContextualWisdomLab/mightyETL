@@ -31,7 +31,7 @@ import java.util.UUID;
 import java.util.regex.Pattern;
 
 /**
- * Creates, reads, and lists durable principal-scoped asynchronous ETL job resources.
+ * Creates, reads, lists, and cancels durable principal-scoped asynchronous ETL job resources.
  *
  * <p>The intake path validates the complete bounded JSON batch before persistence. Raw
  * authentication principals and idempotency keys are never stored. Instead, independent SHA-256
@@ -48,9 +48,18 @@ import java.util.regex.Pattern;
  * opaque cursor is non-authoritative: it contains only the last returned ordering key, while the
  * principal hash remains an independent mandatory query predicate. Malformed or non-canonical
  * cursors fail closed before database access.</p>
+ *
+ * <p>Cancellation is owned by one conditional database update. It can move only an owner-matched
+ * pending or running row to {@link EtlJobStatus#CANCELLED}, clearing the retained payload and every
+ * lease field atomically. A worker that tries to publish success afterward fails its exact-live-
+ * lease predicate and rolls back the target and response-ledger transaction. Raw cancellation keys
+ * are never persisted; replay compares only a principal-scoped SHA-256 value.</p>
  */
 @Service
 public class EtlJobService {
+
+    /** Stable terminal code persisted when the authenticated owner cancels a durable job. */
+    public static final String CANCELLED_BY_OWNER_CODE = "etl_job_cancelled_by_owner";
 
     private static final String INSERT_JOB_SQL = """
             INSERT INTO etl_job_records (
@@ -76,6 +85,29 @@ public class EtlJobService {
             FROM etl_job_records
             WHERE job_record_id = ?
               AND principal_scope_hash = ?
+            """;
+    private static final String SELECT_OWNED_CANCELLATION_SQL = """
+            SELECT job_record_id, job_status, attempt_count, failure_code,
+                   cancellation_key_hash, created_at, updated_at
+            FROM etl_job_records
+            WHERE job_record_id = ?
+              AND principal_scope_hash = ?
+            """;
+    private static final String CANCEL_OWNED_JOB_SQL = """
+            UPDATE etl_job_records
+            SET job_status = 'CANCELLED',
+                request_payload = NULL,
+                failure_code = NULL,
+                lease_claim_id = NULL,
+                lease_owner_id = NULL,
+                lease_expires_at = NULL,
+                cancellation_key_hash = ?,
+                cancellation_code = ?,
+                job_cancelled_at = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE job_record_id = ?
+              AND principal_scope_hash = ?
+              AND job_status IN ('PENDING', 'RUNNING')
             """;
     private static final String SELECT_OWNED_JOB_PAGE_SQL = """
             SELECT job_record_id, job_status, attempt_count,
@@ -195,7 +227,7 @@ public class EtlJobService {
         String validatedKey = validateIdempotencyKey(idempotencyKey);
         String validatedScope = validatePrincipalScope(principalScope);
         String validatedPayload = validatePayload(requestPayload);
-        requireActiveTransaction();
+        requireActiveSubmissionTransaction();
 
         String principalScopeHash = Sha256Digest.digest(validatedScope);
         String submissionKeyHash = Sha256Digest.digest(validatedKey);
@@ -234,6 +266,74 @@ public class EtlJobService {
     }
 
     /**
+     * Cancels an owner-scoped pending or running job, or replays an identical cancellation.
+     *
+     * <p>The conditional update is the only cancellation authority. It changes no row after a
+     * terminal success or failure. Cancelling a running row clears its claim token, owner, expiry,
+     * and payload in the same transaction, so a concurrent worker cannot publish terminal success
+     * through the former lease. Replays compare a principal-scoped SHA-256 key and return the
+     * already committed operator-safe status without rewriting the row.</p>
+     *
+     * @param jobRecordId opaque durable job identifier
+     * @param cancellationKey required quoted Structured Field String or legacy raw safe value
+     * @param principalScope authenticated principal namespace
+     * @return newly committed or replayed cancelled status
+     * @throws NullPointerException when {@code jobRecordId} is {@code null}
+     * @throws EtlRequestException when authentication, key, ownership, or state contracts fail
+     * @throws IllegalStateException when invoked without an actual transaction
+     */
+    @Transactional
+    public EtlJobCancellation cancelOwned(
+            UUID jobRecordId,
+            @Nullable String cancellationKey,
+            @Nullable String principalScope
+    ) {
+        UUID validatedJobId = Objects.requireNonNull(jobRecordId, "jobRecordId must not be null");
+        String validatedKey = validateCancellationKey(cancellationKey);
+        String validatedScope = validatePrincipalScope(principalScope);
+        requireActiveCancellationTransaction();
+
+        String principalScopeHash = Sha256Digest.digest(validatedScope);
+        String cancellationKeyHash = Sha256Digest.digest(validatedKey);
+        int updatedRows = jdbcTemplate.update(
+                CANCEL_OWNED_JOB_SQL,
+                cancellationKeyHash,
+                CANCELLED_BY_OWNER_CODE,
+                validatedJobId,
+                principalScopeHash
+        );
+
+        StoredCancellation storedCancellation = findOwnedCancellation(
+                validatedJobId,
+                principalScopeHash
+        );
+        if (storedCancellation == null) {
+            throw new EtlRequestException(EtlRequestError.JOB_NOT_FOUND);
+        }
+        if (updatedRows == 1) {
+            return new EtlJobCancellation(storedCancellation.snapshot(), false);
+        }
+
+        return switch (storedCancellation.snapshot().jobStatus()) {
+            case CANCELLED -> {
+                if (!cancellationKeyHash.equals(storedCancellation.cancellationKeyHash())) {
+                    throw new EtlRequestException(
+                            EtlRequestError.JOB_CANCELLATION_KEY_REUSED
+                    );
+                }
+                yield new EtlJobCancellation(storedCancellation.snapshot(), true);
+            }
+            case SUCCEEDED -> throw new EtlRequestException(
+                    EtlRequestError.JOB_ALREADY_SUCCEEDED
+            );
+            case FAILED -> throw new EtlRequestException(EtlRequestError.JOB_ALREADY_FAILED);
+            case PENDING, RUNNING -> throw new EtlRequestException(
+                    EtlRequestError.JOB_CANCELLATION_IN_PROGRESS
+            );
+        };
+    }
+
+    /**
      * Returns one job only when it belongs to the authenticated principal.
      *
      * <p>Missing identifiers and identifiers owned by another principal intentionally produce the
@@ -253,12 +353,14 @@ public class EtlJobService {
         String principalScopeHash = Sha256Digest.digest(validatePrincipalScope(principalScope));
         List<EtlJobSnapshot> jobs = jdbcTemplate.query(
                 SELECT_OWNED_JOB_SQL,
-                (resultSet, rowNumber) -> mapSnapshot(resultSet.getObject("job_record_id", UUID.class),
+                (resultSet, rowNumber) -> mapSnapshot(
+                        resultSet.getObject("job_record_id", UUID.class),
                         resultSet.getString("job_status"),
                         resultSet.getInt("attempt_count"),
                         resultSet.getString("failure_code"),
                         resultSet.getTimestamp("created_at"),
-                        resultSet.getTimestamp("updated_at")),
+                        resultSet.getTimestamp("updated_at")
+                ),
                 validatedJobId,
                 principalScopeHash
         );
@@ -340,6 +442,30 @@ public class EtlJobService {
                 ),
                 principalScopeHash,
                 submissionKeyHash
+        );
+        return jobs.isEmpty() ? null : jobs.getFirst();
+    }
+
+    @Nullable
+    private StoredCancellation findOwnedCancellation(
+            UUID jobRecordId,
+            String principalScopeHash
+    ) {
+        List<StoredCancellation> jobs = jdbcTemplate.query(
+                SELECT_OWNED_CANCELLATION_SQL,
+                (resultSet, rowNumber) -> new StoredCancellation(
+                        mapSnapshot(
+                                resultSet.getObject("job_record_id", UUID.class),
+                                resultSet.getString("job_status"),
+                                resultSet.getInt("attempt_count"),
+                                resultSet.getString("failure_code"),
+                                resultSet.getTimestamp("created_at"),
+                                resultSet.getTimestamp("updated_at")
+                        ),
+                        resultSet.getString("cancellation_key_hash")
+                ),
+                jobRecordId,
+                principalScopeHash
         );
         return jobs.isEmpty() ? null : jobs.getFirst();
     }
@@ -532,6 +658,22 @@ public class EtlJobService {
         throw new EtlRequestException(EtlRequestError.INVALID_IDEMPOTENCY_KEY);
     }
 
+    private static String validateCancellationKey(@Nullable String cancellationKey) {
+        if (cancellationKey == null) {
+            throw new EtlRequestException(EtlRequestError.JOB_CANCELLATION_KEY_REQUIRED);
+        }
+        var structuredFieldMatcher = IDEMPOTENCY_KEY_STRUCTURED_FIELD_PROFILE.matcher(
+                cancellationKey
+        );
+        if (structuredFieldMatcher.matches()) {
+            return structuredFieldMatcher.group(1);
+        }
+        if (IDEMPOTENCY_KEY_VALUE_PROFILE.matcher(cancellationKey).matches()) {
+            return cancellationKey;
+        }
+        throw new EtlRequestException(EtlRequestError.JOB_CANCELLATION_KEY_REQUIRED);
+    }
+
     private static String validatePrincipalScope(@Nullable String principalScope) {
         if (principalScope == null
                 || principalScope.isBlank()
@@ -542,7 +684,7 @@ public class EtlJobService {
         return principalScope;
     }
 
-    private static void requireActiveTransaction() {
+    private static void requireActiveSubmissionTransaction() {
         if (!TransactionSynchronizationManager.isActualTransactionActive()) {
             throw new IllegalStateException(
                     "Durable ETL job submission requires an active transaction"
@@ -550,9 +692,26 @@ public class EtlJobService {
         }
     }
 
+    private static void requireActiveCancellationTransaction() {
+        if (!TransactionSynchronizationManager.isActualTransactionActive()) {
+            throw new IllegalStateException(
+                    "Durable ETL job cancellation requires an active transaction"
+            );
+        }
+    }
+
     private record StoredJobRecord(String requestDigest, EtlJobSnapshot snapshot) {
         private StoredJobRecord {
             Objects.requireNonNull(requestDigest, "requestDigest must not be null");
+            Objects.requireNonNull(snapshot, "snapshot must not be null");
+        }
+    }
+
+    private record StoredCancellation(
+            EtlJobSnapshot snapshot,
+            @Nullable String cancellationKeyHash
+    ) {
+        private StoredCancellation {
             Objects.requireNonNull(snapshot, "snapshot must not be null");
         }
     }
