@@ -33,7 +33,9 @@ class DurableJobCancellationDocumentationTest {
         assertTrue(runbook.contains("V6__add_etl_job_cancellation.sql"));
         assertTrue(runbook.contains("mightyetl.etl.jobs.intake-enabled=false"));
         assertTrue(runbook.contains("does not claim arbitrary external side-effect reversal"));
-        assertTrue(runbook.contains("Never silently map CANCELLED to FAILED or SUCCEEDED"));
+        assertTrue(runbook.contains(
+                "Never silently map `CANCELLED` to `FAILED` or `SUCCEEDED`"
+        ));
         assertTrue(runbook.contains("RFC 9110"));
         assertTrue(runbook.contains("RFC 9457"));
         assertTrue(runbook.contains("PostgreSQL Global Development Group. (2026)"));
