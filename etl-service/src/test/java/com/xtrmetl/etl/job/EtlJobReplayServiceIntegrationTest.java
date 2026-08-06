@@ -321,7 +321,15 @@ class EtlJobReplayServiceIntegrationTest {
                 )
         );
         assertEquals("Replay root is absent from the owner namespace", absent.getMessage());
-        assertEquals(0, replayRowCount());
+        assertEquals(
+                0,
+                jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM etl_job_records "
+                                + "WHERE job_status='PENDING' "
+                                + "AND replay_generation_count IS NOT NULL",
+                        Integer.class
+                )
+        );
     }
 
     private UUID insertTerminalSource(
