@@ -4,7 +4,7 @@
 
 **Goal:** Create a new owner-scoped durable job from a failed or cancelled source only after the client resupplies the exact original payload.
 
-**Architecture:** Store replay lineage on the new job row, use a versioned principal-scoped replay-key hash in the existing submission identity column, serialize creation with the existing transaction-lock boundary, verify payload digest against the terminal source, and return the existing accepted-job wire model.
+**Architecture:** Store replay lineage on the new job row, bind immediate-source and root references to the same principal through composite owner-scoped foreign keys, use a versioned principal-scoped replay-key hash in the existing submission identity column, serialize creation with the existing transaction-lock boundary, verify payload digest against the terminal source, and return the existing accepted-job wire model.
 
 **Tech Stack:** Java 25, Spring MVC, Spring transactions, JdbcTemplate, PostgreSQL 18, Flyway, H2 integration tests, JUnit 5, Mockito, JaCoCo, Maven.
 
@@ -14,6 +14,7 @@
 - Allow only `FAILED` and `CANCELLED` sources.
 - Validate identifier, replay key, principal, and complete payload before lock or table access.
 - Persist no raw principal or raw replay key.
+- Require PostgreSQL to reject source or root lineage whose `principal_scope_hash` differs from the new row.
 - Preserve zero-missed configured production instruction, line, method, and branch coverage.
 - Preserve no-skipped project tests and beginner-readable public Javadoc.
 - Use descriptive multi-word `snake_case` database objects.
@@ -25,8 +26,9 @@
 - Modify: `etl-service/src/test/java/com/xtrmetl/etl/job/EtlJobMigrationDocumentationTest.java`
 - Create: `etl-service/src/main/resources/db/migration/V7__add_etl_job_replay_lineage.sql`
 
-- [ ] Require all three lineage columns, bounded generation, complete-null-or-complete-non-null lifecycle, self-reference rejection, two named self-referencing foreign keys, and `ON DELETE RESTRICT`.
-- [ ] Run the focused migration test and observe failure because V7 is absent.
+- [ ] Require all three lineage columns, bounded generation, complete-null-or-complete-non-null lifecycle, self-reference rejection, named composite owner-scoped foreign keys, their named `(job_record_id, principal_scope_hash)` unique support constraint, and `ON DELETE RESTRICT`.
+- [ ] Reject legacy one-column source or root foreign keys because they permit cross-owner lineage at the database layer.
+- [ ] Run the focused migration test and observe failure because V7 or the tenant-integrity constraints are absent.
 - [ ] Implement the additive transactional migration.
 - [ ] Rerun the focused test and commit.
 
@@ -91,6 +93,7 @@ EtlJobReplay replayOwned(
 - [ ] Prove retry after a committed first replay returns the same new row.
 - [ ] Prove replay-of-replay preserves the root and increments generation.
 - [ ] Prove generation 100 fails before insertion.
+- [ ] Prove PostgreSQL rejects a replay source or root from another `principal_scope_hash`, independent of application owner predicates.
 - [ ] Run focused and full tests and commit.
 
 ## Task 6 — Finish operations, provenance, and exact-head verification
@@ -102,9 +105,10 @@ EtlJobReplay replayOwned(
 - Modify: `CHANGELOG.md`
 - Create: `etl-service/src/test/java/com/xtrmetl/etl/documentation/DurableJobReplayDocumentationTest.java`
 
-- [ ] Require source immutability, payload digest proof, lineage, concurrency, generation limit, connector limitation, rollout, and rollback documentation first.
+- [ ] Require source immutability, payload digest proof, composite owner-scoped foreign keys, cross-owner lineage rejection, concurrency, generation limit, connector limitation, rollout, and rollback documentation first.
 - [ ] Document W3C PROV mapping as an export contract, not a database-authority substitute.
 - [ ] Record APA 7th primary references and the versioned replay-key compatibility boundary.
+- [ ] Rehearse the migration on PostgreSQL 18 and verify the owner-scoped source/root foreign-key failures before production rollout.
 - [ ] Run all verification through exact-head CI: `./mvnw -B test`, configured coverage gates, and `git diff --check`.
 - [ ] Keep the PR draft until every stacked-target gate succeeds.
 
@@ -114,5 +118,6 @@ EtlJobReplay replayOwned(
 - The source is never mutated.
 - Replay-key and payload conflicts are distinguished without disclosing source existence across principals.
 - New jobs enter the existing worker lifecycle rather than creating a second execution engine.
+- PostgreSQL and application owner predicates independently reject cross-owner lineage.
 - No placeholder, ambiguous public signature, or unbounded database object name remains.
 - Verification requires that no project test is skipped.
