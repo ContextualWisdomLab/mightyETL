@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The hourly pull-request disposition loop now requires at least one non-author approval anchored to the exact current head SHA; stale approvals, comment-only reviews, and the mere absence of requested changes cannot authorize unattended merge.
 - The hourly OpenCode workflow now scopes repository write permissions to its sole maintenance job, replaces the npm installation command with the immutable OpenCode 1.18.13 Linux release archive plus pinned SHA-256 validation, requires exactly one regular-file archive member before private-directory extraction, rejects non-regular or symbolic-link output, and uses a removable repository-local GitHub CLI credential helper instead of storing an encoded authorization header while retaining `persist-credentials: false`.
 - The hourly OpenCode workflow now snapshots same-repository `develop` pull-request heads before the agent runs and uses job-scoped Actions write authority only to authorize approval-required workflow runs for an unchanged exact head; `.github/**` and `CODEOWNERS` changes remain human-authorized, and no review or merge authority is added.
+- Updated existing pull-request candidates now carry their captured pre-agent head into the deterministic publisher, which rejects destructive ancestry, more than 50 agent-introduced files, and any agent-introduced `.github/**` or `CODEOWNERS` change before exposing the updated pull request or authorizing checks.
 - The hourly OpenCode workflow now uses the current free NVIDIA `deepseek-ai/deepseek-v4-pro` endpoint for long-context coding and agentic tool use instead of the deprecated Qwen3 Coder free endpoint; model or endpoint rejection fails visibly without a non-NVIDIA, partner-only, or automatic fallback.
 - The managed Jackson component set now uses the patched 2.21.5 BOM, closing CVE-2026-54515, CVE-2026-59889, and GHSA-mhm7-754m-9p8w while keeping core, annotations, datatype, and module artifacts aligned.
 - Durable `POST /api/etl/jobs` submissions now return RFC 9110 `202 Accepted`, a stable job representation, `Location` status-monitor metadata, and explicit replay metadata without changing the synchronous `/api/etl/process` contract.
@@ -152,8 +153,6 @@ Through code analysis, identified the platform as:
 - **Enterprise ETL and CDC Platform**
 - Microservices-based architecture using Spring Cloud
 - Real-time Change Data Capture using Debezium
-- Data transformation pipelines with parallel processing
-- JWT-based security with role-based access control
 - Event streaming via Apache Kafka
 - Service discovery with Netflix Eureka
 - Distributed tracing with Zipkin
@@ -274,5 +273,5 @@ This changelog will be updated:
 ---
 
 **Changelog Version**: 1.0  
-**Last Updated**: 2026-08-05  
+**Last Updated**: 2026-08-06  
 **Maintained By**: Development Team

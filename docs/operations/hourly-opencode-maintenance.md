@@ -80,7 +80,7 @@ Before OpenCode starts, the job snapshots:
 
 After OpenCode exits, the job requires `develop` to remain unchanged and selects at most one candidate:
 
-- one existing pull request whose head moved; or
+- one existing pull request whose head moved, retaining both the pre-agent and post-agent exact heads; or
 - one new or advanced branch matching `automation/opencode-YYYYMMDDTHHMMSSZ-short-slug`.
 
 Multiple candidates fail closed. No candidate is represented as a no-op, not as successful product development.
@@ -89,7 +89,15 @@ Multiple candidates fail closed. No candidate is represented as a no-op, not as 
 
 This job has `contents: read` and the workflow's sole `pull-requests: write` grant. It never checks out or executes repository code and never receives `NVIDIA_API_KEY`.
 
-For an existing pull request, it only re-reads and validates repository, base branch, head branch, state, and exact SHA. For a new branch, it additionally requires:
+For an existing pull request, it re-reads and validates repository, base branch, head branch, state, and exact SHA. It then compares the captured pre-agent head with the post-agent head and requires all of the following:
+
+- the post-agent head is a non-destructive descendant with at least one new commit and no commits behind the captured head;
+- no more than 50 files changed during the agent update;
+- the agent-introduced range contains no `.github/**` or `CODEOWNERS` change.
+
+This range-specific comparison prevents an already-open pull request from bypassing the same policy-file boundary applied to a newly created automation branch. Policy files that existed before the agent run do not authorize the model to modify them during that run.
+
+For a new branch, the publisher requires:
 
 - the strict `automation/opencode-*` namespace;
 - the live branch SHA to equal the candidate SHA;
@@ -148,7 +156,9 @@ The model must not:
 | OpenCode archive or checksum mismatch | fail before extraction or execution |
 | protected `develop` head moves during the run | fail as indeterminate publication evidence |
 | more than one candidate branch or PR changes | fail as ambiguous model output |
+| updated PR head is not a non-destructive descendant of its captured head | refuse publication |
 | candidate branch is not ahead of `develop` | refuse publication |
+| agent-introduced range exceeds 50 files | refuse publication |
 | candidate changes `.github/**` or `CODEOWNERS` | require explicit human handling |
 | live PR or branch SHA differs from the captured SHA | fail closed |
 | workflow run lacks exact PR association | exclude it from authorization |
@@ -162,7 +172,7 @@ A failed OpenCode step is preserved as a failed job after candidate evidence is 
 
 Disable **Hourly OpenCode maintenance** to stop the schedule immediately. Permanent rollback must revert the workflow, contract tests, this operations document, doctoring evidence, design and plan records, and corresponding changelog material through an independently reviewed pull request.
 
-Do not restore `pull-requests: write` to the model job. Do not remove exact pull-request association from workflow-run authorization. A replacement GitHub App or token broker requires separate evidence for endpoint-level capability, actor identity, secret lifecycle, exact-head binding, and independent review.
+Do not restore `pull-requests: write` to the model job. Do not remove exact pull-request association from workflow-run authorization. Do not remove the pre-agent versus post-agent range check from updated pull requests. A replacement GitHub App or token broker requires separate evidence for endpoint-level capability, actor identity, secret lifecycle, exact-head binding, and independent review.
 
 ## Verification checklist
 
@@ -176,6 +186,8 @@ Before merge, verify on the exact head:
 - the immutable OpenCode archive and action pins remain unchanged;
 - the model job has `pull-requests: read`, not write;
 - the publisher is the only holder of `pull-requests: write` and performs no checkout;
+- updated existing pull requests retain their captured pre-agent head and reject destructive ancestry, more than 50 agent-introduced files, `.github/**`, and `CODEOWNERS` changes;
+- new branches reject more than 50 files, `.github/**`, and `CODEOWNERS` changes;
 - the authorizer is the only holder of `actions: write` and performs no checkout;
 - every authorized run is associated with the exact pull-request number and SHA;
 - the workflow contains no pull-request review or merge operation.
