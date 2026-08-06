@@ -31,7 +31,24 @@ replay_root_job_record_id
 replay_generation_count
 ```
 
-The root job has all three fields null. Every replay row has all three fields non-null, an immediate source different from itself, a root different from itself, and a generation from 1 through 100. Self-referencing foreign keys use `ON DELETE RESTRICT` so terminal history cannot disappear through cascade deletion.
+The root job has all three fields null. Every replay row has all three fields non-null, an immediate source different from itself, a root different from itself, and a generation from 1 through 100. Composite owner-scoped foreign keys use `ON DELETE RESTRICT` so terminal history cannot disappear through cascade deletion and one tenant cannot reference another tenant's source or root.
+
+The referenced key is the named support constraint:
+
+```text
+etl_job_owner_identity_unique
+UNIQUE (job_record_id, principal_scope_hash)
+```
+
+Each source and root relationship includes the new row's `principal_scope_hash`:
+
+```text
+FOREIGN KEY (replay_source_job_record_id, principal_scope_hash)
+  REFERENCES etl_job_records (job_record_id, principal_scope_hash)
+
+FOREIGN KEY (replay_root_job_record_id, principal_scope_hash)
+  REFERENCES etl_job_records (job_record_id, principal_scope_hash)
+```
 
 For the first replay:
 
@@ -49,7 +66,7 @@ root = inherited first job
 generation = source generation + 1
 ```
 
-The application verifies that source and inherited root are owner-scoped to the same principal. Database constraints remain the structural boundary; the relational rows are authoritative even when lineage is later exported as W3C PROV.
+The application still verifies that source and inherited root are owner-scoped to the same principal. The database independently rejects cross-owner lineage through the composite owner-scoped foreign keys. Relational rows remain authoritative even when lineage is later exported as W3C PROV.
 
 ## Replay-key authority
 
@@ -81,7 +98,8 @@ One transaction performs the following sequence:
 7. require the supplied payload digest to equal the source `request_digest`;
 8. derive root and bounded generation;
 9. insert one new `PENDING` row with the verified payload and lineage;
-10. return only the new operator-safe job identity.
+10. let PostgreSQL validate source and root against the same `principal_scope_hash`;
+11. return only the new operator-safe job identity.
 
 The source is never updated. Read-then-write state resurrection is prohibited.
 
@@ -134,7 +152,7 @@ The exact-head suite must prove:
 9. generation 100 cannot create generation 101;
 10. concurrent creation produces one row and an in-progress or later replay outcome;
 11. the new job can be claimed and follows normal lifecycle contracts;
-12. migration completeness, self-reference prohibition, naming, deletion restriction, rollout, and rollback are documented and tested;
+12. migration completeness, owner-scoped source and root constraints, cross-owner lineage rejection, self-reference prohibition, naming, deletion restriction, rollout, and rollback are documented and tested;
 13. all added production statements and branches retain zero-missed configured coverage and no project test is skipped.
 
 ## Operational limitation
@@ -146,6 +164,8 @@ Replay verifies that the resupplied payload matches the immutable source digest.
 Fielding, R., Nottingham, M., & Reschke, J. (2022). *HTTP semantics* (RFC 9110). RFC Editor. https://www.rfc-editor.org/rfc/rfc9110
 
 Nottingham, M., Wilde, E., & Dalal, S. (2023). *Problem details for HTTP APIs* (RFC 9457). RFC Editor. https://www.rfc-editor.org/rfc/rfc9457
+
+PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: Constraints*. https://www.postgresql.org/docs/18/ddl-constraints.html
 
 PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: INSERT*. https://www.postgresql.org/docs/18/sql-insert.html
 
