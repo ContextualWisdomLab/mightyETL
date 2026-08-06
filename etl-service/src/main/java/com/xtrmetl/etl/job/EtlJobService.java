@@ -53,7 +53,8 @@ import java.util.regex.Pattern;
  * pending or running row to {@link EtlJobStatus#CANCELLED}, clearing the retained payload and every
  * lease field atomically. A worker that tries to publish success afterward fails its exact-live-
  * lease predicate and rolls back the target and response-ledger transaction. Raw cancellation keys
- * are never persisted; replay compares only a principal-scoped SHA-256 value.</p>
+ * are never persisted; replay compares only a domain-separated principal-and-job-scoped SHA-256
+ * value so identical client keys cannot be correlated across jobs or tenants in storage.</p>
  */
 @Service
 public class EtlJobService {
@@ -61,6 +62,8 @@ public class EtlJobService {
     /** Stable terminal code persisted when the authenticated owner cancels a durable job. */
     public static final String CANCELLED_BY_OWNER_CODE = "etl_job_cancelled_by_owner";
 
+    private static final String CANCELLATION_KEY_DOMAIN =
+            "mightyetl:durable-job-cancellation:v1:";
     private static final String INSERT_JOB_SQL = """
             INSERT INTO etl_job_records (
                 job_record_id,
@@ -271,8 +274,8 @@ public class EtlJobService {
      * <p>The conditional update is the only cancellation authority. It changes no row after a
      * terminal success or failure. Cancelling a running row clears its claim token, owner, expiry,
      * and payload in the same transaction, so a concurrent worker cannot publish terminal success
-     * through the former lease. Replays compare a principal-scoped SHA-256 key and return the
-     * already committed operator-safe status without rewriting the row.</p>
+     * through the former lease. Replays compare a domain-separated principal-and-job-scoped SHA-256
+     * key and return the already committed operator-safe status without rewriting the row.</p>
      *
      * @param jobRecordId opaque durable job identifier
      * @param cancellationKey required quoted Structured Field String or legacy raw safe value
@@ -294,7 +297,14 @@ public class EtlJobService {
         requireActiveCancellationTransaction();
 
         String principalScopeHash = Sha256Digest.digest(validatedScope);
-        String cancellationKeyHash = Sha256Digest.digest(validatedKey);
+        String cancellationKeyHash = Sha256Digest.digest(
+                CANCELLATION_KEY_DOMAIN
+                        + principalScopeHash
+                        + ':'
+                        + validatedJobId
+                        + ':'
+                        + validatedKey
+        );
         int updatedRows = jdbcTemplate.update(
                 CANCEL_OWNED_JOB_SQL,
                 cancellationKeyHash,
