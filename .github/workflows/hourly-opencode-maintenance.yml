@@ -207,6 +207,7 @@ jobs:
                       kind: "existing_pr",
                       number: .number,
                       head_ref: .head.ref,
+                      before_head_sha: $before[$number_key],
                       head_sha: .head.sha
                     }
                 ]
@@ -294,6 +295,11 @@ jobs:
 
           if [[ "${kind}" == "existing_pr" ]]; then
             number="$(jq -r '.number' <<<"${AGENT_CANDIDATE}")"
+            before_head="$(jq -r '.before_head_sha' <<<"${AGENT_CANDIDATE}")"
+            if ! [[ "${before_head}" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "Updated pull request candidate has an invalid pre-agent head SHA" >&2
+              exit 1
+            fi
             live="$(gh api "/repos/${repository}/pulls/${number}")"
             jq -e \
               --arg repo "${repository}" \
@@ -309,6 +315,32 @@ jobs:
                   and .head.sha == $head_sha
                 )
               ' >/dev/null <<<"${live}"
+
+            comparison="$(gh api "/repos/${repository}/compare/${before_head}...${expected_head}")"
+            if ! jq -e '
+              .status == "ahead"
+              and .ahead_by >= 1
+              and .behind_by == 0
+            ' >/dev/null <<<"${comparison}"; then
+              echo "Updated pull request head is not a non-destructive descendant of its pre-agent head" >&2
+              exit 1
+            fi
+            file_count="$(jq '.files | length' <<<"${comparison}")"
+            if [[ "${file_count}" -gt 50 ]]; then
+              echo "Updated pull request exceeds the bounded 50-file publication limit" >&2
+              exit 1
+            fi
+            if jq -e '
+              any(
+                .files[].filename;
+                startswith(".github/")
+                or . == "CODEOWNERS"
+                or endswith("/CODEOWNERS")
+              )
+            ' >/dev/null <<<"${comparison}"; then
+              echo "Updated pull request changes .github or CODEOWNERS policy and requires manual handling" >&2
+              exit 1
+            fi
           elif [[ "${kind}" == "new_branch" ]]; then
             if ! [[ "${head_ref}" =~ ^automation/opencode-[0-9]{8}T[0-9]{6}Z-[a-z0-9][a-z0-9-]{0,48}$ ]]; then
               echo "Agent branch does not match the strict publication namespace" >&2
