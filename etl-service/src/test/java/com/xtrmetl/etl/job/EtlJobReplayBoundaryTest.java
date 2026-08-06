@@ -1,5 +1,6 @@
 package com.xtrmetl.etl.job;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xtrmetl.etl.service.EtlBatchProperties;
 import com.xtrmetl.etl.service.EtlRequestError;
@@ -101,6 +102,34 @@ class EtlJobReplayBoundaryTest {
         assertError(
                 EtlRequestError.INVALID_JSON,
                 () -> service.replayOwned(SOURCE_ID, "{}", REPLAY_KEY, "tenant_alpha")
+        );
+        verifyNoInteractions(jdbcTemplate);
+    }
+
+    @Test
+    void rejectsAnAbsentParsedRootBeforeDatabaseWork() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        ObjectMapper absentRootMapper = new ObjectMapper() {
+            @Override
+            public ObjectMapper copy() {
+                return this;
+            }
+
+            @Override
+            public JsonNode readTree(String content) {
+                return null;
+            }
+        };
+        EtlJobReplayService service = new EtlJobReplayService(
+                jdbcTemplate,
+                absentRootMapper,
+                new EtlBatchProperties(),
+                lockHash -> true
+        );
+
+        assertError(
+                EtlRequestError.INVALID_JSON,
+                () -> service.replayOwned(SOURCE_ID, "[]", REPLAY_KEY, "tenant_alpha")
         );
         verifyNoInteractions(jdbcTemplate);
     }
