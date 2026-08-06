@@ -5,13 +5,15 @@ ALTER TABLE etl_job_records
     ADD COLUMN replay_generation_count INTEGER;
 
 ALTER TABLE etl_job_records
+    ADD CONSTRAINT etl_job_owner_identity_unique
+        UNIQUE (job_record_id, principal_scope_hash),
     ADD CONSTRAINT etl_job_replay_source_reference
-        FOREIGN KEY (replay_source_job_record_id)
-        REFERENCES etl_job_records (job_record_id)
+        FOREIGN KEY (replay_source_job_record_id, principal_scope_hash)
+        REFERENCES etl_job_records (job_record_id, principal_scope_hash)
         ON DELETE RESTRICT,
     ADD CONSTRAINT etl_job_replay_root_reference
-        FOREIGN KEY (replay_root_job_record_id)
-        REFERENCES etl_job_records (job_record_id)
+        FOREIGN KEY (replay_root_job_record_id, principal_scope_hash)
+        REFERENCES etl_job_records (job_record_id, principal_scope_hash)
         ON DELETE RESTRICT,
     ADD CONSTRAINT etl_job_replay_lineage_complete_check CHECK (
         (
