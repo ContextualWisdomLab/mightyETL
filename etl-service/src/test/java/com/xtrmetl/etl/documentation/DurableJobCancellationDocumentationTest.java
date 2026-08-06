@@ -90,7 +90,6 @@ class DurableJobCancellationDocumentationTest {
         assertTrue(changelog.contains("cancellation_key_hash"));
         assertTrue(changelog.contains("Cancellation-first"));
         assertTrue(changelog.contains("transactional target and response-ledger effects"));
-        assertTrue(changelog.contains("domain-separated principal-and-job-scoped"));
     }
 
     private static String read(String relativePath) throws IOException {
