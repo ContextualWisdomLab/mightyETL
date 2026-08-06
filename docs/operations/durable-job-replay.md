@@ -171,7 +171,7 @@ retry. A domain change requires a versioned migration or dual-read period, not a
 
 ## Connector limitation
 
-Matching the original payload proves replay fidelity, not external duplicate-effect safety. Enable
+Matching the original payload does not prove that replaying a connector is externally safe. Enable
 replay for a connector only when its target effects participate in the mightyETL transaction or the
 connector provides independently tested idempotency or compensation. Succeeded jobs remain excluded
 from this first slice.
