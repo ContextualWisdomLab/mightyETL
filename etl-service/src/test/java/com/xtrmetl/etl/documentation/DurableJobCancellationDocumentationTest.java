@@ -29,7 +29,9 @@ class DurableJobCancellationDocumentationTest {
         assertTrue(runbook.contains("Cancellation commits first"));
         assertTrue(runbook.contains("Success commits first"));
         assertTrue(runbook.contains("StaleEtlJobLeaseException"));
-        assertTrue(runbook.contains("rolls back its target and etl_idempotency_records writes"));
+        assertTrue(runbook.contains(
+                "rolls back its target and `etl_idempotency_records` writes"
+        ));
         assertTrue(runbook.contains("V6__add_etl_job_cancellation.sql"));
         assertTrue(runbook.contains("mightyetl.etl.jobs.intake-enabled=false"));
         assertTrue(runbook.contains("does not claim arbitrary external side-effect reversal"));
@@ -50,7 +52,7 @@ class DurableJobCancellationDocumentationTest {
                 "docs/superpowers/plans/2026-08-06-durable-job-cancellation.md"
         ).replaceAll("\\s+", " ");
 
-        assertTrue(design.contains("One conditional UPDATE is the cancellation authority"));
+        assertTrue(design.contains("One conditional `UPDATE` is the cancellation authority"));
         assertTrue(design.contains("Exactly one terminal outcome wins"));
         assertTrue(design.contains("same-key replay"));
         assertTrue(design.contains("transactional target effects"));
@@ -66,7 +68,7 @@ class DurableJobCancellationDocumentationTest {
         assertTrue(changelog.contains("owner-scoped durable-job cancellation"));
         assertTrue(changelog.contains("CANCELLED"));
         assertTrue(changelog.contains("cancellation_key_hash"));
-        assertTrue(changelog.contains("cancellation-first"));
+        assertTrue(changelog.contains("Cancellation-first"));
         assertTrue(changelog.contains("transactional target and response-ledger effects"));
     }
 
