@@ -61,16 +61,18 @@ BEGIN
                 USING ERRCODE = '23514';
         END IF;
 
-        IF OLD.job_status IS DISTINCT FROM NEW.job_status
-           OR OLD.request_digest IS DISTINCT FROM NEW.request_digest
-           OR OLD.request_payload IS DISTINCT FROM NEW.request_payload
-           OR OLD.attempt_count IS DISTINCT FROM NEW.attempt_count
-           OR OLD.failure_code IS DISTINCT FROM NEW.failure_code
-           OR OLD.cancellation_key_hash IS DISTINCT FROM NEW.cancellation_key_hash
-           OR OLD.cancellation_code IS DISTINCT FROM NEW.cancellation_code
-           OR OLD.job_cancelled_at IS DISTINCT FROM NEW.job_cancelled_at
-           OR OLD.created_at IS DISTINCT FROM NEW.created_at
-           OR OLD.updated_at IS DISTINCT FROM NEW.updated_at THEN
+        IF OLD.job_status IN ('FAILED', 'CANCELLED') AND (
+            OLD.job_status IS DISTINCT FROM NEW.job_status
+            OR OLD.request_digest IS DISTINCT FROM NEW.request_digest
+            OR OLD.request_payload IS DISTINCT FROM NEW.request_payload
+            OR OLD.attempt_count IS DISTINCT FROM NEW.attempt_count
+            OR OLD.failure_code IS DISTINCT FROM NEW.failure_code
+            OR OLD.cancellation_key_hash IS DISTINCT FROM NEW.cancellation_key_hash
+            OR OLD.cancellation_code IS DISTINCT FROM NEW.cancellation_code
+            OR OLD.job_cancelled_at IS DISTINCT FROM NEW.job_cancelled_at
+            OR OLD.created_at IS DISTINCT FROM NEW.created_at
+            OR OLD.updated_at IS DISTINCT FROM NEW.updated_at
+        ) THEN
             -- The row being updated is already locked by PostgreSQL. Every child insertion
             -- locks its source and root before it can commit, so an existence lookup is enough
             -- to serialize this mutation without taking child locks in the reverse direction.
