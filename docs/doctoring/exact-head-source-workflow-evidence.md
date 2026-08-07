@@ -30,65 +30,65 @@ ExactHeadWorkflowCheckoutTest.sbomGenerationChecksOutAndAssertsTheExactSourceRev
 
 The failure log independently exposed the synthetic merge checkout and persisted credential. The production workflow changes were applied only after this RED evidence.
 
-The permanent contract requires:
+The permanent source-execution contract requires:
 
 - the literal pull-request head expression in both workflows;
 - checkout credential persistence disabled;
 - an explicit post-checkout identity assertion; and
 - no hard binding to `github.sha`, which denotes the merge revision on `pull_request` events.
 
-## Incident and decision: dependency-delta evidence
+## Dependency Review event-endpoint contract
 
-Dependency Review does not execute contributor source, but it evaluates the dependency delta between two revisions. Relying on an action's implicit event defaults makes that evidence less explicit than mightyETL's exact-head gate requires, especially after a stacked predecessor or head moves.
+Dependency Review does not execute contributor source. It asks GitHub's dependency-review service to evaluate the dependency delta represented by a pull-request event. The action's contract therefore differs from source-executing CI and SBOM checks.
 
-Fail-first commit `077340a62e267f3dfbe05099b137bec57c11a5ae` added `DependencyReviewExactHeadWorkflowTest`, requiring the pinned GitHub Dependency Review Action to receive the pull-request event's exact base and head SHAs. CI run `31177454329` failed on that test while the existing workflow still supplied only `fail-on-severity`.
+Fail-first commit `077340a62e267f3dfbe05099b137bec57c11a5ae` originally asserted that the workflow must pass the pull request's base and head SHAs through the action's `base-ref` and `head-ref` inputs. CI run `31177454329` failed that new assertion while the established workflow used only the pull-request event and `fail-on-severity`.
 
-Green repair `0b947a691a7114a31a3ba11be50c8c3f484ac838` changed `.github/workflows/dependency-review.yml` to pass:
+A subsequent repair added those inputs. Review against the current upstream `actions/dependency-review-action` v5 documentation showed that premise to be incorrect: `base-ref` and `head-ref` are supported inputs, but they are **only used for event types other than `pull_request` and `pull_request_target`**. Supplying them to this `pull_request` workflow is therefore ignored and can create false confidence that an explicit binding exists when the action is actually using the event endpoints.
 
-```yaml
-with:
-  base-ref: ${{ github.event.pull_request.base.sha }}
-  head-ref: ${{ github.event.pull_request.head.sha }}
-  fail-on-severity: high
-```
+The corrective TDD sequence preserves both findings without rewriting history:
 
-The workflow remains pinned to `actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294` (v5.0.0). The pinned action's `action.yml` declares both `base-ref` and `head-ref` as supported optional inputs, so the repair uses the action's reviewed public contract rather than undocumented behavior.
+- `077340a62e267f3dfbe05099b137bec57c11a5ae` remains the original fail-first experiment;
+- the intervening commits that added explicit `base-ref`/`head-ref` remain auditable as an incorrect repair;
+- `cd706f235f9ddda4ee0d7244772453f2f5c934a5` changes the contract test first so ignored PR-event overrides are rejected; with the overrides still present, this is corrective RED evidence;
+- `3358b40adaf52cc821e3fce923ecf5af49f77f7f` removes the ignored inputs and returns the workflow to the action's documented pull-request semantics.
 
 The permanent Dependency Review contract requires:
 
-- explicit event base SHA passed as `base-ref`;
-- explicit event head SHA passed as `head-ref`;
-- an immutable action commit pin;
-- fail-closed severity policy retained; and
-- no reuse of a successful dependency delta after either endpoint moves.
+- trigger through `pull_request` so the action obtains the comparison endpoints from the pull-request event;
+- immutable pin `actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294` (v5.0.0);
+- `fail-on-severity: high` retained;
+- no `base-ref` or `head-ref` override on the pull-request workflow, because upstream documents those inputs for non-pull-request events only; and
+- no reuse of a successful dependency-review run after either the pull-request head or base moves.
+
+This is an evidence correction, not a gate relaxation. The dependency review must still rerun for the current pull-request event after any endpoint change, and queued, pending, absent, skipped, neutral, cancelled, failed, or stale-event evidence is not accepted.
 
 ## Authority boundary
 
-These repairs change which exact revisions are measured; they do not convert checks into approval and do not weaken branch protection.
+These controls change which exact revisions are measured or how their provenance is established; they do not convert checks into approval and do not weaken branch protection.
 
 - The workflows remain `pull_request` workflows with repository permission `contents: read` only.
 - No repository, model, cloud, deployment, or signing secret is exposed to pull-request source.
 - The CI/SBOM checkout credential is removed before Maven or project code executes.
-- The workflow definition still follows GitHub's pull-request event semantics; the explicit checkout ref affects the checked-out source tree, not the event or reviewer identity.
-- Dependency Review receives exact event endpoint SHAs and remains a distinct dependency-delta control.
+- The CI/SBOM checkout ref affects the checked-out source tree, not the event or reviewer identity.
+- Dependency Review derives its base/head comparison from the pull-request event according to the pinned action's documented contract; mightyETL verifies freshness by accepting only a run associated with the unchanged current pull request rather than by supplying ignored inputs.
 - Organization SAST and Security Scan evidence remains independently required and must itself be proven against the exact source head before merge.
 - A green generated-merge run from an older head, a predecessor base, a queued run, or an absent workflow is not accepted as exact-head evidence.
 
-This pattern would be unsafe under a privileged `pull_request_target`, `workflow_run`, or comment-triggered workflow that exposes secrets or write authority to untrusted source. mightyETL does not use those privileged event shapes for these source-executing jobs.
+This source-checkout pattern would be unsafe under a privileged `pull_request_target`, `workflow_run`, or comment-triggered workflow that exposes secrets or write authority to untrusted source. mightyETL does not use those privileged event shapes for these source-executing jobs.
 
 ## Stack and review consequence
 
 Every change to the root stack head invalidates downstream ancestry and all older check, review, and approval evidence. After this repair passes its current exact head, each downstream branch must be advanced non-destructively to an auditable history containing the exact predecessor head, then rerun its own exact-head gates. No predecessor evidence transfers.
 
-For Dependency Review specifically, any base or head movement also invalidates the previous dependency delta even when the dependency manifest itself appears unchanged. The workflow must rerun with the new event endpoints.
+For Dependency Review specifically, any base or head movement invalidates the previous dependency delta even when the dependency manifest itself appears unchanged. A fresh pull-request event run must complete for the unchanged current endpoints before merge evidence is accepted.
 
 ## Operations and rollback
 
 Operators should inspect the checkout log and exact identity step whenever the event payload, checkout action, or trigger changes. A passing source-executing run must show the expected source SHA as the checked-out `HEAD` before Maven execution.
 
-Operators should inspect the Dependency Review run inputs whenever stacked ancestry changes. A passing dependency review must correspond to the event's exact current base and head SHA pair.
+For Dependency Review, operators should confirm that the run belongs to the current pull request after its latest base/head movement and that the workflow remains a `pull_request` workflow using the immutable action pin. Do not infer stronger evidence from `base-ref`/`head-ref` inputs on a pull-request event because upstream documents those inputs as unused for that event type.
 
-Rollback to implicit source checkout or implicit Dependency Review endpoints is prohibited because either restores ambiguous evidence. If exact endpoint binding becomes unavailable, fail the workflow and investigate event metadata or action behavior. Do not substitute an older head, older base, generated merge revision, or manually asserted status.
+Rollback to implicit CI/SBOM source checkout is prohibited because it restores synthetic-merge-only execution evidence. Reintroducing ignored Dependency Review endpoint overrides is also prohibited because it restores misleading evidence. If the upstream action changes its event/ref contract, fail closed, review the pinned action and primary documentation, update tests and doctoring first, and rerun the current pull request. Do not substitute an older head, older base, generated merge revision, or manually asserted status.
 
 ## References — APA 7th edition
 
