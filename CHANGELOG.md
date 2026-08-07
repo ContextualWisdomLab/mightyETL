@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The model-executing hourly OpenCode maintenance job now has read-only issue access; fail-first workflow-contract coverage proves `issues: write` is unnecessary while preserving issue and roadmap inspection.
 - Pull-request CI and CycloneDX SBOM jobs now check out the literal current source head, immediately assert `git rev-parse HEAD` against `github.event.pull_request.head.sha`, and disable checkout credential persistence; generated merge revisions remain useful compatibility previews but no longer masquerade as direct exact-head source evidence.
 - Dependency Review now relies on the immutably pinned GitHub Dependency Review Action's documented `pull_request` event endpoints; ignored `base-ref`/`head-ref` overrides are prohibited on pull-request runs, and dependency-delta evidence is invalidated whenever either endpoint moves.
 - The hourly pull-request disposition loop now requires at least one non-author approval anchored to the exact current head SHA; stale approvals, comment-only reviews, and the mere absence of requested changes cannot authorize unattended merge.
@@ -258,7 +259,3 @@ This changelog will be updated:
 - For each release or milestone
 
 ---
-
-**Changelog Version**: 1.0  
-**Last Updated**: 2026-08-07  
-**Maintained By**: Development Team
