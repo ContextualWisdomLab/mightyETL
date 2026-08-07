@@ -401,6 +401,50 @@ BEGIN
 END
 $lineage_immutability_check$;
 
+DO $root_evidence_immutability_check$
+BEGIN
+    BEGIN
+        UPDATE etl_job_records
+           SET request_digest = repeat('0', 64)
+         WHERE job_record_id = '00000000-0000-4000-8000-000000000002';
+    EXCEPTION
+        WHEN check_violation THEN
+            NULL;
+    END;
+
+    IF EXISTS (
+        SELECT 1
+          FROM etl_job_records
+         WHERE job_record_id = '00000000-0000-4000-8000-000000000002'
+           AND request_digest <> repeat('b', 64)
+    ) THEN
+        RAISE EXCEPTION 'referenced replay root evidence was mutable';
+    END IF;
+END
+$root_evidence_immutability_check$;
+
+DO $source_evidence_immutability_check$
+BEGIN
+    BEGIN
+        UPDATE etl_job_records
+           SET failure_code = 'etl_replay_generation_changed'
+         WHERE job_record_id = '00000000-0000-4000-8000-000000000005';
+    EXCEPTION
+        WHEN check_violation THEN
+            NULL;
+    END;
+
+    IF EXISTS (
+        SELECT 1
+          FROM etl_job_records
+         WHERE job_record_id = '00000000-0000-4000-8000-000000000005'
+           AND failure_code <> 'etl_replay_generation_failed'
+    ) THEN
+        RAISE EXCEPTION 'referenced immediate-source evidence was mutable';
+    END IF;
+END
+$source_evidence_immutability_check$;
+
 DO $delete_restrict_check$
 BEGIN
     BEGIN
