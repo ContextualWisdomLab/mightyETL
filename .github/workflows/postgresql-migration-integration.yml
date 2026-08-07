@@ -6,6 +6,7 @@ on:
       - develop
     paths:
       - "etl-service/src/main/resources/db/migration/**"
+      - "etl-service/src/test/postgresql/**"
       - "scripts/verify-postgresql-migrations.sh"
       - ".github/workflows/postgresql-migration-integration.yml"
   workflow_dispatch:
