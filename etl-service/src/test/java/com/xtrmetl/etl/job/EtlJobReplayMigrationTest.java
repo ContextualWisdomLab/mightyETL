@@ -62,7 +62,10 @@ class EtlJobReplayMigrationTest {
         ));
         assertTrue(migration.contains(
                 "BEFORE INSERT OR UPDATE OF replay_source_job_record_id, "
-                        + "replay_root_job_record_id, replay_generation_count"
+                        + "replay_root_job_record_id, replay_generation_count, job_status, "
+                        + "request_digest, request_payload, attempt_count, failure_code, "
+                        + "cancellation_key_hash, cancellation_code, job_cancelled_at, "
+                        + "created_at, updated_at"
         ));
         assertTrue(migration.contains(
                 "NEW.replay_source_job_record_id <> NEW.replay_root_job_record_id"
@@ -71,6 +74,15 @@ class EtlJobReplayMigrationTest {
                 "source_generation_count IS DISTINCT FROM NEW.replay_generation_count - 1"
         ));
         assertTrue(migration.contains("Replay lineage fields are immutable"));
+        assertTrue(migration.contains("Referenced replay evidence is immutable"));
+        assertTrue(migration.contains("FOR UPDATE"));
+        assertTrue(migration.contains(
+                "child_record.replay_source_job_record_id = OLD.job_record_id"
+        ));
+        assertTrue(migration.contains(
+                "child_record.replay_root_job_record_id = OLD.job_record_id"
+        ));
+        assertFalse(migration.contains("FOR KEY SHARE"));
         assertFalse(migration.contains(
                 "FOREIGN KEY (replay_source_job_record_id) "
                         + "REFERENCES etl_job_records (job_record_id)"
