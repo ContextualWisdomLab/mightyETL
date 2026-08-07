@@ -72,6 +72,15 @@ public class EtlJobReplayService {
             WHERE job_record_id = ?
               AND principal_scope_hash = ?
             """;
+    private static final String SELECT_LINEAGE_ROOT_COUNT_SQL = """
+            SELECT COUNT(*)
+            FROM etl_job_records
+            WHERE job_record_id = ?
+              AND principal_scope_hash = ?
+              AND replay_source_job_record_id IS NULL
+              AND replay_root_job_record_id IS NULL
+              AND replay_generation_count IS NULL
+            """;
     private static final String INSERT_REPLAY_JOB_SQL = """
             INSERT INTO etl_job_records (
                 job_record_id,
@@ -291,14 +300,24 @@ public class EtlJobReplayService {
     }
 
     private void requireOwnedRoot(UUID rootJobRecordId, String principalScopeHash) {
-        Integer count = jdbcTemplate.queryForObject(
+        Integer ownedRootCount = jdbcTemplate.queryForObject(
                 SELECT_OWNED_ROOT_COUNT_SQL,
                 Integer.class,
                 rootJobRecordId,
                 principalScopeHash
         );
-        if (!Integer.valueOf(1).equals(count)) {
+        if (!Integer.valueOf(1).equals(ownedRootCount)) {
             throw new IllegalStateException("Replay root is absent from the owner namespace");
+        }
+
+        Integer lineageRootCount = jdbcTemplate.queryForObject(
+                SELECT_LINEAGE_ROOT_COUNT_SQL,
+                Integer.class,
+                rootJobRecordId,
+                principalScopeHash
+        );
+        if (!Integer.valueOf(1).equals(lineageRootCount)) {
+            throw new IllegalStateException("Replay root is not a lineage root");
         }
     }
 
