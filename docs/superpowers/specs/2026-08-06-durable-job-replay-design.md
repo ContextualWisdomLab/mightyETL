@@ -31,7 +31,7 @@ replay_root_job_record_id
 replay_generation_count
 ```
 
-The root job has all three fields null. Every replay row has all three fields non-null, an immediate source different from itself, a root different from itself, and a generation from 1 through 100. Composite owner-scoped foreign keys use `ON DELETE RESTRICT` so terminal history cannot disappear through cascade deletion and one tenant cannot reference another tenant's source or root.
+The root job has all three fields null. Every replay row has all three fields non-null, an immediate source different from itself, a root different from itself, and a generation from 1 through 100. The composite owner-scoped foreign keys use `ON DELETE RESTRICT` so terminal history cannot disappear through cascade deletion and one tenant cannot reference another tenant's source or root.
 
 The referenced key is the named support constraint:
 
@@ -65,7 +65,9 @@ On replay insertion, the trigger requires all of the following:
 - generation 1 uses the same row for immediate source and root;
 - later generations inherit the exact first root and equal the source generation plus one.
 
-On updates that name any lineage column, the trigger rejects every changed value. Lineage fields are immutable after insertion, so a maintenance script, import path, or future service cannot silently reparent a job after descendants exist. Ordinary lifecycle updates remain permitted because they do not change the lineage columns.
+On updates that name any lineage column, the trigger rejects every changed value. Lineage fields are immutable after insertion, so a maintenance script, import path, or future service cannot silently reparent a job after descendants exist.
+
+A terminal row becomes durable evidence when a descendant names it as an immediate source or lineage root. The same trigger serializes child insertion and parent mutation with PostgreSQL row locks. It permits ordinary lifecycle updates before the first descendant exists, but after a reference exists it rejects changes to status, request digest or payload, attempt and failure state, cancellation evidence, and lifecycle timestamps. Referenced replay evidence is immutable, so an already-created descendant cannot silently acquire a different historical meaning.
 
 For the first replay:
 
@@ -83,7 +85,7 @@ root = inherited first job
 generation = source generation + 1
 ```
 
-The application independently validates the owner-scoped source, inherited root, and root-row identity before insertion. PostgreSQL independently rejects cross-owner, nonterminal, discontinuous, derived-root, and mutable lineage. Relational rows remain authoritative even when lineage is later exported as W3C PROV.
+The application independently validates the owner-scoped source, inherited root, and root-row identity before insertion. PostgreSQL independently rejects cross-owner, nonterminal, discontinuous, derived-root, mutable-lineage, and referenced-evidence mutation. Relational rows remain authoritative even when lineage is later exported as W3C PROV.
 
 ## Replay-key authority
 
@@ -116,7 +118,7 @@ One transaction performs the following sequence:
 8. derive root and bounded generation;
 9. require the inherited root to exist in the owner namespace and have null lineage fields;
 10. insert one new `PENDING` row with the verified payload and lineage;
-11. let PostgreSQL validate same-owner references, terminal source, first root, exact generation continuity, and initial lifecycle;
+11. let PostgreSQL validate same-owner references, terminal source, first root, exact generation continuity, initial lifecycle, and the transition from mutable lifecycle state to referenced immutable evidence;
 12. return only the new operator-safe job identity.
 
 The source is never updated. Read-then-write state resurrection is prohibited.
@@ -171,7 +173,7 @@ The exact-head suite must prove:
 10. concurrent creation produces one row and an in-progress or later replay outcome;
 11. the new job can be claimed and follows normal lifecycle contracts;
 12. service defense in depth rejects an inherited root that is itself a replay row;
-13. PostgreSQL 18 rejects cross-owner references, nonterminal sources, generation-one root divergence, derived roots, skipped generations, and lineage mutation;
+13. PostgreSQL 18 rejects cross-owner references, nonterminal sources, generation-one root divergence, derived roots, skipped generations, lineage mutation, and mutation of referenced root or immediate-source evidence;
 14. migration completeness, source and root constraints, trigger/function presence, self-reference prohibition, naming, deletion restriction, rollout, and rollback are documented and tested;
 15. all added production statements and branches retain zero-missed configured coverage and no project test is skipped.
 
