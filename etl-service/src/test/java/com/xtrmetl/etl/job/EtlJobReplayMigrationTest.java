@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -18,13 +19,7 @@ class EtlJobReplayMigrationTest {
 
     @Test
     void replayMigrationAddsCompleteRestrictedOwnerScopedLineage() throws IOException {
-        String migration = Files.readString(
-                projectRoot().resolve(
-                        "etl-service/src/main/resources/db/migration/"
-                                + "V7__add_etl_job_replay_lineage.sql"
-                ),
-                StandardCharsets.UTF_8
-        ).replaceAll("\\s+", " ");
+        String migration = normalizedMigration();
 
         assertTrue(migration.contains("ADD COLUMN replay_source_job_record_id UUID"));
         assertTrue(migration.contains("ADD COLUMN replay_root_job_record_id UUID"));
@@ -94,6 +89,37 @@ class EtlJobReplayMigrationTest {
         assertFalse(migration.contains("ON DELETE CASCADE"));
         assertFalse(migration.contains("replay_payload"));
         assertFalse(migration.contains("principal_name"));
+    }
+
+    @Test
+    void updateGuardAvoidsChildToAncestorLockInversion() throws IOException {
+        String migration = normalizedMigration();
+        Pattern updateReturnsBeforeInsertValidation = Pattern.compile(
+                "IF TG_OP = 'UPDATE' THEN .*Referenced replay evidence is immutable.*"
+                        + "RETURN NEW; END IF; IF NEW\\.replay_generation_count IS NULL"
+        );
+        Pattern descendantLookupTakesRowLock = Pattern.compile(
+                "FROM etl_job_records AS child_record .*FOR UPDATE;.*IF FOUND THEN"
+        );
+
+        assertTrue(
+                updateReturnsBeforeInsertValidation.matcher(migration).find(),
+                "UPDATE validation must return before INSERT-only source/root locking"
+        );
+        assertFalse(
+                descendantLookupTakesRowLock.matcher(migration).find(),
+                "Referenced-child existence checks must not lock child rows in reverse order"
+        );
+    }
+
+    private static String normalizedMigration() throws IOException {
+        return Files.readString(
+                projectRoot().resolve(
+                        "etl-service/src/main/resources/db/migration/"
+                                + "V7__add_etl_job_replay_lineage.sql"
+                ),
+                StandardCharsets.UTF_8
+        ).replaceAll("\\s+", " ");
     }
 
     /** @return reactor root from repository-root or module-local execution */
