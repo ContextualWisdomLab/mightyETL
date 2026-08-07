@@ -43,6 +43,7 @@ DO $verification_block$
 DECLARE
     missing_column_count integer;
     restrict_foreign_key_count integer;
+    replay_lookup_index_count integer;
     replay_check_definition text;
     cancellation_check_definition text;
 BEGIN
@@ -95,6 +96,25 @@ BEGIN
 
     IF restrict_foreign_key_count <> 2 THEN
         RAISE EXCEPTION 'replay source and root must each use a self-reference with ON DELETE RESTRICT';
+    END IF;
+
+    SELECT count(*)
+      INTO replay_lookup_index_count
+      FROM pg_class AS index_class
+      JOIN pg_index AS index_record
+        ON index_record.indexrelid = index_class.oid
+      JOIN pg_class AS table_record
+        ON table_record.oid = index_record.indrelid
+     WHERE table_record.relname = 'etl_job_records'
+       AND index_class.relname IN (
+            'etl_job_replay_source_lookup_index',
+            'etl_job_replay_root_lookup_index'
+       )
+       AND index_record.indisready
+       AND index_record.indisvalid;
+
+    IF replay_lookup_index_count <> 2 THEN
+        RAISE EXCEPTION 'replay lookup indexes are missing or invalid';
     END IF;
 
     SELECT string_agg(pg_get_constraintdef(constraint_record.oid), ' ')
