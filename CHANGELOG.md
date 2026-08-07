@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Pull-request CI and CycloneDX SBOM jobs now check out the literal current source head, immediately assert `git rev-parse HEAD` against `github.event.pull_request.head.sha`, and disable checkout credential persistence; generated merge revisions remain useful compatibility previews but no longer masquerade as direct exact-head source evidence.
 - The durable-job claim eligibility index now builds in a separate PostgreSQL `CREATE INDEX CONCURRENTLY` migration with Flyway non-transactional script configuration and session-level PostgreSQL migration locking, preserving normal job writes during rollout while keeping lease columns and constraints transactional.
 - Durable asynchronous ETL jobs now progress from `PENDING` through lease-fenced execution to `SUCCEEDED` or `FAILED`; PostgreSQL owns cross-replica claiming, stale workers cannot commit target or lifecycle effects, and intake and execution remain independently fail-closed.
 - Durable-worker observability now records one terminal outcome counter and one matching duration sample for every completed poll, including idle polls and database failures while persisting retry or terminal transitions.
@@ -31,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Permanent fail-first exact-head workflow contracts and authoritative evidence in `docs/doctoring/exact-head-source-workflow-evidence.md`, including the observed synthetic merge checkout, cross-platform source identity assertions, least-privilege boundary, stack invalidation rule, rollback prohibition, and APA 7th GitHub references.
 - A production rollout and invalid-index recovery runbook for the nonblocking durable-job claim index: `docs/operations/durable-job-claim-index-rollout.md`.
 - PostgreSQL `FOR UPDATE SKIP LOCKED` durable-job claiming, per-process and per-claim lease fencing, expiry reclaim, bounded attempts, exact-live-lease transitions, terminal payload clearing, stable failure codes, and finite-cardinality worker metrics.
 - Hashed durable execution identity and domain-separated reuse of `etl_idempotency_records`, coupling response replay or creation, target writes, and terminal `SUCCEEDED` in one transaction without retaining or reconstructing raw principals or raw client idempotency keys.
@@ -269,5 +271,5 @@ This changelog will be updated:
 ---
 
 **Changelog Version**: 1.0  
-**Last Updated**: 2026-08-06  
+**Last Updated**: 2026-08-07  
 **Maintained By**: Development Team
