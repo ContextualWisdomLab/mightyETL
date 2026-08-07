@@ -58,6 +58,8 @@ class EtlJobReplayPostgresWorkflowTest {
         assertTrue(rehearsal.contains("cross-owner source lineage was accepted"));
         assertTrue(rehearsal.contains("cross-owner root lineage was accepted"));
         assertTrue(rehearsal.contains("replay lineage fields were mutable"));
+        assertTrue(rehearsal.contains("referenced replay root evidence was mutable"));
+        assertTrue(rehearsal.contains("referenced immediate-source evidence was mutable"));
         assertTrue(rehearsal.contains(
                 "ON DELETE RESTRICT did not protect immediate replay history"
         ));
