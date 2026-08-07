@@ -56,8 +56,21 @@ class PostgresqlMigrationIntegrationWorkflowTest {
         assertFalse(script.contains("|| true"));
     }
 
+    /**
+     * Reads one repository contract with platform-independent line endings.
+     *
+     * <p>Git may materialize text files with CRLF on Windows runners. Normalizing both CRLF
+     * and lone carriage returns keeps semantic workflow assertions identical across the CI
+     * operating-system matrix without weakening their exact content requirements.</p>
+     *
+     * @param relativePath repository-relative file path
+     * @return UTF-8 content using LF line endings
+     * @throws IOException when the repository contract cannot be read
+     */
     private static String read(String relativePath) throws IOException {
-        return Files.readString(projectRoot().resolve(relativePath), StandardCharsets.UTF_8);
+        return Files.readString(projectRoot().resolve(relativePath), StandardCharsets.UTF_8)
+                .replace("\r\n", "\n")
+                .replace('\r', '\n');
     }
 
     /**
