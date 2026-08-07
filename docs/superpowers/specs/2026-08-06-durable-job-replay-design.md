@@ -50,24 +50,32 @@ FOREIGN KEY (replay_root_job_record_id, principal_scope_hash)
   REFERENCES etl_job_records (job_record_id, principal_scope_hash)
 ```
 
-Those declarative constraints establish owner scope, existence, self-reference rejection, completeness, deletion restriction, and the generation bound. They do not by themselves prove that a source is terminal, that the selected root is the first lineage row, or that each replay hop advances exactly one generation. The migration therefore adds a database trigger and PL/pgSQL trigger function as the relational authority for continuity:
+Those declarative constraints establish owner scope, existence, self-reference rejection, completeness, deletion restriction, and the generation bound. They do not by themselves prove that a source is terminal, that the selected root is the first lineage row, that the new row preserves the immediate source digest, or that each replay hop advances exactly one generation. The migration therefore adds a database trigger and PL/pgSQL trigger function as the relational authority for continuity:
 
 ```text
 validate_etl_job_replay_lineage()
 etl_job_replay_lineage_guard_trigger
 ```
 
-On replay insertion, the trigger requires all of the following:
+On replay insertion, the database trigger requires all of the following:
 
 - the new derived row starts as `PENDING`, attempt zero, with a retained payload;
 - the immediate source exists in the same principal scope and is `FAILED` or `CANCELLED`;
+- the new row's `request_digest` exactly equals the immediate source `request_digest`;
 - the root exists in the same principal scope, is terminal, and has all lineage fields null;
 - generation 1 uses the same row for immediate source and root;
 - later generations inherit the exact first root and equal the source generation plus one.
 
 On updates that name any lineage column, the trigger rejects every changed value. Lineage fields are immutable after insertion, so a maintenance script, import path, or future service cannot silently reparent a job after descendants exist.
 
-A terminal row becomes durable evidence when a descendant names it as an immediate source or lineage root. The same trigger serializes child insertion and parent mutation with PostgreSQL row locks. It permits ordinary lifecycle updates before the first descendant exists, but after a reference exists it rejects changes to status, request digest or payload, attempt and failure state, cancellation evidence, and lifecycle timestamps. Referenced replay evidence is immutable, so an already-created descendant cannot silently acquire a different historical meaning.
+A terminal row becomes durable evidence when a descendant names it as an immediate source or lineage root. Child insertion locks the immediate source and root with PostgreSQL `FOR UPDATE` before it can validate and commit. A parent update already owns the parent row lock before its trigger executes; when the update would alter terminal replay evidence, the trigger performs an indexed descendant existence lookup without taking child row locks and then returns before the INSERT-only source/root locking path. This establishes one lock direction and avoids child-to-ancestor lock inversion:
+
+```text
+child insertion → lock source/root → validate → commit or reject
+parent mutation → parent row already locked → read descendant existence → commit or reject
+```
+
+If a parent update commits first, a later child validates the resulting evidence. If child insertion obtains the parent lock first, a later conflicting parent update waits, observes the committed descendant, and fails closed. Ordinary lifecycle updates remain possible before the first descendant exists; referenced replay evidence is immutable after that point, so an already-created descendant cannot silently acquire a different historical meaning.
 
 For the first replay:
 
@@ -85,7 +93,19 @@ root = inherited first job
 generation = source generation + 1
 ```
 
-The application independently validates the owner-scoped source, inherited root, and root-row identity before insertion. PostgreSQL independently rejects cross-owner, nonterminal, discontinuous, derived-root, mutable-lineage, and referenced-evidence mutation. Relational rows remain authoritative even when lineage is later exported as W3C PROV.
+The application independently validates the owner-scoped source, source digest, inherited root, and root-row identity before insertion. PostgreSQL independently rejects cross-owner, nonterminal, digest-divergent, discontinuous, derived-root, mutable-lineage, and referenced-evidence mutation. Relational rows remain authoritative even when lineage is later exported as W3C PROV.
+
+## Replay lookup indexes
+
+The trigger's immutable-evidence check and PostgreSQL's self-referencing foreign keys need bounded source/root lookup paths as durable history grows. The design therefore separates schema authority from online index construction:
+
+- `V7__add_etl_job_replay_lineage.sql` remains transactional and contains columns, constraints, trigger, and function only;
+- `V8__add_etl_job_replay_source_lookup_index.sql` owns one partial `CREATE INDEX CONCURRENTLY` for `(replay_source_job_record_id, principal_scope_hash)`;
+- `V9__add_etl_job_replay_root_lookup_index.sql` owns one partial `CREATE INDEX CONCURRENTLY` for `(replay_root_job_record_id, principal_scope_hash)`;
+- each concurrent migration has its own `.sql.conf` with `executeInTransaction=false`;
+- migration verification requires both indexes to be present, ready, and valid.
+
+One concurrent index per nontransactional migration gives each failure one auditable Flyway repair boundary. A cancelled build can leave an invalid index, so rollout must inspect PostgreSQL catalog state, remove only the failed artifact with `DROP INDEX CONCURRENTLY`, repair the exact migration record under the approved deployment procedure, and rerun without editing an applied migration.
 
 ## Replay-key authority
 
@@ -118,7 +138,7 @@ One transaction performs the following sequence:
 8. derive root and bounded generation;
 9. require the inherited root to exist in the owner namespace and have null lineage fields;
 10. insert one new `PENDING` row with the verified payload and lineage;
-11. let PostgreSQL validate same-owner references, terminal source, first root, exact generation continuity, initial lifecycle, and the transition from mutable lifecycle state to referenced immutable evidence;
+11. let PostgreSQL validate same-owner references, immediate-source digest equality, terminal source, first root, exact generation continuity, initial lifecycle, and the transition from mutable lifecycle state to referenced immutable evidence;
 12. return only the new operator-safe job identity.
 
 The source is never updated. Read-then-write state resurrection is prohibited.
@@ -173,9 +193,10 @@ The exact-head suite must prove:
 10. concurrent creation produces one row and an in-progress or later replay outcome;
 11. the new job can be claimed and follows normal lifecycle contracts;
 12. service defense in depth rejects an inherited root that is itself a replay row;
-13. PostgreSQL 18 rejects cross-owner references, nonterminal sources, generation-one root divergence, derived roots, skipped generations, lineage mutation, and mutation of referenced root or immediate-source evidence;
-14. migration completeness, source and root constraints, trigger/function presence, self-reference prohibition, naming, deletion restriction, rollout, and rollback are documented and tested;
-15. all added production statements and branches retain zero-missed configured coverage and no project test is skipped.
+13. PostgreSQL 18 rejects cross-owner references, nonterminal sources, immediate-source digest mismatch, generation-one root divergence, derived roots, skipped generations, lineage mutation, and mutation of referenced root or immediate-source evidence;
+14. PostgreSQL 18 applies V8 and V9 independently and requires both replay lookup indexes to be ready and valid;
+15. migration completeness, source and root constraints, trigger/function presence, self-reference prohibition, descriptive naming, deletion restriction, concurrent-index recovery, rollout, and rollback are documented and tested;
+16. all added production statements and branches retain zero-missed configured coverage and no project test is skipped.
 
 ## Operational limitation
 
@@ -188,6 +209,8 @@ Fielding, R., Nottingham, M., & Reschke, J. (2022). *HTTP semantics* (RFC 9110).
 Nottingham, M., Wilde, E., & Dalal, S. (2023). *Problem details for HTTP APIs* (RFC 9457). RFC Editor. https://www.rfc-editor.org/rfc/rfc9457
 
 PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: Constraints*. https://www.postgresql.org/docs/18/ddl-constraints.html
+
+PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: CREATE INDEX*. https://www.postgresql.org/docs/18/sql-createindex.html
 
 PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: CREATE TRIGGER*. https://www.postgresql.org/docs/18/sql-createtrigger.html
 
