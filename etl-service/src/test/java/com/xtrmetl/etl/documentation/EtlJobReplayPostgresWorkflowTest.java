@@ -41,6 +41,31 @@ class EtlJobReplayPostgresWorkflowTest {
         assertTrue(verifier.contains(
                 "etl-service/src/test/postgresql/replay_lineage_migration.sql"
         ));
+        assertTrue(verifier.contains(
+                "pg_get_indexdef(index_record.indexrelid, 1, true)"
+        ));
+        assertTrue(verifier.contains(
+                "pg_get_expr(index_record.indpred, index_record.indrelid)"
+        ));
+        assertTrue(verifier.contains("index_record.indnkeyatts = 1"));
+        assertTrue(verifier.contains("index_record.indnatts = 1"));
+        assertTrue(verifier.contains("NOT index_record.indisunique"));
+        assertTrue(verifier.contains(
+                "pg_get_indexdef(index_record.indexrelid, 1, true) = "
+                        + "'replay_source_job_record_id'"
+        ));
+        assertTrue(verifier.contains(
+                "pg_get_expr(index_record.indpred, index_record.indrelid) = "
+                        + "'(replay_source_job_record_id IS NOT NULL)'"
+        ));
+        assertTrue(verifier.contains(
+                "pg_get_indexdef(index_record.indexrelid, 1, true) = "
+                        + "'replay_root_job_record_id'"
+        ));
+        assertTrue(verifier.contains(
+                "pg_get_expr(index_record.indpred, index_record.indrelid) = "
+                        + "'(replay_root_job_record_id IS NOT NULL)'"
+        ));
     }
 
     @Test
