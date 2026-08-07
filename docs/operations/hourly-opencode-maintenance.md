@@ -64,13 +64,13 @@ This is the only job that executes checked-out repository code and OpenCode. Its
 actions: read
 checks: read
 contents: write
-issues: write
+issues: read
 pull-requests: read
 security-events: read
 statuses: read
 ```
 
-`contents: write` permits one feature-branch push. It does not grant pull-request review or merge endpoints. The model prompt additionally forbids direct pull-request creation, update, approval, closure, or merge, but the permission map—not the prompt—is the primary authorization boundary.
+`contents: write` permits one feature-branch push. `issues: read` permits issue and roadmap inspection only; the model-executing job has no issue mutation authority. Neither permission grants pull-request review or merge endpoints. The model prompt additionally forbids direct pull-request creation, update, approval, closure, or merge, but the permission map—not the prompt—is the primary authorization boundary.
 
 Before OpenCode starts, the job snapshots:
 
@@ -185,6 +185,7 @@ Before merge, verify on the exact head:
 - only `NVIDIA_NIM_API_KEY` is referenced as a model secret;
 - the immutable OpenCode archive and action pins remain unchanged;
 - the model job has `pull-requests: read`, not write;
+- the model job has `issues: read`, not write;
 - the publisher is the only holder of `pull-requests: write` and performs no checkout;
 - updated existing pull requests retain their captured pre-agent head and reject destructive ancestry, more than 50 agent-introduced files, `.github/**`, and `CODEOWNERS` changes;
 - new branches reject more than 50 files, `.github/**`, and `CODEOWNERS` changes;
