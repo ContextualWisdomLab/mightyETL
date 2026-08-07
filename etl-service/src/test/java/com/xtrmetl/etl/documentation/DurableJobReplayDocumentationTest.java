@@ -112,6 +112,28 @@ class DurableJobReplayDocumentationTest {
         assertTrue(standardsEvidence.contains("lineage-column immutability"));
     }
 
+    @Test
+    void verificationDocsRequireExactReplayIndexCatalogDefinitions() throws IOException {
+        String runbook = read("docs/operations/durable-job-replay.md")
+                .replaceAll("\\s+", " ");
+        String standardsEvidence = read(
+                "docs/doctoring/durable-job-replay-standards-evidence.md"
+        ).replaceAll("\\s+", " ");
+        String changelog = read("CHANGELOG.md").replaceAll("\\s+", " ");
+
+        assertTrue(runbook.contains(
+                "exact indexed column, one-key/one-attribute nonunique shape, "
+                        + "and `IS NOT NULL` partial predicate"
+        ));
+        assertTrue(standardsEvidence.contains(
+                "`pg_get_indexdef` reconstructs each indexed column and `pg_get_expr` "
+                        + "reconstructs each stored partial predicate"
+        ));
+        assertTrue(changelog.contains(
+                "exact replay-index column, predicate, and one-column nonunique shape"
+        ));
+    }
+
     private static String read(String relativePath) throws IOException {
         return Files.readString(projectRoot().resolve(relativePath), StandardCharsets.UTF_8);
     }
