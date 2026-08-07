@@ -134,7 +134,7 @@ BEGIN
        );
 
     IF replay_lookup_index_count <> 2 THEN
-        RAISE EXCEPTION 'replay lookup indexes are missing, invalid, or have unexpected definitions';
+        RAISE EXCEPTION 'replay lookup indexes are missing or invalid, or have unexpected definitions';
     END IF;
 
     SELECT string_agg(pg_get_constraintdef(constraint_record.oid), ' ')
