@@ -12,24 +12,33 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Keeps the production-PostgreSQL replay migration and rollback rehearsal executable in CI.
+ *
+ * <p>The ordinary cross-platform Java build validates these repository contracts without
+ * requiring PostgreSQL on every runner. The separate direct-{@code develop} integration
+ * workflow then executes the same verifier against PostgreSQL 18.</p>
  */
 class EtlJobReplayPostgresWorkflowTest {
 
     @Test
-    void ciRunsTheCompleteReplayMigrationChainAgainstPostgres18() throws IOException {
-        String workflow = read(".github/workflows/ci.yml").replaceAll("\\s+", " ");
+    void directDevelopWorkflowRunsCompleteReplayMigrationChainOnPostgres18() throws IOException {
+        String workflow = read(
+                ".github/workflows/postgresql-migration-integration.yml"
+        ).replaceAll("\\s+", " ");
+        String verifier = read(
+                "scripts/verify-postgresql-migrations.sh"
+        ).replaceAll("\\s+", " ");
 
-        assertTrue(workflow.contains("postgres_replay_migration:"));
-        assertTrue(workflow.contains("image: postgres:18"));
-        assertTrue(workflow.contains("--health-cmd pg_isready"));
-        assertTrue(workflow.contains("V2__create_etl_job_records.sql"));
-        assertTrue(workflow.contains("V3__add_etl_job_lease_fencing.sql"));
-        assertTrue(workflow.contains("V4__add_etl_job_claim_eligibility_index.sql"));
-        assertTrue(workflow.contains("V5__add_etl_job_owner_pagination_index.sql"));
-        assertTrue(workflow.contains("V6__add_etl_job_cancellation.sql"));
-        assertTrue(workflow.contains("V7__add_etl_job_replay_lineage.sql"));
-        assertTrue(workflow.contains("psql -v ON_ERROR_STOP=1"));
-        assertTrue(workflow.contains(
+        assertTrue(workflow.contains("replay_lineage_migration:"));
+        assertTrue(workflow.contains("image: postgres:18-alpine"));
+        assertTrue(workflow.contains("--health-cmd \"pg_isready"));
+        assertTrue(workflow.contains("etl-service/src/test/postgresql/**"));
+        assertTrue(workflow.contains("bash scripts/verify-postgresql-migrations.sh"));
+
+        assertTrue(verifier.contains("find \"${migration_directory}\""));
+        assertTrue(verifier.contains("-name 'V*__*.sql'"));
+        assertTrue(verifier.contains("sort -zV"));
+        assertTrue(verifier.contains("psql --no-psqlrc --set ON_ERROR_STOP=1"));
+        assertTrue(verifier.contains(
                 "etl-service/src/test/postgresql/replay_lineage_migration.sql"
         ));
     }
@@ -43,8 +52,12 @@ class EtlJobReplayPostgresWorkflowTest {
         assertTrue(rehearsal.contains("cross-owner source lineage was accepted"));
         assertTrue(rehearsal.contains("cross-owner root lineage was accepted"));
         assertTrue(rehearsal.contains("ON DELETE RESTRICT did not protect replay history"));
-        assertTrue(rehearsal.contains("ALTER TABLE etl_job_records DROP CONSTRAINT etl_job_replay_source_reference"));
-        assertTrue(rehearsal.contains("ALTER TABLE etl_job_records DROP COLUMN replay_source_job_record_id"));
+        assertTrue(rehearsal.contains(
+                "ALTER TABLE etl_job_records DROP CONSTRAINT etl_job_replay_source_reference"
+        ));
+        assertTrue(rehearsal.contains(
+                "ALTER TABLE etl_job_records DROP COLUMN replay_source_job_record_id"
+        ));
         assertTrue(rehearsal.contains("ROLLBACK"));
         assertTrue(rehearsal.contains("rollback rehearsal did not restore V7"));
     }
@@ -53,7 +66,11 @@ class EtlJobReplayPostgresWorkflowTest {
         return Files.readString(projectRoot().resolve(relativePath), StandardCharsets.UTF_8);
     }
 
-    /** @return repository root from reactor-root or module-local execution */
+    /**
+     * Finds the repository root from reactor-root or module-local Maven execution.
+     *
+     * @return repository root that contains workflows, scripts, and test fixtures
+     */
     private static Path projectRoot() {
         Path current = Paths.get(System.getProperty("user.dir")).toAbsolutePath();
         Path lastPomParent = null;
