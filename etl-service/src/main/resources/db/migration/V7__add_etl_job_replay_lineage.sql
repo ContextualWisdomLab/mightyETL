@@ -33,8 +33,9 @@ ALTER TABLE etl_job_records
 
 -- Keep the relational lineage authoritative even when rows are imported outside the service.
 -- Each derived row must point to an exact terminal predecessor, preserve the first root, and
--- advance the generation by exactly one. Lineage columns become immutable after insertion so a
--- later update cannot silently rewrite descendants' provenance.
+-- advance the generation by exactly one. Lineage columns become immutable after insertion.
+-- Once a row is referenced as an immediate source or root, its terminal replay evidence also
+-- becomes immutable so later writes cannot change the meaning of already-created descendants.
 CREATE FUNCTION validate_etl_job_replay_lineage() RETURNS trigger
 LANGUAGE plpgsql
 AS $etl_job_replay_lineage$
@@ -59,6 +60,31 @@ BEGIN
        ) THEN
         RAISE EXCEPTION 'Replay lineage fields are immutable'
             USING ERRCODE = '23514';
+    END IF;
+
+    IF TG_OP = 'UPDATE'
+       AND (
+            OLD.job_status IS DISTINCT FROM NEW.job_status
+            OR OLD.request_digest IS DISTINCT FROM NEW.request_digest
+            OR OLD.request_payload IS DISTINCT FROM NEW.request_payload
+            OR OLD.attempt_count IS DISTINCT FROM NEW.attempt_count
+            OR OLD.failure_code IS DISTINCT FROM NEW.failure_code
+            OR OLD.cancellation_key_hash IS DISTINCT FROM NEW.cancellation_key_hash
+            OR OLD.cancellation_code IS DISTINCT FROM NEW.cancellation_code
+            OR OLD.job_cancelled_at IS DISTINCT FROM NEW.job_cancelled_at
+            OR OLD.created_at IS DISTINCT FROM NEW.created_at
+            OR OLD.updated_at IS DISTINCT FROM NEW.updated_at
+       ) THEN
+        PERFORM 1
+          FROM etl_job_records AS child_record
+         WHERE child_record.replay_source_job_record_id = OLD.job_record_id
+            OR child_record.replay_root_job_record_id = OLD.job_record_id
+         FOR UPDATE;
+
+        IF FOUND THEN
+            RAISE EXCEPTION 'Referenced replay evidence is immutable'
+                USING ERRCODE = '23514';
+        END IF;
     END IF;
 
     IF NEW.replay_generation_count IS NULL THEN
@@ -86,7 +112,7 @@ BEGIN
       FROM etl_job_records
      WHERE job_record_id = NEW.replay_source_job_record_id
        AND principal_scope_hash = NEW.principal_scope_hash
-     FOR KEY SHARE;
+     FOR UPDATE;
 
     IF NOT FOUND THEN
         RAISE EXCEPTION 'Replay source is missing or belongs to another owner'
@@ -109,7 +135,7 @@ BEGIN
       FROM etl_job_records
      WHERE job_record_id = NEW.replay_root_job_record_id
        AND principal_scope_hash = NEW.principal_scope_hash
-     FOR KEY SHARE;
+     FOR UPDATE;
 
     IF NOT FOUND THEN
         RAISE EXCEPTION 'Replay root is missing or belongs to another owner'
@@ -144,7 +170,10 @@ $etl_job_replay_lineage$;
 
 CREATE TRIGGER etl_job_replay_lineage_guard_trigger
 BEFORE INSERT OR UPDATE OF replay_source_job_record_id,
-    replay_root_job_record_id, replay_generation_count
+    replay_root_job_record_id, replay_generation_count, job_status,
+    request_digest, request_payload, attempt_count, failure_code,
+    cancellation_key_hash, cancellation_code, job_cancelled_at,
+    created_at, updated_at
 ON etl_job_records
 FOR EACH ROW
 EXECUTE FUNCTION validate_etl_job_replay_lineage();
