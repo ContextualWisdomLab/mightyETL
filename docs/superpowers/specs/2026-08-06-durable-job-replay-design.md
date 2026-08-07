@@ -50,7 +50,7 @@ FOREIGN KEY (replay_root_job_record_id, principal_scope_hash)
   REFERENCES etl_job_records (job_record_id, principal_scope_hash)
 ```
 
-Those declarative constraints establish owner scope, existence, self-reference rejection, completeness, deletion restriction, and the generation bound. They do not by themselves prove that a source is terminal, that the selected root is the first lineage row, or that generation advances exactly once. The migration therefore adds a database trigger and PL/pgSQL trigger function as the relational authority for continuity:
+Those declarative constraints establish owner scope, existence, self-reference rejection, completeness, deletion restriction, and the generation bound. They do not by themselves prove that a source is terminal, that the selected root is the first lineage row, or that each replay hop advances exactly one generation. The migration therefore adds a database trigger and PL/pgSQL trigger function as the relational authority for continuity:
 
 ```text
 validate_etl_job_replay_lineage()
