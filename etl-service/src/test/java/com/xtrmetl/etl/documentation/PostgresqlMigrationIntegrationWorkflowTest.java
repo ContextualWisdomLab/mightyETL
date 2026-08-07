@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class PostgresqlMigrationIntegrationWorkflowTest {
 
     @Test
-    void workflowUsesLeastPrivilegePinnedCheckoutAndPostgresqlEighteen() throws IOException {
+    void workflowUsesLeastPrivilegeExactHeadCheckoutAndPostgresqlEighteen() throws IOException {
         String workflow = read(".github/workflows/postgresql-migration-integration.yml");
 
         assertTrue(workflow.contains("name: PostgreSQL Migration Integration"));
@@ -26,10 +26,25 @@ class PostgresqlMigrationIntegrationWorkflowTest {
         assertTrue(workflow.contains("timeout-minutes: 15"));
         assertTrue(workflow.contains("image: postgres:18-alpine"));
         assertTrue(workflow.contains(
+                "if: github.event_name != 'workflow_dispatch' || "
+                        + "github.ref_name == github.event.repository.default_branch"
+        ));
+        assertTrue(workflow.contains(
                 "uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"
+        ));
+        assertTrue(workflow.contains(
+                "repository: ${{ github.event_name == 'pull_request' "
+                        + "&& github.event.pull_request.head.repo.full_name || github.repository }}"
+        ));
+        assertTrue(workflow.contains(
+                "ref: ${{ github.event_name == 'pull_request' "
+                        + "&& github.event.pull_request.head.sha "
+                        + "|| github.event.repository.default_branch }}"
         ));
         assertTrue(workflow.contains("persist-credentials: false"));
         assertTrue(workflow.contains("bash scripts/verify-postgresql-migrations.sh"));
+        assertFalse(workflow.contains("refs/pull/"));
+        assertFalse(workflow.contains("github.event.pull_request.merge_commit_sha"));
         assertFalse(workflow.contains("pull_request_target:"));
         assertFalse(workflow.contains("COPILOT_GITHUB_TOKEN"));
         assertFalse(workflow.contains("NVIDIA_NIM_API_KEY"));
