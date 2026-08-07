@@ -21,11 +21,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Guards the credential, authority, supply-chain, publication, and exact-head validation
  * boundaries of the scheduled OpenCode maintenance workflow.
  *
- * <p>The model may edit and push one bounded feature branch. It never receives pull-request write
- * authority. A deterministic non-checkout publisher may create one draft pull request, while a
- * second isolated non-checkout job may authorize only approval-required workflow runs associated
- * with that exact pull request and exact head. These tests keep those authorities physically
- * separated from model and repository-code execution.</p>
+ * <p>The model may edit and commit one bounded feature-branch candidate, but it must never
+ * receive repository-content write authority. An isolated deterministic branch publisher may
+ * transfer the exact candidate commit, a second non-checkout publisher may create one draft pull
+ * request, and a third isolated non-checkout job may authorize only approval-required workflow
+ * runs associated with that exact pull request and exact head. These tests keep every write
+ * authority physically separated from model and repository-code execution.</p>
  */
 class HourlyOpenCodeMaintenanceWorkflowTest {
 
@@ -87,14 +88,19 @@ class HourlyOpenCodeMaintenanceWorkflowTest {
         assertFalse(workflow.contains("anomalyco/opencode/github@"));
     }
 
-    /** Verifies ephemeral Git credentials for branch pushes and deterministic cleanup. */
+    /** Verifies ephemeral Git credentials exist only for deterministic branch publication. */
     @Test
     void bootstrapsAndRemovesDirectTokenGitCredentials() {
+        String maintenance = maintenanceJob();
+        String branchPublisher = branchPublicationJob();
+
         assertTrue(workflow.contains("GH_TOKEN: ${{ github.token }}"));
-        assertTrue(workflow.contains(
+        assertFalse(maintenance.contains("git_credential_key="));
+        assertFalse(maintenance.contains("git push"));
+        assertTrue(branchPublisher.contains(
                 "git_credential_key=\"credential.https://github.com.helper\""
         ));
-        assertTrue(workflow.contains("cleanup_git_credentials()"));
+        assertTrue(branchPublisher.contains("cleanup_git_credentials()"));
         assertTrue(workflow.contains("trap cleanup_git_credentials EXIT"));
         assertTrue(workflow.contains(
                 "git config --local --add \"${git_credential_key}\" \"\""
@@ -130,21 +136,35 @@ class HourlyOpenCodeMaintenanceWorkflowTest {
     }
 
     /**
-     * Proves the model has read-only pull-request authority and both PR-writing jobs are
-     * deterministic non-checkout jobs without the NVIDIA credential.
+     * Proves all repository writes are isolated from the model-executing job and its NVIDIA
+     * credential, while pull-request and Actions write authorities remain separately bounded.
      */
     @Test
     void isolatesPullRequestAndActionsWriteAuthorityFromTheAgent() {
         String maintenance = maintenanceJob();
+        String branchPublisher = branchPublicationJob();
         String publisher = publicationJob();
         String authorizer = authorizationJob();
 
         assertTrue(workflow.contains("permissions:\n  contents: read\n\njobs:"));
         assertTrue(maintenance.contains("actions: read"));
-        assertTrue(maintenance.contains("contents: write"));
+        assertTrue(maintenance.contains("contents: read"));
+        assertFalse(maintenance.contains("contents: write"));
         assertTrue(maintenance.contains("pull-requests: read"));
         assertFalse(maintenance.contains("pull-requests: write"));
         assertFalse(maintenance.contains("actions: write"));
+
+        assertTrue(branchPublisher.contains("contents: write"));
+        assertTrue(branchPublisher.contains("actions: read"));
+        assertFalse(branchPublisher.contains("NVIDIA_API_KEY"));
+        assertFalse(branchPublisher.contains("opencode run"));
+        assertFalse(branchPublisher.contains("pull-requests: write"));
+        assertTrue(branchPublisher.contains(
+                "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c"
+        ));
+        assertTrue(maintenance.contains(
+                "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
+        ));
 
         assertTrue(publisher.contains("pull-requests: write"));
         assertTrue(publisher.contains("contents: read"));
@@ -227,7 +247,12 @@ class HourlyOpenCodeMaintenanceWorkflowTest {
 
     /** @return workflow text for the OpenCode execution job only */
     private static String maintenanceJob() {
-        return jobSection("  maintain-repository:", "  publish-agent-pull-request:");
+        return jobSection("  maintain-repository:", "  publish-agent-branch:");
+    }
+
+    /** @return workflow text for the isolated deterministic branch publisher only */
+    private static String branchPublicationJob() {
+        return jobSection("  publish-agent-branch:", "  publish-agent-pull-request:");
     }
 
     /** @return workflow text for the deterministic draft-PR publisher only */
