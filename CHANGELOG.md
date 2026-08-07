@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Authenticated operators can now create an ordinary pending durable job from an immutable failed or cancelled source only after resupplying a byte-identical bounded JSON payload; the terminal source remains unchanged and succeeded sources remain non-replayable.
 - Replay lineage now remains database-authoritative across every writer: PostgreSQL validates the terminal immediate source, first root, exact source/root/generation continuity, generation-one identity, and one-step generation succession, while immutable lineage fields prevent post-insert reparenting.
+- Once a terminal job is referenced as a replay source or root, PostgreSQL row-lock serialization now freezes its status, request evidence, attempt/failure state, cancellation evidence, and lifecycle timestamps so descendants cannot silently acquire different historical meaning.
 - Authenticated operators can now perform owner-scoped durable-job cancellation for `PENDING` and `RUNNING` work through an idempotent action that commits terminal `CANCELLED`, clears payload and lease state, stores only `cancellation_key_hash` plus a fixed code and timestamp, and returns stable RFC 9457 conflicts when success or failure already won.
 - Cancellation-first races now make the former exact lease stale and roll back transactional target and response-ledger effects; success-first races remain `SUCCEEDED`, while same-key cancellation replays and different-key reuse fails closed.
 - Owner-scoped durable-job status responses now emit deterministic weak SHA-256 `ETag` validators; ordinary and wildcard `If-None-Match` requests return an empty RFC 9110 `304 Not Modified` response only after authenticated owner-safe lookup, while `Cache-Control: no-store` remains unchanged.
@@ -40,7 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Transactional migration `V7__add_etl_job_replay_lineage.sql`, owner-scoped replay admission, the named `etl_job_owner_identity_unique` support key, composite owner-scoped foreign keys for immediate-source and root lineage, `validate_etl_job_replay_lineage()` plus `etl_job_replay_lineage_guard_trigger`, and immutable `replay_source_job_record_id`, `replay_root_job_record_id`, and `replay_generation_count` evidence with concurrency, tenant-integrity, exact-continuity, worker-compatibility, rollout, incident, and rollback tests and documentation.
-- PostgreSQL 18 rehearsal now executes valid first- and second-generation replay chains and rejects nonterminal sources, different generation-one roots, derived roots, skipped generations, cross-owner references, lineage mutation, and protected source/root deletion before transactionally rehearsing trigger, function, constraint, and column rollback.
+- PostgreSQL 18 rehearsal now executes valid first- and second-generation replay chains and rejects nonterminal sources, different generation-one roots, derived roots, skipped generations, cross-owner references, lineage mutation, referenced root/source evidence mutation, and protected source/root deletion before transactionally rehearsing trigger, function, constraint, and column rollback.
 - Transactional migration `V6__add_etl_job_cancellation.sql`, owner-safe cancellation API and replay model, exact lease-invalidation and cancellation-versus-success integration tests, plus rollout, incident, connector-limitation, and rollback evidence in `docs/operations/durable-job-cancellation.md`.
 - Deterministic ordinary, wildcard, changed-state, changed-failure-code, null-versus-empty, and unrelated-response conditional polling tests, complete controller Javadoc, privacy and rollback guidance, and APA 7th standards evidence in `docs/etl/durable-job-polling.md`.
 - Controller-scoped polling advice, deterministic active/terminal lifecycle tests, disabled-worker fail-closed behavior, sub-second rounding coverage, rollback guidance, and APA 7th RFC 9110 evidence in `docs/etl/durable-job-polling.md`.
@@ -81,7 +82,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- Replay uses owner-scoped source selection, byte-exact digest verification, a versioned principal-scoped key domain, immutable relational lineage, composite owner-scoped foreign keys, and a database trigger that independently rejects cross-tenant references, nonterminal sources, false roots, generation discontinuities, and lineage mutation without retaining raw principals or replay keys; this evidence does not prove external connector safety, so connector-native idempotency, transaction participation, or compensation remains required.
+- Replay uses owner-scoped source selection, byte-exact digest verification, a versioned principal-scoped key domain, immutable relational lineage, composite owner-scoped foreign keys, and a database trigger that independently rejects cross-tenant references, nonterminal sources, false roots, generation discontinuities, lineage mutation, and mutation of referenced terminal evidence without retaining raw principals or replay keys; this evidence does not prove external connector safety, so connector-native idempotency, transaction participation, or compensation remains required.
 - Cancellation stores only a principal-scoped SHA-256 replay identity and a fixed machine code, exposes no raw principal, key, hash, payload, lease, SQL, exception, or target detail, and requires an owner-matched conditional database update before reporting success.
 - Conditional status validators are SHA-256 digests of only the complete owner-authorized operator-safe representation; payloads, raw principals, idempotency keys, internal hashes, leases, SQL, and exception text remain excluded, and wildcard evaluation occurs only after owner-safe lookup.
 - Polling advice exposes only a bounded delay integer and is omitted when local execution is disabled or terminal; it never contains job, lease, principal, key, hash, payload, SQL, exception, target, or queue-depth data.
@@ -169,7 +170,7 @@ Through code analysis, identified the platform as:
 - Microservices-based architecture using Spring Cloud
 - Real-time Change Data Capture using Debezium
 - Event streaming via Apache Kafka
-- Service discovery with Netflix Eureka
+- Service discovery and registration
 - Distributed tracing with Zipkin
 
 #### Key Components Documented
