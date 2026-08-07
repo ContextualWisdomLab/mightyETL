@@ -3,7 +3,7 @@
 - **Status:** Proposed while the replay pull request is stacked; Accepted only after direct-`develop` gates and merge
 - **Date:** 2026-08-07
 - **Decision owners:** mightyETL maintainers
-- **Scope:** `etl-service` durable-job admission, persistence, operator API, and provenance
+- **Scope:** `etl-service` durable-job admission, persistence, operator API, provenance, and PostgreSQL rollout
 
 ## Context
 
@@ -11,9 +11,13 @@ Durable jobs deliberately clear `request_payload` after success, failure, or can
 
 Rewinding a terminal row to `PENDING` would erase the original terminal fact, mix attempt histories, invalidate conditional status validators, and make concurrent cancellation or success reasoning substantially harder. Retaining terminal payloads solely for replay would expand sensitive-data retention. Treating semantically equivalent JSON as the same work would also allow hidden payload changes under a replay label.
 
-A structural schema with nullable source, root, and generation fields is not sufficient on its own. Composite foreign keys can prove same-owner existence, and check constraints can prove field completeness and bounds, but they cannot prove that a source is terminal, a root is the first row in the chain, a generation increments exactly once, or an existing replay has never been reparented. Those properties must remain true even for maintenance scripts, data imports, and future writers that do not execute the Java service.
+A structural schema with nullable source, root, and generation fields is not sufficient on its own. Composite foreign keys can prove same-owner existence, and check constraints can prove field completeness and bounds, but they cannot prove that a source is terminal, the replay row preserves the exact source request digest, a root is the first row in the chain, a generation increments exactly once, or an existing replay has never been reparented. Those properties must remain true even for maintenance scripts, data imports, and future writers that do not execute the Java service.
 
-Cross-row validity also creates a temporal requirement. Once a descendant commits a reference to terminal source or root evidence, a later direct writer must not change the referenced status, digest, payload state, attempt/failure state, cancellation evidence, or lifecycle timestamps. Otherwise the descendant's historical meaning can change after admission even though its lineage identifiers remain untouched. Child insertion and parent mutation therefore require one database-owned serialization boundary.
+Cross-row validity also creates a temporal requirement. Once a descendant commits a reference to terminal source or root evidence, a later direct writer must not change the referenced status, digest, payload state, attempt/failure state, cancellation evidence, or lifecycle timestamps. Otherwise the descendant's historical meaning can change after admission even though its lineage identifiers remain untouched.
+
+The trigger must preserve that temporal boundary without introducing a deadlock. Child insertion needs source/root row locks to bind exact evidence. A parent update already owns the parent row lock before a `BEFORE UPDATE` trigger runs, so locking child rows and then returning to ancestors would invert lock order. The parent mutation path therefore needs an indexed descendant existence lookup without child row locks.
+
+The source/root foreign keys and descendant lookup also need bounded access paths as history grows. Building those indexes inside the transactional lineage migration would block production writers, while grouping multiple `CREATE INDEX CONCURRENTLY` statements into one nontransactional Flyway migration would make partial failure recovery ambiguous.
 
 ## Decision
 
@@ -29,20 +33,36 @@ A derived row stores:
 
 Source and root references are composite owner-scoped foreign keys to `(job_record_id, principal_scope_hash)` and use `ON DELETE RESTRICT`. A root row has all three lineage fields null; a replay row has all three non-null. Generation cannot exceed the supported bound.
 
-V7 also creates the PL/pgSQL function `validate_etl_job_replay_lineage()` and the row-level `etl_job_replay_lineage_guard_trigger`. The trigger is the database authority for exact source/root/generation continuity and referenced evidence immutability:
+V7 creates the PL/pgSQL function `validate_etl_job_replay_lineage()` and the row-level `etl_job_replay_lineage_guard_trigger`. The trigger is the database authority for exact request and lineage continuity:
 
 - replay rows are inserted only as `PENDING`, attempt zero, with a retained payload;
 - immediate source and root belong to the same principal namespace as the new row;
 - the immediate source is `FAILED` or `CANCELLED`;
+- the replay row `request_digest` equals the immediate source `request_digest`;
 - the root is terminal and has no lineage fields;
 - generation one uses the same source and root;
 - later generations retain that root and equal the immediate source generation plus one;
 - lineage columns are immutable after insertion; and
 - after any descendant references a row as immediate source or root, the terminal status, request evidence, attempt/failure state, cancellation evidence, and lifecycle timestamps are immutable.
 
-The trigger uses PostgreSQL `FOR UPDATE` row locks for both source/root validation during child insertion and descendant lookup during a parent-evidence update. If a parent update commits first, a later child validates and binds the resulting evidence. If child insertion locks and references the parent first, a later conflicting parent update waits, observes the committed descendant, and fails closed. Ordinary lifecycle updates remain available until the row becomes referenced historical evidence.
+The trigger uses one directional lock protocol:
 
-The Java service independently verifies the inherited root is an actual first root before insertion. This is defense in depth; it does not replace the trigger. The new row enters the ordinary `PENDING` lifecycle and uses the existing worker, PostgreSQL claim, exact lease, success, failure, polling, cancellation, and ETag contracts.
+- an INSERT locks source and root rows with `FOR UPDATE`, validates exact evidence, and then commits or rejects;
+- an UPDATE already owns its parent row lock, performs an indexed descendant existence read without locking child rows, rejects protected evidence changes when a descendant exists, and returns before the INSERT-only source/root locking path.
+
+If a parent update commits first, a later child validates and binds the resulting evidence. If child insertion locks and references the parent first, a later conflicting parent update waits, observes the committed descendant, and fails closed. Ordinary lifecycle updates remain available until the row becomes referenced historical evidence.
+
+V8 and V9 provide the online lookup boundary:
+
+- `V8__add_etl_job_replay_source_lookup_index.sql` creates the partial `etl_job_replay_source_lookup_index` concurrently;
+- `V9__add_etl_job_replay_root_lookup_index.sql` creates the partial `etl_job_replay_root_lookup_index` concurrently;
+- each migration owns exactly one `CREATE INDEX CONCURRENTLY` statement;
+- each companion `.sql.conf` sets `executeInTransaction=false`;
+- migration verification requires both indexes to be ready and valid.
+
+A failed concurrent build is repaired by inspecting catalog state, removing only the invalid artifact with `DROP INDEX CONCURRENTLY`, repairing the exact Flyway migration record through the approved deployment process, and rerunning without editing an applied migration.
+
+The Java service independently verifies source digest equality and the inherited root before insertion. This is defense in depth; it does not replace the trigger. The new row enters the ordinary `PENDING` lifecycle and uses the existing worker, PostgreSQL claim, exact lease, success, failure, polling, cancellation, and ETag contracts.
 
 ```mermaid
 sequenceDiagram
@@ -64,7 +84,8 @@ sequenceDiagram
     A-->>O: 202 + Location + Idempotency-Replayed
     W->>P: ordinary lease-fenced claim
     P->>T: later mutation of referenced terminal evidence
-    T->>T: lock descendant rows and reject mutation
+    T->>T: indexed child-existence read without child lock
+    T-->>P: reject protected evidence mutation
 ```
 
 ## Replay identity
@@ -115,7 +136,15 @@ Rejected because maintenance scripts, migrations, import processes, or future se
 
 ### Use only foreign keys and check constraints
 
-Rejected because those constraints cannot express exact generation succession, immutable cross-row root identity, or the transition from mutable terminal state to referenced immutable evidence. A row-level trigger is required for those cross-row and temporal invariants.
+Rejected because those constraints cannot express exact digest equality, generation succession, immutable cross-row root identity, or the transition from mutable terminal state to referenced immutable evidence. A row-level trigger is required for those cross-row and temporal invariants.
+
+### Lock descendants during parent mutation
+
+Rejected because child insertion already locks ancestors. A parent trigger that locks child rows and then reaches ancestors creates child-to-ancestor lock inversion and can deadlock replay admission against lifecycle maintenance.
+
+### Build both indexes in one nontransactional migration
+
+Rejected because a second-index failure could leave a valid first index and a failed Flyway version with no one-artifact repair boundary. Separate V8/V9 migrations preserve auditable failure and rollback semantics.
 
 ### Leave referenced evidence mutable
 
@@ -131,8 +160,10 @@ Rejected because a descendant would preserve the same source/root identifiers wh
 - ordinary worker and cancellation machinery is reused;
 - payload retention does not increase;
 - concurrent retries have one database-owned outcome;
-- database maintenance and import paths cannot create discontinuous or reparented lineage;
-- cross-owner, nonterminal, derived-root, skipped-generation, lineage-mutation, and referenced-evidence-mutation attempts fail closed.
+- database maintenance and import paths cannot create digest-divergent, discontinuous, or reparented lineage;
+- cross-owner, nonterminal, derived-root, skipped-generation, lineage-mutation, and referenced-evidence-mutation attempts fail closed;
+- source/root lookups remain indexed as durable history grows;
+- concurrent index failure has one migration and one artifact to repair.
 
 ### Costs
 
@@ -140,15 +171,16 @@ Rejected because a descendant would preserve the same source/root identifiers wh
 - self-referencing lineage constrains retention and deletion order;
 - every connector needs an explicit replay-safety classification;
 - migrations and generation bounds require real PostgreSQL verification;
-- the trigger adds same-transaction row locks and lookups to replay insertion and referenced-evidence updates;
+- the trigger adds same-transaction ancestor locks to replay insertion and indexed descendant reads to referenced-evidence updates;
 - a terminal row cannot receive later maintenance edits after it becomes lineage evidence without a separately reviewed migration strategy;
-- trigger and function lifecycle must be included in downgrade and disaster-recovery rehearsals.
+- V8/V9 are nontransactional and require explicit ready/valid inspection and invalid-index recovery;
+- trigger, function, and index lifecycle must be included in downgrade and disaster-recovery rehearsals.
 
 ## Verification
 
-Acceptance requires exact-head tests for source immutability, owner isolation, exact payload matching, same-key replay, conflicting-key reuse, concurrent admission, lineage inheritance, generation exhaustion, ordinary worker behavior, cancellation compatibility, RFC 9457 responses, privacy exclusions, and zero-missed configured production coverage.
+Acceptance requires exact-head tests for source immutability, owner isolation, exact payload matching, same-key replay, conflicting-key reuse, concurrent admission, lineage inheritance, generation exhaustion, ordinary worker behavior, cancellation compatibility, RFC 9457 responses, privacy exclusions, lock-order safety, and zero-missed configured production coverage.
 
-A direct-`develop` GitHub Actions gate applies every versioned migration to PostgreSQL 18, verifies replay and cancellation columns, verifies both lineage foreign keys use `ON DELETE RESTRICT`, verifies trigger and function presence, executes valid generation-one and generation-two inserts, rejects nonterminal sources, different generation-one roots, derived roots, skipped generations, cross-owner references, lineage mutation, referenced root-digest mutation, and referenced immediate-source failure-evidence mutation, protects source/root deletion, rehearses transactional rollback, and creates a non-empty schema-only dump. SAST, security, dependency, SBOM, review-thread, and non-author exact-head approval gates remain mandatory.
+A direct-`develop` GitHub Actions gate applies every versioned migration to PostgreSQL 18, verifies replay and cancellation columns, verifies both lineage foreign keys use `ON DELETE RESTRICT`, verifies trigger and function presence, verifies both replay lookup indexes are ready and valid, executes valid generation-one and generation-two inserts, rejects nonterminal sources, request-digest mismatch, different generation-one roots, derived roots, skipped generations, cross-owner references, lineage mutation, referenced root-digest mutation, and referenced immediate-source failure-evidence mutation, protects source/root deletion, rehearses ordered rollback, and creates a non-empty schema-only dump. SAST, security, dependency, SBOM, review-thread, and non-author exact-head approval gates remain mandatory.
 
 ## References — APA 7th edition
 
@@ -159,6 +191,8 @@ National Institute of Standards and Technology. (2016). *SHA-3 derived functions
 Nottingham, M., Wilde, E., & Dalal, S. (2023). *Problem details for HTTP APIs* (RFC 9457). RFC Editor. https://www.rfc-editor.org/rfc/rfc9457
 
 PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: Constraints*. https://www.postgresql.org/docs/18/ddl-constraints.html
+
+PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: CREATE INDEX*. https://www.postgresql.org/docs/18/sql-createindex.html
 
 PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: CREATE TRIGGER*. https://www.postgresql.org/docs/18/sql-createtrigger.html
 
