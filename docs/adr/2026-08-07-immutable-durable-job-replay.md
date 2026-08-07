@@ -1,0 +1,122 @@
+# ADR: Immutable durable-job replay lineage
+
+- **Status:** Proposed while the replay pull request is stacked; Accepted only after direct-`develop` gates and merge
+- **Date:** 2026-08-07
+- **Decision owners:** mightyETL maintainers
+- **Scope:** `etl-service` durable-job admission, persistence, operator API, and provenance
+
+## Context
+
+Durable jobs deliberately clear `request_payload` after success, failure, or cancellation. Operators nevertheless need a controlled way to retry failed or cancelled work without weakening source immutability, owner isolation, idempotency, lease fencing, or auditability.
+
+Rewinding a terminal row to `PENDING` would erase the original terminal fact, mix attempt histories, invalidate conditional status validators, and make concurrent cancellation or success reasoning substantially harder. Retaining terminal payloads solely for replay would expand sensitive-data retention. Treating semantically equivalent JSON as the same work would also allow hidden payload changes under a replay label.
+
+## Decision
+
+Replay creates a **new** durable job. The terminal source remains unchanged.
+
+The authenticated owner submits the source identifier, a replay-specific `Idempotency-Key`, and the complete bounded JSON text. Admission parses the payload through the ordinary durable-intake boundary and requires its SHA-256 digest to equal the immutable source `request_digest`. Only `FAILED` and `CANCELLED` sources are eligible. `SUCCEEDED` remains excluded because payload equality is not evidence that committed target effects may be repeated safely.
+
+A derived row stores:
+
+- `replay_source_job_record_id`: immediate source;
+- `replay_root_job_record_id`: immutable root of the replay chain;
+- `replay_generation_count`: bounded positive generation.
+
+Source and root references use `ON DELETE RESTRICT`. A root row has all three lineage fields null; a replay row has all three non-null. Generation cannot exceed the supported bound. The new row enters the ordinary `PENDING` lifecycle and uses the existing worker, PostgreSQL claim, exact lease, success, failure, polling, cancellation, and ETag contracts.
+
+```mermaid
+sequenceDiagram
+    participant O as Authenticated owner
+    participant A as Replay API
+    participant P as PostgreSQL transaction
+    participant W as Ordinary worker
+
+    O->>A: source id + exact payload + replay key
+    A->>A: bounded JSON validation and SHA-256
+    A->>P: owner-matched terminal source lock
+    P->>P: verify FAILED/CANCELLED and digest equality
+    P->>P: verify replay-key identity and generation bound
+    P->>P: insert new PENDING row with source/root/generation
+    P-->>A: commit derived job
+    A-->>O: 202 + Location + Idempotency-Replayed
+    W->>P: ordinary lease-fenced claim
+```
+
+## Replay identity
+
+The stored replay identity uses a versioned replay-specific domain and the principal namespace. It is intentionally distinct from ordinary submission and cancellation domains. Raw principals and raw replay keys are not retained. The domain string is persistence compatibility behavior and cannot change without a migration or dual-read period.
+
+NIST SP 800-185 motivates explicit domain separation, but the SHA-256 construction does not claim cSHAKE, KMAC, TupleHash, or ParallelHash conformance.
+
+## HTTP behavior
+
+- first committed replay: `202 Accepted`, `Location`, `Cache-Control: no-store`, `Idempotency-Replayed: false`;
+- committed same-intent retry: same derived job, current lifecycle state, `Idempotency-Replayed: true`;
+- absent or foreign source: indistinguishable `404 etl_job_not_found`;
+- active source: stable `409` problem;
+- succeeded source: stable `409` problem;
+- byte-different payload: stable `422` problem;
+- conflicting replay-key reuse: stable `422` problem;
+- unresolved concurrent admission: stable retryable `409` problem;
+- generation exhaustion: stable `409` problem.
+
+All errors use fixed RFC 9457 metadata and exclude exception messages, SQL, hashes, identifiers, payloads, and target details.
+
+## Connector boundary
+
+The replay transaction can prove source ownership, payload fidelity, replay identity, lineage, and durable admission. It cannot prove that a remote warehouse, file system, API, or broker will suppress duplicate effects. Replay is enabled for a connector only when target effects participate in the mightyETL transaction or the connector provides independently tested idempotency or compensation.
+
+## Alternatives rejected
+
+### Rewind the terminal row
+
+Rejected because it destroys terminal history, combines multiple execution episodes into one identity, complicates ETag semantics, and weakens race reasoning.
+
+### Retain terminal payloads indefinitely
+
+Rejected because replay does not justify expanding sensitive payload retention. The operator must recover the exact payload from an approved upstream or encrypted audit source.
+
+### Accept semantic JSON equivalence
+
+Rejected because normalization can obscure a changed request and creates a second canonicalization contract. Replay fidelity is byte-exact, matching durable submission identity.
+
+### Permit succeeded-source replay
+
+Rejected in the initial slice because a succeeded job may already have committed irreversible external effects.
+
+## Consequences
+
+### Positive
+
+- terminal sources remain immutable;
+- each execution episode has a distinct opaque job identity;
+- lineage supports incident analysis and future PROV-compatible export;
+- ordinary worker and cancellation machinery is reused;
+- payload retention does not increase;
+- concurrent retries have one database-owned outcome.
+
+### Costs
+
+- operators must possess the exact original payload bytes;
+- self-referencing lineage constrains retention and deletion order;
+- every connector needs an explicit replay-safety classification;
+- migrations and generation bounds require real PostgreSQL verification.
+
+## Verification
+
+Acceptance requires exact-head tests for source immutability, owner isolation, exact payload matching, same-key replay, conflicting-key reuse, concurrent admission, lineage inheritance, generation exhaustion, ordinary worker behavior, cancellation compatibility, RFC 9457 responses, privacy exclusions, and zero-missed configured production coverage.
+
+A direct-`develop` GitHub Actions gate applies every versioned migration to PostgreSQL 18, verifies replay and cancellation columns, verifies both lineage foreign keys use `ON DELETE RESTRICT`, verifies bounded source/root/generation checks, and creates a non-empty schema-only dump. SAST, security, dependency, SBOM, review-thread, and non-author exact-head approval gates remain mandatory.
+
+## References — APA 7th edition
+
+Fielding, R., Nottingham, M., & Reschke, J. (2022). *HTTP semantics* (RFC 9110). RFC Editor. https://www.rfc-editor.org/rfc/rfc9110
+
+National Institute of Standards and Technology. (2016). *SHA-3 derived functions: cSHAKE, KMAC, TupleHash, and ParallelHash* (NIST Special Publication 800-185). U.S. Department of Commerce. https://doi.org/10.6028/NIST.SP.800-185
+
+Nottingham, M., Wilde, E., & Dalal, S. (2023). *Problem details for HTTP APIs* (RFC 9457). RFC Editor. https://www.rfc-editor.org/rfc/rfc9457
+
+PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: INSERT*. https://www.postgresql.org/docs/18/sql-insert.html
+
+World Wide Web Consortium. (2013). *PROV-O: The PROV ontology*. https://www.w3.org/TR/prov-o/
