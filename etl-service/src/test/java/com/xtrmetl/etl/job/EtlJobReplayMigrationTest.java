@@ -54,6 +54,23 @@ class EtlJobReplayMigrationTest {
         assertTrue(migration.contains("replay_generation_count BETWEEN 1 AND 100"));
         assertTrue(migration.contains("replay_source_job_record_id <> job_record_id"));
         assertTrue(migration.contains("replay_root_job_record_id <> job_record_id"));
+        assertTrue(migration.contains(
+                "CREATE FUNCTION validate_etl_job_replay_lineage() RETURNS trigger"
+        ));
+        assertTrue(migration.contains(
+                "CREATE TRIGGER etl_job_replay_lineage_guard_trigger"
+        ));
+        assertTrue(migration.contains(
+                "BEFORE INSERT OR UPDATE OF replay_source_job_record_id, "
+                        + "replay_root_job_record_id, replay_generation_count"
+        ));
+        assertTrue(migration.contains(
+                "NEW.replay_source_job_record_id <> NEW.replay_root_job_record_id"
+        ));
+        assertTrue(migration.contains(
+                "source_generation_count IS DISTINCT FROM NEW.replay_generation_count - 1"
+        ));
+        assertTrue(migration.contains("Replay lineage fields are immutable"));
         assertFalse(migration.contains(
                 "FOREIGN KEY (replay_source_job_record_id) "
                         + "REFERENCES etl_job_records (job_record_id)"
