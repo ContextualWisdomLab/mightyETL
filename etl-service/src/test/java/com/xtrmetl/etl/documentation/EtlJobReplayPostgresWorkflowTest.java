@@ -44,14 +44,32 @@ class EtlJobReplayPostgresWorkflowTest {
     }
 
     @Test
-    void postgresRehearsalCoversTenantIntegrityDeletionAndRollback() throws IOException {
+    void postgresRehearsalCoversLineageContinuityTenantIntegrityAndRollback()
+            throws IOException {
         String rehearsal = read(
                 "etl-service/src/test/postgresql/replay_lineage_migration.sql"
         ).replaceAll("\\s+", " ");
 
+        assertTrue(rehearsal.contains("replay lineage trigger or function is missing"));
+        assertTrue(rehearsal.contains("nonterminal replay source was accepted"));
+        assertTrue(rehearsal.contains("generation-one replay accepted a different root"));
+        assertTrue(rehearsal.contains("a derived replay row was accepted as lineage root"));
+        assertTrue(rehearsal.contains("a skipped replay generation was accepted"));
         assertTrue(rehearsal.contains("cross-owner source lineage was accepted"));
         assertTrue(rehearsal.contains("cross-owner root lineage was accepted"));
-        assertTrue(rehearsal.contains("ON DELETE RESTRICT did not protect replay history"));
+        assertTrue(rehearsal.contains("replay lineage fields were mutable"));
+        assertTrue(rehearsal.contains(
+                "ON DELETE RESTRICT did not protect immediate replay history"
+        ));
+        assertTrue(rehearsal.contains(
+                "ON DELETE RESTRICT did not protect replay root history"
+        ));
+        assertTrue(rehearsal.contains(
+                "DROP TRIGGER etl_job_replay_lineage_guard_trigger ON etl_job_records"
+        ));
+        assertTrue(rehearsal.contains(
+                "DROP FUNCTION validate_etl_job_replay_lineage()"
+        ));
         assertTrue(rehearsal.contains(
                 "ALTER TABLE etl_job_records DROP CONSTRAINT etl_job_replay_source_reference"
         ));
