@@ -98,6 +98,10 @@ BEGIN
         RAISE EXCEPTION 'replay source and root must each use a self-reference with ON DELETE RESTRICT';
     END IF;
 
+    -- Names and ready/valid flags are insufficient: CREATE INDEX CONCURRENTLY IF NOT EXISTS
+    -- would retain a valid but incorrectly shaped index with the expected name. Reconstruct the
+    -- indexed column and stored predicate from PostgreSQL catalogs and require the exact bounded
+    -- one-column, nonunique partial-index contracts used by the lineage trigger.
     SELECT count(*)
       INTO replay_lookup_index_count
       FROM pg_class AS index_class
@@ -106,15 +110,31 @@ BEGIN
       JOIN pg_class AS table_record
         ON table_record.oid = index_record.indrelid
      WHERE table_record.relname = 'etl_job_records'
-       AND index_class.relname IN (
-            'etl_job_replay_source_lookup_index',
-            'etl_job_replay_root_lookup_index'
-       )
        AND index_record.indisready
-       AND index_record.indisvalid;
+       AND index_record.indisvalid
+       AND index_record.indnkeyatts = 1
+       AND index_record.indnatts = 1
+       AND NOT index_record.indisunique
+       AND (
+            (
+                index_class.relname = 'etl_job_replay_source_lookup_index'
+                AND pg_get_indexdef(index_record.indexrelid, 1, true)
+                    = 'replay_source_job_record_id'
+                AND pg_get_expr(index_record.indpred, index_record.indrelid)
+                    = '(replay_source_job_record_id IS NOT NULL)'
+            )
+            OR
+            (
+                index_class.relname = 'etl_job_replay_root_lookup_index'
+                AND pg_get_indexdef(index_record.indexrelid, 1, true)
+                    = 'replay_root_job_record_id'
+                AND pg_get_expr(index_record.indpred, index_record.indrelid)
+                    = '(replay_root_job_record_id IS NOT NULL)'
+            )
+       );
 
     IF replay_lookup_index_count <> 2 THEN
-        RAISE EXCEPTION 'replay lookup indexes are missing or invalid';
+        RAISE EXCEPTION 'replay lookup indexes are missing, invalid, or have unexpected definitions';
     END IF;
 
     SELECT string_agg(pg_get_constraintdef(constraint_record.oid), ' ')
