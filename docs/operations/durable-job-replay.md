@@ -115,7 +115,16 @@ The `BEFORE INSERT OR UPDATE OF` database trigger enforces these additional inva
 - the exact root is same-owner, terminal, and has all lineage fields null;
 - generation 1 uses the same row as immediate source and root;
 - every later generation equals the source generation plus one and inherits the same first root;
-- lineage fields are immutable after insertion.
+- lineage fields are immutable after insertion; and
+- after a descendant references a row as immediate source or root, its status, request evidence,
+  attempt/failure state, cancellation evidence, and lifecycle timestamps are immutable.
+
+The trigger uses PostgreSQL `FOR UPDATE` row locking for source/root validation and for referenced-child
+inspection. This creates one fail-closed serialization boundary between child insertion and mutation
+of the parent evidence. A parent update that commits before the child is inserted defines the evidence
+the child subsequently validates. Once the child insertion has locked and referenced the parent, a
+later conflicting parent update observes the descendant and fails with a check-violation-class
+integrity error.
 
 The service performs the same root-identity check before insertion as defense in depth. The database
 trigger remains authoritative for maintenance scripts, data imports, and other writers that do not
@@ -139,8 +148,11 @@ lease fencing, attempts, retry, success, failure, cancellation, pagination, `Ret
 contracts apply unchanged. No replay-specific worker or scheduler exists.
 
 Ordinary lifecycle updates may change status, payload, lease, attempts, failure, or cancellation
-fields while retaining the exact lineage. Any writer that attempts to reparent a replay row or alter
-its generation receives a database constraint failure and must be treated as an integrity incident.
+fields while retaining the exact lineage only until that row becomes historical evidence for a
+subsequent replay. After any descendant references the row as source or root, the terminal evidence
+covered by V7 is frozen. Any writer that attempts to reparent a replay row, alter its generation, or
+change referenced terminal evidence receives a database constraint failure and must be treated as an
+integrity incident.
 
 ## Provenance export
 
@@ -175,7 +187,9 @@ trigger enforcement, or replay-key idempotency.
    - derived replay rows used as root;
    - skipped generations;
    - source or root references from another `principal_scope_hash`;
-   - post-insert lineage mutation.
+   - post-insert lineage mutation;
+   - request-digest mutation on a referenced lineage root; and
+   - failure-evidence mutation on a referenced immediate source.
 8. Confirm both source and root deletion remain protected by `ON DELETE RESTRICT`.
 9. Claim the new pending row through the ordinary worker and verify no replay-only execution path.
 10. Monitor replay acceptance, in-progress conflicts, payload mismatches, generation exhaustion,
@@ -199,13 +213,14 @@ Read the already-created replay job associated with the operator's prior request
 principal-scoped replay intent and cannot be reused for another source or payload. Use a new key only
 for a deliberately separate replay.
 
-### Trigger or lineage integrity rejection
+### Trigger, referenced evidence, or lineage integrity rejection
 
 Stop replay admission for the affected deployment. Preserve the deployed SHA, Flyway history,
 transaction boundary, fixed error classification, and sanitized database evidence. Do not retry by
-disabling the trigger or rewriting the source, root, or generation. Determine whether the attempted
-write came from a stale binary, maintenance script, import path, migration defect, or unauthorized
-writer. Treat cross-owner attempts as tenant-isolation incidents even when PostgreSQL rejected them.
+disabling the trigger or rewriting the source, root, generation, request digest, status, failure or
+cancellation evidence, or timestamps. Determine whether the attempted write came from a stale binary,
+maintenance script, import path, migration defect, or unauthorized writer. Treat cross-owner attempts
+as tenant-isolation incidents even when PostgreSQL rejected them.
 
 ### Broken lineage or missing root
 
