@@ -16,7 +16,7 @@ jobs:
     permissions:
       actions: read
       checks: read
-      contents: write
+      contents: read
       issues: read
       pull-requests: read
       security-events: read
@@ -26,6 +26,7 @@ jobs:
       automation_branch_heads_before: ${{ steps.snapshot_heads.outputs.automation_branch_heads }}
       develop_head_before: ${{ steps.snapshot_heads.outputs.develop_head }}
       agent_candidate: ${{ steps.detect_candidate.outputs.agent_candidate }}
+      has_candidate: ${{ steps.detect_candidate.outputs.has_candidate }}
     runs-on: ubuntu-latest
     timeout-minutes: 50
     steps:
@@ -128,11 +129,11 @@ jobs:
           PROMPT: |
             Maintain ContextualWisdomLab/mightyETL toward defensible commercial and acquisition readiness.
 
-            Start every run by inspecting every open pull request and its exact current head. Review unresolved human, CodeRabbit, GitHub Advanced Security, Dependabot, and automated feedback. Inspect required checks, statuses, and workflow outcomes. Treat queued, pending, skipped-required, stale-head, cancelled, absent, or unsuccessful gates as not passing. Distinguish valid current findings from stale, duplicate, incorrect, or superseded feedback. Resolve only source defects; the deterministic publisher and independent reviewers own pull-request lifecycle operations.
+            Start every run by inspecting every open pull request and its exact current head. Review unresolved human, CodeRabbit, GitHub Advanced Security, Dependabot, and automated feedback. Inspect required checks, statuses, and workflow outcomes. Treat queued, pending, skipped-required, stale-head, cancelled, absent, or unsuccessful gates as not passing. Distinguish valid current findings from stale, duplicate, incorrect, or superseded feedback. Resolve only source defects; deterministic non-model jobs and independent reviewers own remote branch publication and pull-request lifecycle operations.
 
-            When one dependency-eligible development pull request exists, check out that same-repository head branch, implement valid fixes test-first, rerun relevant tests, update authoritative documentation and CHANGELOG.md, commit, and push only that existing branch. Do not create another branch for the same work.
+            When one dependency-eligible development pull request exists, fetch and check out that same-repository head branch, implement valid fixes test-first, rerun relevant tests, update authoritative documentation and CHANGELOG.md, and commit only to that local branch. Do not publish the branch remotely; the isolated deterministic branch publisher owns that authority. Do not create another branch for the same work.
 
-            When no development pull request exists, inspect open issues, roadmap, architecture, security, privacy, reliability, observability, accessibility, packaging, interoperability, deployment, data governance, operational workflows, release evidence, and buyer-visible gaps. Select exactly one highest-impact bounded vertical slice. Create and push exactly one automation/opencode-YYYYMMDDTHHMMSSZ-short-slug branch. Do not create a second branch or pull request. Prefer durable ETL execution, idempotency, replay, dead-letter handling, schema contracts, connector reliability, target warehouse support, tenancy, auditability, SLO evidence, and operator controls.
+            When no development pull request exists, inspect open issues, roadmap, architecture, security, privacy, reliability, observability, accessibility, packaging, interoperability, deployment, data governance, operational workflows, release evidence, and buyer-visible gaps. Select exactly one highest-impact bounded vertical slice. Use exactly one automation/opencode-YYYYMMDDTHHMMSSZ-short-slug local branch and commit the bounded slice there. Do not publish the branch remotely or create a second branch or pull request. Prefer durable ETL execution, idempotency, replay, dead-letter handling, schema contracts, connector reliability, target warehouse support, tenancy, auditability, SLO evidence, and operator controls.
 
             Preserve standalone operation and modular MSA compatibility with ContextualWisdomLab/.github, naruon, and other CWL services. Database objects must contain at least two descriptive words and use snake_case by default. Public production APIs require complete beginner-readable documentation. Added production statements and branches require deterministic 100% statement and branch coverage. Use current authoritative standards, primary technical documentation, and peer-reviewed evidence where material, with APA 7th references in repository documentation.
 
@@ -140,7 +141,7 @@ jobs:
 
             Do not alter the existing review agent, its workflow, its provider configuration, or its credential flow. Do not change any review-agent secret name. Do not inspect secret values. Do not print, echo, summarize, or expose secret values. Do not modify .github/workflows/ or CODEOWNERS unless an open issue explicitly labeled automation-maintenance authorizes that exact bounded automation change; even then, leave the policy change for explicit human workflow authorization.
 
-            Use the repository-scoped token only for read operations and the one permitted feature-branch push. Keep the working tree truthful about tests, skipped coverage, remaining risks, and release readiness. The deterministic non-model publisher creates a draft pull request after validating the resulting branch.
+            Use the repository-scoped token for read operations only. Keep the working tree truthful about tests, skipped coverage, remaining risks, and release readiness. Commit every intended candidate change before returning. The deterministic non-model jobs validate and publish at most one exact local candidate.
         run: |
           set -euo pipefail
           if [[ -z "${NVIDIA_API_KEY}" ]]; then
@@ -152,14 +153,21 @@ jobs:
             exit 1
           fi
 
-          git_credential_key="credential.https://github.com.helper"
-          cleanup_git_credentials() {
-            git config --local --unset-all "${git_credential_key}" >/dev/null 2>&1 || true
+          askpass_script="${RUNNER_TEMP}/opencode-git-read-askpass.sh"
+          cleanup_read_credentials() {
+            rm -f "${askpass_script}"
           }
-          trap cleanup_git_credentials EXIT
-          cleanup_git_credentials
-          git config --local --add "${git_credential_key}" ""
-          git config --local --add "${git_credential_key}" "!gh auth git-credential"
+          trap cleanup_read_credentials EXIT
+          cat > "${askpass_script}" <<'ASKPASS'
+          #!/usr/bin/env bash
+          case "${1:-}" in
+            *Username*) printf '%s\n' 'x-access-token' ;;
+            *) printf '%s\n' "${GITHUB_TOKEN}" ;;
+          esac
+          ASKPASS
+          chmod 0700 "${askpass_script}"
+          export GIT_ASKPASS="${askpass_script}"
+          export GIT_TERMINAL_PROMPT=0
           git config --local user.name "opencode-agent[bot]"
           git config --local user.email "opencode-agent[bot]@users.noreply.github.com"
 
@@ -180,6 +188,7 @@ jobs:
           repository="${GITHUB_REPOSITORY}"
           after_pr_file="${RUNNER_TEMP}/open-pr-heads-after.json"
           after_branch_file="${RUNNER_TEMP}/automation-branch-heads-after.json"
+          candidate_dir="${RUNNER_TEMP}/opencode-candidate"
 
           jq -e 'select(type == "object")' >/dev/null <<<"${BEFORE_PR_HEADS}"
           jq -e 'select(type == "object")' >/dev/null <<<"${BEFORE_AUTOMATION_BRANCH_HEADS}"
@@ -224,7 +233,6 @@ jobs:
                   | select(($before[.name] // null) != .commit.sha)
                   | .name as $branch_name
                   | select(($existing_refs | index($branch_name)) == null)
-                  | select(.name | test("^automation/opencode-[0-9]{8}T[0-9]{6}Z-[a-z0-9][a-z0-9-]{0,48}$"))
                   | {
                       kind: "new_branch",
                       head_ref: .name,
@@ -235,19 +243,210 @@ jobs:
           )"
           candidates="$(jq -cn --argjson a "${changed_existing}" --argjson b "${changed_automation}" '$a + $b')"
           candidate_count="$(jq 'length' <<<"${candidates}")"
-
-          if [[ "${candidate_count}" -gt 1 ]]; then
-            echo "Multiple agent publication candidates were detected; refusing ambiguous publication" >&2
+          if [[ "${candidate_count}" -gt 0 ]]; then
+            echo "Multiple agent publication candidates were detected remotely; refusing to race another writer" >&2
             jq . <<<"${candidates}" >&2
             exit 1
           fi
-          if [[ "${candidate_count}" -eq 0 ]]; then
-            printf 'agent_candidate=%s\n' '{"kind":"none"}' >> "${GITHUB_OUTPUT}"
-            exit 0
+
+          after_pr_heads="$(
+            jq -c --arg repo "${repository}" '
+              map(select(.head.repo.full_name == $repo and .base.ref == "develop"))
+              | map({key: (.number | tostring), value: .head.sha})
+              | from_entries
+            ' "${after_pr_file}"
+          )"
+          if ! jq -e --argjson before "${BEFORE_PR_HEADS}" --argjson after "${after_pr_heads}" \
+            '$before == $after' >/dev/null; then
+            echo "Open pull-request state moved during the model job; refusing stale publication" >&2
+            exit 1
+          fi
+          after_automation_heads="$(
+            jq -c '
+              map(select(.name | startswith("automation/opencode-")))
+              | map({key: .name, value: .commit.sha})
+              | from_entries
+            ' "${after_branch_file}"
+          )"
+          if ! jq -e \
+            --argjson before "${BEFORE_AUTOMATION_BRANCH_HEADS}" \
+            --argjson after "${after_automation_heads}" \
+            '$before == $after' >/dev/null; then
+            echo "Automation branch state moved during the model job; refusing stale publication" >&2
+            exit 1
           fi
 
-          candidate="$(jq -c '.[0]' <<<"${candidates}")"
+          if [[ -n "$(git status --porcelain --untracked-files=all)" ]]; then
+            echo "OpenCode left uncommitted changes; candidate publication requires an exact commit" >&2
+            exit 1
+          fi
+          branch_name="$(git symbolic-ref --quiet --short HEAD || true)"
+          candidate_head="$(git rev-parse HEAD)"
+          if [[ -z "${branch_name}" ]]; then
+            echo "OpenCode left a detached HEAD; refusing ambiguous publication" >&2
+            exit 1
+          fi
+
+          if [[ "${branch_name}" == "develop" ]]; then
+            if [[ "${candidate_head}" == "${DEVELOP_HEAD_BEFORE}" ]]; then
+              printf 'agent_candidate=%s\n' '{"kind":"none"}' >> "${GITHUB_OUTPUT}"
+              printf 'has_candidate=false\n' >> "${GITHUB_OUTPUT}"
+              exit 0
+            fi
+            echo "OpenCode committed on protected develop instead of a bounded candidate branch" >&2
+            exit 1
+          fi
+
+          matching_prs="$(
+            jq -c \
+              --arg repo "${repository}" \
+              --arg branch "${branch_name}" '
+                [
+                  .[]
+                  | select(
+                      .head.repo.full_name == $repo
+                      and .base.ref == "develop"
+                      and .head.ref == $branch
+                    )
+                ]
+              ' "${after_pr_file}"
+          )"
+          matching_pr_count="$(jq 'length' <<<"${matching_prs}")"
+          if [[ "${matching_pr_count}" -gt 1 ]]; then
+            echo "Multiple same-repository pull requests share the local candidate branch" >&2
+            exit 1
+          fi
+
+          if [[ "${matching_pr_count}" -eq 1 ]]; then
+            number="$(jq -r '.[0].number' <<<"${matching_prs}")"
+            number_key="${number}"
+            before_head="$(jq -r --arg key "${number_key}" '.[$key] // empty' <<<"${BEFORE_PR_HEADS}")"
+            live_head="$(jq -r '.[0].head.sha' <<<"${matching_prs}")"
+            if [[ -z "${before_head}" || "${live_head}" != "${before_head}" ]]; then
+              echo "Existing pull-request head moved before local candidate validation" >&2
+              exit 1
+            fi
+            if [[ "${candidate_head}" == "${before_head}" ]]; then
+              printf 'agent_candidate=%s\n' '{"kind":"none"}' >> "${GITHUB_OUTPUT}"
+              printf 'has_candidate=false\n' >> "${GITHUB_OUTPUT}"
+              exit 0
+            fi
+            predecessor_sha="${before_head}"
+            predecessor_ref="${branch_name}"
+            candidate="$(
+              jq -cn \
+                --argjson number "${number}" \
+                --arg head_ref "${branch_name}" \
+                --arg before_head_sha "${before_head}" \
+                --arg head_sha "${candidate_head}" \
+                --arg predecessor_sha "${predecessor_sha}" \
+                --arg predecessor_ref "${predecessor_ref}" \
+                --arg develop_head_before "${DEVELOP_HEAD_BEFORE}" \
+                '{
+                  kind: "existing_pr",
+                  number: $number,
+                  head_ref: $head_ref,
+                  before_head_sha: $before_head_sha,
+                  head_sha: $head_sha,
+                  predecessor_sha: $predecessor_sha,
+                  predecessor_ref: $predecessor_ref,
+                  develop_head_before: $develop_head_before
+                }'
+            )"
+          else
+            if ! [[ "${branch_name}" =~ ^automation/opencode-[0-9]{8}T[0-9]{6}Z-[a-z0-9][a-z0-9-]{0,48}$ ]]; then
+              echo "Local candidate branch does not match the strict automation namespace" >&2
+              exit 1
+            fi
+            if jq -e --arg branch "${branch_name}" 'has($branch)' \
+              >/dev/null <<<"${BEFORE_AUTOMATION_BRANCH_HEADS}"; then
+              echo "OpenCode reused an existing automation branch without an associated pull request" >&2
+              exit 1
+            fi
+            if jq -e --arg branch "${branch_name}" \
+              'any(.[]; .name == $branch)' >/dev/null "${after_branch_file}"; then
+              echo "Agent branch already exists remotely; refusing ambiguous ownership" >&2
+              exit 1
+            fi
+            predecessor_sha="${DEVELOP_HEAD_BEFORE}"
+            predecessor_ref="develop"
+            candidate="$(
+              jq -cn \
+                --arg head_ref "${branch_name}" \
+                --arg head_sha "${candidate_head}" \
+                --arg predecessor_sha "${predecessor_sha}" \
+                --arg predecessor_ref "${predecessor_ref}" \
+                --arg develop_head_before "${DEVELOP_HEAD_BEFORE}" \
+                '{
+                  kind: "new_branch",
+                  head_ref: $head_ref,
+                  head_sha: $head_sha,
+                  predecessor_sha: $predecessor_sha,
+                  predecessor_ref: $predecessor_ref,
+                  develop_head_before: $develop_head_before
+                }'
+            )"
+          fi
+
+          if ! git merge-base --is-ancestor "${predecessor_sha}" "${candidate_head}"; then
+            echo "Local candidate is not a non-destructive descendant of its exact predecessor" >&2
+            exit 1
+          fi
+          ahead_count="$(git rev-list --count "${predecessor_sha}..${candidate_head}")"
+          if [[ "${ahead_count}" -lt 1 ]]; then
+            echo "Agent branch is not ahead of develop or its exact predecessor" >&2
+            exit 1
+          fi
+          if [[ "${ahead_count}" -gt 50 ]]; then
+            echo "Agent candidate exceeds the bounded 50-commit publication limit" >&2
+            exit 1
+          fi
+          if git rev-list --merges "${predecessor_sha}..${candidate_head}" | grep -q .; then
+            echo "Agent candidate contains a merge commit; refusing non-linear publication" >&2
+            exit 1
+          fi
+
+          changed_paths_file="${RUNNER_TEMP}/opencode-candidate-paths.txt"
+          git log --format= --name-only "${predecessor_sha}..${candidate_head}" \
+            | sed '/^$/d' | sort -u > "${changed_paths_file}"
+          file_count="$(wc -l < "${changed_paths_file}")"
+          if [[ "${file_count}" -gt 50 ]]; then
+            echo "Agent branch exceeds the bounded 50-file publication limit" >&2
+            exit 1
+          fi
+          if grep -Eq '(^\.github/|(^|/)CODEOWNERS$)' "${changed_paths_file}"; then
+            echo "Agent branch changes .github or CODEOWNERS policy and requires manual handling" >&2
+            exit 1
+          fi
+          git diff --check "${predecessor_sha}" "${candidate_head}"
+
+          rm -rf "${candidate_dir}"
+          install -d -m 0700 "${candidate_dir}"
+          printf '%s\n' "${candidate}" > "${candidate_dir}/metadata.json"
+          bundle_ref="refs/heads/__opencode_candidate"
+          git update-ref "${bundle_ref}" "${candidate_head}"
+          git bundle create "${candidate_dir}/candidate.bundle" \
+            "${bundle_ref}" "^${predecessor_sha}"
+          git update-ref -d "${bundle_ref}"
+          bundle_size="$(stat -c '%s' "${candidate_dir}/candidate.bundle")"
+          if [[ "${bundle_size}" -gt 26214400 ]]; then
+            echo "Agent candidate bundle exceeds the 25 MiB publication limit" >&2
+            exit 1
+          fi
+          sha256sum "${candidate_dir}/candidate.bundle" \
+            | awk '{print $1}' > "${candidate_dir}/candidate.bundle.sha256"
+
           printf 'agent_candidate=%s\n' "${candidate}" >> "${GITHUB_OUTPUT}"
+          printf 'has_candidate=true\n' >> "${GITHUB_OUTPUT}"
+
+      - name: Upload exact local candidate for isolated branch publication
+        if: ${{ always() && !cancelled() && steps.detect_candidate.outputs.has_candidate == 'true' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: opencode-candidate-${{ github.run_id }}
+          path: ${{ runner.temp }}/opencode-candidate
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Preserve an OpenCode execution failure after candidate capture
         if: ${{ steps.run_opencode.outcome == 'failure' }}
@@ -256,9 +455,198 @@ jobs:
           echo "OpenCode failed after any reviewable branch evidence was captured" >&2
           exit 1
 
-  publish-agent-pull-request:
+  publish-agent-branch:
     needs: maintain-repository
-    if: ${{ always() && !cancelled() && needs.maintain-repository.outputs.agent_candidate != '' }}
+    if: ${{ always() && !cancelled() && needs.maintain-repository.outputs.has_candidate == 'true' }}
+    permissions:
+      actions: read
+      contents: write
+    outputs:
+      agent_candidate: ${{ steps.publish_branch.outputs.agent_candidate }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Download exact candidate bundle
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: opencode-candidate-${{ github.run_id }}
+          path: ${{ runner.temp }}/opencode-candidate
+
+      - name: Publish exact candidate by non-forced branch update
+        id: publish_branch
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_CANDIDATE: ${{ needs.maintain-repository.outputs.agent_candidate }}
+        run: |
+          set -euo pipefail
+          repository="${GITHUB_REPOSITORY}"
+          candidate_dir="${RUNNER_TEMP}/opencode-candidate"
+          metadata_file="${candidate_dir}/metadata.json"
+          bundle_file="${candidate_dir}/candidate.bundle"
+          digest_file="${candidate_dir}/candidate.bundle.sha256"
+
+          test -f "${metadata_file}"
+          test -f "${bundle_file}"
+          test -f "${digest_file}"
+          metadata="$(jq -c . "${metadata_file}")"
+          expected_metadata="$(jq -c . <<<"${EXPECTED_CANDIDATE}")"
+          if [[ "${metadata}" != "${expected_metadata}" ]]; then
+            echo "Downloaded candidate metadata does not match the exact model-job output" >&2
+            exit 1
+          fi
+          expected_digest="$(tr -d '[:space:]' < "${digest_file}")"
+          if ! [[ "${expected_digest}" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "Candidate bundle digest is malformed" >&2
+            exit 1
+          fi
+          actual_digest="$(sha256sum "${bundle_file}" | awk '{print $1}')"
+          if [[ "${actual_digest}" != "${expected_digest}" ]]; then
+            echo "Candidate bundle digest mismatch" >&2
+            exit 1
+          fi
+
+          kind="$(jq -r '.kind' <<<"${metadata}")"
+          head_ref="$(jq -r '.head_ref' <<<"${metadata}")"
+          candidate_head="$(jq -r '.head_sha' <<<"${metadata}")"
+          predecessor_sha="$(jq -r '.predecessor_sha' <<<"${metadata}")"
+          predecessor_ref="$(jq -r '.predecessor_ref' <<<"${metadata}")"
+          develop_head_before="$(jq -r '.develop_head_before' <<<"${metadata}")"
+          if ! [[ "${candidate_head}" =~ ^[0-9a-f]{40}$ \
+            && "${predecessor_sha}" =~ ^[0-9a-f]{40}$ \
+            && "${develop_head_before}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Candidate metadata contains an invalid exact SHA" >&2
+            exit 1
+          fi
+          git check-ref-format --branch "${head_ref}" >/dev/null
+          git check-ref-format --branch "${predecessor_ref}" >/dev/null
+
+          current_develop="$(gh api "/repos/${repository}/git/ref/heads/develop" --jq '.object.sha')"
+          if [[ "${current_develop}" != "${develop_head_before}" ]]; then
+            echo "Protected develop moved before isolated branch publication" >&2
+            exit 1
+          fi
+
+          if [[ "${kind}" == "existing_pr" ]]; then
+            number="$(jq -r '.number' <<<"${metadata}")"
+            before_head="$(jq -r '.before_head_sha' <<<"${metadata}")"
+            if ! [[ "${number}" =~ ^[0-9]+$ && "${before_head}" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "Existing pull-request candidate metadata is malformed" >&2
+              exit 1
+            fi
+            live="$(gh api "/repos/${repository}/pulls/${number}")"
+            jq -e \
+              --arg repo "${repository}" \
+              --arg head_ref "${head_ref}" \
+              --arg before_head "${before_head}" '
+                select(
+                  .state == "open"
+                  and .base.repo.full_name == $repo
+                  and .head.repo.full_name == $repo
+                  and .base.ref == "develop"
+                  and .head.ref == $head_ref
+                  and .head.sha == $before_head
+                )
+              ' >/dev/null <<<"${live}"
+            if [[ "${predecessor_sha}" != "${before_head}" || "${predecessor_ref}" != "${head_ref}" ]]; then
+              echo "Existing pull-request predecessor metadata does not bind the live branch" >&2
+              exit 1
+            fi
+          elif [[ "${kind}" == "new_branch" ]]; then
+            if ! [[ "${head_ref}" =~ ^automation/opencode-[0-9]{8}T[0-9]{6}Z-[a-z0-9][a-z0-9-]{0,48}$ ]]; then
+              echo "New candidate branch violates the strict automation namespace" >&2
+              exit 1
+            fi
+            encoded_ref="$(jq -rn --arg value "${head_ref}" '$value | @uri')"
+            if gh api "/repos/${repository}/branches/${encoded_ref}" >/dev/null 2>&1; then
+              echo "New candidate branch appeared before isolated publication" >&2
+              exit 1
+            fi
+            if [[ "${predecessor_sha}" != "${develop_head_before}" || "${predecessor_ref}" != "develop" ]]; then
+              echo "New branch predecessor does not bind the exact protected develop head" >&2
+              exit 1
+            fi
+          else
+            echo "Unknown agent candidate kind: ${kind}" >&2
+            exit 1
+          fi
+
+          work_dir="${RUNNER_TEMP}/opencode-branch-publisher"
+          rm -rf "${work_dir}"
+          install -d -m 0700 "${work_dir}"
+          cd "${work_dir}"
+          git init --quiet
+          git remote add origin "https://github.com/${repository}.git"
+
+          git_credential_key="credential.https://github.com.helper"
+          cleanup_git_credentials() {
+            git config --local --unset-all "${git_credential_key}" >/dev/null 2>&1 || true
+          }
+          trap cleanup_git_credentials EXIT
+          cleanup_git_credentials
+          git config --local --add "${git_credential_key}" ""
+          git config --local --add "${git_credential_key}" "!gh auth git-credential"
+          git config --local user.name "opencode-agent[bot]"
+          git config --local user.email "opencode-agent[bot]@users.noreply.github.com"
+
+          git fetch --no-tags origin \
+            "refs/heads/${predecessor_ref}:refs/remotes/origin/predecessor"
+          fetched_predecessor="$(git rev-parse refs/remotes/origin/predecessor)"
+          if [[ "${fetched_predecessor}" != "${predecessor_sha}" ]]; then
+            echo "Exact predecessor moved while the isolated publisher was preparing" >&2
+            exit 1
+          fi
+
+          git bundle verify "${bundle_file}"
+          git fetch --no-tags "${bundle_file}" \
+            "refs/heads/__opencode_candidate:refs/heads/__opencode_candidate"
+          imported_head="$(git rev-parse refs/heads/__opencode_candidate)"
+          if [[ "${imported_head}" != "${candidate_head}" ]]; then
+            echo "Candidate bundle does not contain the expected exact head" >&2
+            exit 1
+          fi
+          git fsck --strict --no-dangling
+          if ! git merge-base --is-ancestor "${predecessor_sha}" "${candidate_head}"; then
+            echo "Candidate bundle is not a non-destructive descendant of the exact predecessor" >&2
+            exit 1
+          fi
+          ahead_count="$(git rev-list --count "${predecessor_sha}..${candidate_head}")"
+          if [[ "${ahead_count}" -lt 1 || "${ahead_count}" -gt 50 ]]; then
+            echo "Candidate commit count is outside the bounded publication range" >&2
+            exit 1
+          fi
+          if git rev-list --merges "${predecessor_sha}..${candidate_head}" | grep -q .; then
+            echo "Candidate bundle contains a merge commit; refusing non-linear publication" >&2
+            exit 1
+          fi
+
+          changed_paths_file="${RUNNER_TEMP}/opencode-publisher-paths.txt"
+          git log --format= --name-only "${predecessor_sha}..${candidate_head}" \
+            | sed '/^$/d' | sort -u > "${changed_paths_file}"
+          file_count="$(wc -l < "${changed_paths_file}")"
+          if [[ "${file_count}" -gt 50 ]]; then
+            echo "Candidate exceeds the bounded 50-file publication limit" >&2
+            exit 1
+          fi
+          if grep -Eq '(^\.github/|(^|/)CODEOWNERS$)' "${changed_paths_file}"; then
+            echo "Candidate changes .github or CODEOWNERS policy and requires manual handling" >&2
+            exit 1
+          fi
+          git diff --check "${predecessor_sha}" "${candidate_head}"
+
+          git push origin "${candidate_head}:refs/heads/${head_ref}"
+          encoded_ref="$(jq -rn --arg value "${head_ref}" '$value | @uri')"
+          live_head="$(gh api "/repos/${repository}/branches/${encoded_ref}" --jq '.commit.sha')"
+          if [[ "${live_head}" != "${candidate_head}" ]]; then
+            echo "Published branch does not retain the expected exact candidate head" >&2
+            exit 1
+          fi
+
+          printf 'agent_candidate=%s\n' "${metadata}" >> "${GITHUB_OUTPUT}"
+
+  publish-agent-pull-request:
+    needs: publish-agent-branch
+    if: ${{ always() && !cancelled() && needs.publish-agent-branch.result == 'success' && needs.publish-agent-branch.outputs.agent_candidate != '' }}
     permissions:
       contents: read
       pull-requests: write
@@ -274,17 +662,13 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          AGENT_CANDIDATE: ${{ needs.maintain-repository.outputs.agent_candidate }}
+          AGENT_CANDIDATE: ${{ needs.publish-agent-branch.outputs.agent_candidate }}
         run: |
           set -euo pipefail
           repository="${GITHUB_REPOSITORY}"
           owner="${repository%%/*}"
           base_branch="develop"
           kind="$(jq -r '.kind' <<<"${AGENT_CANDIDATE}")"
-
-          if [[ "${kind}" == "none" ]]; then
-            exit 0
-          fi
 
           head_ref="$(jq -r '.head_ref' <<<"${AGENT_CANDIDATE}")"
           expected_head="$(jq -r '.head_sha' <<<"${AGENT_CANDIDATE}")"
@@ -398,11 +782,11 @@ jobs:
               body="$(printf '%s\n' \
                 "## Automated bounded development slice" \
                 "" \
-                "This draft pull request was published by a deterministic non-model job after OpenCode pushed exactly one validated branch." \
+                "This draft pull request was published after a deterministic non-model branch writer transferred exactly one validated local OpenCode candidate." \
                 "" \
                 "- Exact head: \`${expected_head}\`" \
                 "- Base: \`${base_branch}\`" \
-                "- Model credential: repository \`NVIDIA_NIM_API_KEY\` mapped only inside the preceding OpenCode job" \
+                "- Model credential: repository \`NVIDIA_NIM_API_KEY\` mapped only inside the preceding read-only OpenCode job" \
                 "- Pull-request approval and merge: explicitly outside the development agent's authority" \
                 "" \
                 "All tests, security checks, review threads, independent exact-head approvals, documentation, and release gates remain required. Pending or absent evidence is not passing." \
@@ -435,7 +819,6 @@ jobs:
 
   authorize-exact-head-checks:
     needs:
-      - maintain-repository
       - publish-agent-pull-request
     if: ${{ always() && !cancelled() && needs.publish-agent-pull-request.result == 'success' && needs.publish-agent-pull-request.outputs.pr_number != '' }}
     permissions:
