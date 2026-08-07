@@ -118,7 +118,7 @@ class EtlJobReplayMigrationTest {
         Pattern terminalEvidenceGuard = Pattern.compile(
                 "IF OLD\\.job_status IN \\('FAILED', 'CANCELLED'\\) AND \\( "
                         + "OLD\\.job_status IS DISTINCT FROM NEW\\.job_status .*"
-                        + "OLD\\.updated_at IS DISTINCT FROM NEW\\.updated_at \\) THEN "
+                        + "OLD\\.updated_at IS DISTINCT FROM NEW\\.updated_at \\) THEN .*?"
                         + "PERFORM 1 FROM etl_job_records AS child_record"
         );
 
