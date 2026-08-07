@@ -156,8 +156,13 @@ inserts, lifecycle updates, and deletes remain available during the build. Postg
 concurrent index creation inside a transaction block, so the companion `.sql.conf` files set
 `executeInTransaction=false`; application configuration also sets
 `spring.flyway.postgresql.transactional-lock=false` so Flyway does not wrap these migrations in a
-PostgreSQL transactional advisory lock. Migration verification requires both indexes to be
-`indisready` and `indisvalid` before rollout is considered complete.
+PostgreSQL transactional advisory lock.
+
+Migration verification requires both indexes to be `indisready` and `indisvalid`, then reconstructs
+the exact indexed column, one-key/one-attribute nonunique shape, and `IS NOT NULL` partial predicate
+from PostgreSQL catalogs. A same-named ready and valid index with a different column, included
+attribute, uniqueness contract, or predicate fails closed instead of being mistaken for the required
+lineage-support index.
 
 ## Worker behavior
 
@@ -201,7 +206,8 @@ trigger enforcement, or replay-key idempotency.
    as operationally ready.
 5. Verify that exactly one `validate_etl_job_replay_lineage` function and one
    `etl_job_replay_lineage_guard_trigger` exist on `etl_job_records`, and that both replay lookup
-   indexes are ready and valid.
+   indexes are ready and valid with the exact column, one-column nonunique shape, and partial
+   predicate recorded in the migration contract.
 6. Smoke-test a disposable failed source, exact payload acceptance, same-key retry, and key conflict.
 7. Confirm the source is unchanged and the new row has source/root/generation lineage.
 8. In an isolated migration rehearsal, confirm PostgreSQL rejects:
@@ -242,7 +248,8 @@ for a deliberately separate replay.
 A cancelled or interrupted `CREATE INDEX CONCURRENTLY` can leave an invalid index behind. Stop the
 migration rollout and preserve the exact application SHA, Flyway schema history, PostgreSQL logs, and
 sanitized index metadata. Do not mark the migration successful while either replay lookup index is
-missing, not ready, or invalid.
+missing, not ready, invalid, or differently defined from its exact indexed-column, attribute-count,
+nonunique, and partial-predicate contract.
 
 Confirm no active migration process is still using the affected index, then remove only the invalid
 artifact outside an explicit transaction:
@@ -256,7 +263,7 @@ Drop only the index that actually failed; the two commands are shown together as
 index inventory. After the invalid index is removed, repair the failed Flyway migration record using
 the approved deployment procedure and rerun that exact migration. Its companion configuration must
 still contain `executeInTransaction=false`. Do not edit an applied migration, create an untracked
-replacement index, or bypass the ready/valid verification query.
+replacement index, or bypass exact catalog-definition verification.
 
 ### Trigger, referenced evidence, or lineage integrity rejection
 
@@ -325,8 +332,14 @@ https://www.postgresql.org/docs/18/sql-createtrigger.html
 PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: INSERT*.
 https://www.postgresql.org/docs/18/sql-insert.html
 
+PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: pg_index*.
+https://www.postgresql.org/docs/18/catalog-pg-index.html
+
 PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: PL/pgSQL trigger functions*.
 https://www.postgresql.org/docs/18/plpgsql-trigger.html
+
+PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: System information functions and operators*.
+https://www.postgresql.org/docs/18/functions-info.html
 
 World Wide Web Consortium. (2013). *PROV-O: The PROV ontology*.
 https://www.w3.org/TR/prov-o/
