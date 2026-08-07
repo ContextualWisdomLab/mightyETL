@@ -62,6 +62,7 @@ jobs:
               "com/xtrmetl/etl/job/EtlJobService": "EtlJobService.java",
               "com/xtrmetl/etl/job/EtlJobReplayService": "EtlJobReplayService.java",
               "com/xtrmetl/etl/controller/EtlJobController": "EtlJobController.java",
+              "com/xtrmetl/etl/controller/EtlJobReplayController": "EtlJobReplayController.java",
               "com/xtrmetl/etl/service/Sha256Digest": "Sha256Digest.java",
           }
           reports = sorted(Path(".").glob("**/target/site/jacoco/jacoco.xml"))
