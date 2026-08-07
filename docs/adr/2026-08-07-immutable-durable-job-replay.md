@@ -11,6 +11,8 @@ Durable jobs deliberately clear `request_payload` after success, failure, or can
 
 Rewinding a terminal row to `PENDING` would erase the original terminal fact, mix attempt histories, invalidate conditional status validators, and make concurrent cancellation or success reasoning substantially harder. Retaining terminal payloads solely for replay would expand sensitive-data retention. Treating semantically equivalent JSON as the same work would also allow hidden payload changes under a replay label.
 
+A structural schema with nullable source, root, and generation fields is not sufficient on its own. Composite foreign keys can prove same-owner existence, and check constraints can prove field completeness and bounds, but they cannot prove that a source is terminal, a root is the first row in the chain, a generation increments exactly once, or an existing replay has never been reparented. Those properties must remain true even for maintenance scripts, data imports, and future writers that do not execute the Java service.
+
 ## Decision
 
 Replay creates a **new** durable job. The terminal source remains unchanged.
@@ -20,24 +22,39 @@ The authenticated owner submits the source identifier, a replay-specific `Idempo
 A derived row stores:
 
 - `replay_source_job_record_id`: immediate source;
-- `replay_root_job_record_id`: immutable root of the replay chain;
+- `replay_root_job_record_id`: immutable first root of the replay chain;
 - `replay_generation_count`: bounded positive generation.
 
-Source and root references use `ON DELETE RESTRICT`. A root row has all three lineage fields null; a replay row has all three non-null. Generation cannot exceed the supported bound. The new row enters the ordinary `PENDING` lifecycle and uses the existing worker, PostgreSQL claim, exact lease, success, failure, polling, cancellation, and ETag contracts.
+Source and root references are composite owner-scoped foreign keys to `(job_record_id, principal_scope_hash)` and use `ON DELETE RESTRICT`. A root row has all three lineage fields null; a replay row has all three non-null. Generation cannot exceed the supported bound.
+
+V7 also creates the PL/pgSQL function `validate_etl_job_replay_lineage()` and the row-level `etl_job_replay_lineage_guard_trigger`. The trigger is the database authority for exact source/root/generation continuity:
+
+- replay rows are inserted only as `PENDING`, attempt zero, with a retained payload;
+- immediate source and root belong to the same principal namespace as the new row;
+- the immediate source is `FAILED` or `CANCELLED`;
+- the root is terminal and has no lineage fields;
+- generation one uses the same source and root;
+- later generations retain that root and equal the immediate source generation plus one;
+- lineage columns are immutable after insertion.
+
+The Java service independently verifies the inherited root is an actual first root before insertion. This is defense in depth; it does not replace the trigger. The new row enters the ordinary `PENDING` lifecycle and uses the existing worker, PostgreSQL claim, exact lease, success, failure, polling, cancellation, and ETag contracts.
 
 ```mermaid
 sequenceDiagram
     participant O as Authenticated owner
     participant A as Replay API
     participant P as PostgreSQL transaction
+    participant T as Lineage trigger
     participant W as Ordinary worker
 
     O->>A: source id + exact payload + replay key
     A->>A: bounded JSON validation and SHA-256
     A->>P: owner-matched terminal source lock
     P->>P: verify FAILED/CANCELLED and digest equality
-    P->>P: verify replay-key identity and generation bound
-    P->>P: insert new PENDING row with source/root/generation
+    P->>P: verify replay-key identity and inherited root
+    P->>T: insert new PENDING row with source/root/generation
+    T->>T: verify owner, terminal source, first root, exact successor
+    T-->>P: accept or reject before persistence
     P-->>A: commit derived job
     A-->>O: 202 + Location + Idempotency-Replayed
     W->>P: ordinary lease-fenced claim
@@ -61,11 +78,11 @@ NIST SP 800-185 motivates explicit domain separation, but the SHA-256 constructi
 - unresolved concurrent admission: stable retryable `409` problem;
 - generation exhaustion: stable `409` problem.
 
-All errors use fixed RFC 9457 metadata and exclude exception messages, SQL, hashes, identifiers, payloads, and target details.
+All covered request failures use fixed RFC 9457 metadata and exclude exception messages, SQL, hashes, identifiers, payloads, and target details. A database-trigger rejection is an internal integrity incident; raw PL/pgSQL text must not enter the client response or ordinary telemetry.
 
 ## Connector boundary
 
-The replay transaction can prove source ownership, payload fidelity, replay identity, lineage, and durable admission. It cannot prove that a remote warehouse, file system, API, or broker will suppress duplicate effects. Replay is enabled for a connector only when target effects participate in the mightyETL transaction or the connector provides independently tested idempotency or compensation.
+The replay transaction can prove source ownership, payload fidelity, replay identity, exact lineage, and durable admission. It cannot prove that a remote warehouse, file system, API, or broker will suppress duplicate effects. Replay is enabled for a connector only when target effects participate in the mightyETL transaction or the connector provides independently tested idempotency or compensation.
 
 ## Alternatives rejected
 
@@ -85,6 +102,14 @@ Rejected because normalization can obscure a changed request and creates a secon
 
 Rejected in the initial slice because a succeeded job may already have committed irreversible external effects.
 
+### Rely only on application validation
+
+Rejected because maintenance scripts, migrations, import processes, or future services can write directly to the table. Relational lineage must remain valid independently of one application binary.
+
+### Use only foreign keys and check constraints
+
+Rejected because those constraints cannot express exact generation succession or immutable cross-row root identity. A row-level trigger is required for those cross-row invariants.
+
 ## Consequences
 
 ### Positive
@@ -94,20 +119,24 @@ Rejected in the initial slice because a succeeded job may already have committed
 - lineage supports incident analysis and future PROV-compatible export;
 - ordinary worker and cancellation machinery is reused;
 - payload retention does not increase;
-- concurrent retries have one database-owned outcome.
+- concurrent retries have one database-owned outcome;
+- database maintenance and import paths cannot create discontinuous or reparented lineage;
+- cross-owner, nonterminal, derived-root, skipped-generation, and mutation attempts fail closed.
 
 ### Costs
 
 - operators must possess the exact original payload bytes;
 - self-referencing lineage constrains retention and deletion order;
 - every connector needs an explicit replay-safety classification;
-- migrations and generation bounds require real PostgreSQL verification.
+- migrations and generation bounds require real PostgreSQL verification;
+- the trigger adds a small number of same-transaction row lookups to replay insertion;
+- trigger and function lifecycle must be included in downgrade and disaster-recovery rehearsals.
 
 ## Verification
 
 Acceptance requires exact-head tests for source immutability, owner isolation, exact payload matching, same-key replay, conflicting-key reuse, concurrent admission, lineage inheritance, generation exhaustion, ordinary worker behavior, cancellation compatibility, RFC 9457 responses, privacy exclusions, and zero-missed configured production coverage.
 
-A direct-`develop` GitHub Actions gate applies every versioned migration to PostgreSQL 18, verifies replay and cancellation columns, verifies both lineage foreign keys use `ON DELETE RESTRICT`, verifies bounded source/root/generation checks, and creates a non-empty schema-only dump. SAST, security, dependency, SBOM, review-thread, and non-author exact-head approval gates remain mandatory.
+A direct-`develop` GitHub Actions gate applies every versioned migration to PostgreSQL 18, verifies replay and cancellation columns, verifies both lineage foreign keys use `ON DELETE RESTRICT`, verifies trigger and function presence, executes valid generation-one and generation-two inserts, rejects nonterminal sources, different generation-one roots, derived roots, skipped generations, cross-owner references, and lineage mutation, protects source/root deletion, rehearses transactional rollback, and creates a non-empty schema-only dump. SAST, security, dependency, SBOM, review-thread, and non-author exact-head approval gates remain mandatory.
 
 ## References — APA 7th edition
 
@@ -117,6 +146,12 @@ National Institute of Standards and Technology. (2016). *SHA-3 derived functions
 
 Nottingham, M., Wilde, E., & Dalal, S. (2023). *Problem details for HTTP APIs* (RFC 9457). RFC Editor. https://www.rfc-editor.org/rfc/rfc9457
 
+PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: Constraints*. https://www.postgresql.org/docs/18/ddl-constraints.html
+
+PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: CREATE TRIGGER*. https://www.postgresql.org/docs/18/sql-createtrigger.html
+
 PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: INSERT*. https://www.postgresql.org/docs/18/sql-insert.html
+
+PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: PL/pgSQL trigger functions*. https://www.postgresql.org/docs/18/plpgsql-trigger.html
 
 World Wide Web Consortium. (2013). *PROV-O: The PROV ontology*. https://www.w3.org/TR/prov-o/
