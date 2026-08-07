@@ -15,7 +15,7 @@ The accepted replay response uses `202 Accepted` with a monitor URI because dura
 | Atomic new-row creation and conflict handling | PostgreSQL 18 `INSERT` and transaction documentation | One transaction validates source ownership, digest, replay identity, and lineage before inserting one new job |
 | Same-owner source and root existence | PostgreSQL 18 constraints | Composite foreign keys bind source and root to the new row's `principal_scope_hash`, and `ON DELETE RESTRICT` protects retained history |
 | Exact request and lineage transition | PostgreSQL 18 `CREATE TRIGGER` and PL/pgSQL trigger functions | A row-level `BEFORE INSERT OR UPDATE OF` trigger validates terminal source, immediate-source digest equality, first root, exact generation successor, initial pending lifecycle, and lineage-column immutability |
-| Online descendant and foreign-key lookup | PostgreSQL 18 `CREATE INDEX` | Separate partial source/root indexes are built with one `CREATE INDEX CONCURRENTLY` per nontransactional Flyway migration and must be ready and valid |
+| Online descendant and foreign-key lookup | PostgreSQL 18 `CREATE INDEX`, `pg_index`, and system-information functions | Separate partial source/root indexes are built with one `CREATE INDEX CONCURRENTLY` per nontransactional Flyway migration and must match their exact ready, valid, nonunique, one-column partial-index definitions |
 | Derivation lineage | W3C PROV-O | New job is derived from the immediate source and preserves an immutable first-root/generation chain |
 | Domain separation rationale | NIST SP 800-185 | Replay-key hashing uses a versioned replay-specific domain; the SHA-256 construction does not claim cSHAKE or TupleHash conformance |
 
@@ -57,7 +57,9 @@ mightyETL therefore uses two migrations:
 - `V8__add_etl_job_replay_source_lookup_index.sql` owns only `etl_job_replay_source_lookup_index`;
 - `V9__add_etl_job_replay_root_lookup_index.sql` owns only `etl_job_replay_root_lookup_index`.
 
-Each companion `.sql.conf` sets `executeInTransaction=false`. One index per nontransactional migration makes failure, Flyway repair, and rollback independently auditable. PostgreSQL migration verification requires both `pg_index.indisready` and `pg_index.indisvalid`. An interrupted build is not accepted as passing evidence; operators remove only the failed artifact with `DROP INDEX CONCURRENTLY`, repair the exact Flyway migration record through the approved process, and rerun without editing an applied migration.
+Each companion `.sql.conf` sets `executeInTransaction=false`. One index per nontransactional migration makes failure, Flyway repair, and rollback independently auditable. PostgreSQL migration verification requires both `pg_index.indisready` and `pg_index.indisvalid`.
+
+Ready and valid flags alone do not prove that a same-named index has the required definition. `pg_index.indnkeyatts` and `pg_index.indnatts` establish that the contract has exactly one key attribute and no included attributes, while `indisunique` proves the expected nonunique shape. `pg_get_indexdef` reconstructs each indexed column and `pg_get_expr` reconstructs each stored partial predicate. The verifier therefore rejects a same-named index unless it targets the exact source or root column and has the matching `IS NOT NULL` predicate. An interrupted or definition-mismatched build is not accepted as passing evidence; operators remove only the failed artifact with `DROP INDEX CONCURRENTLY`, repair the exact Flyway migration record through the approved process, and rerun without editing an applied migration.
 
 ## Security and privacy boundary
 
@@ -68,7 +70,7 @@ Connector replay is enabled only when target effects participate in the mightyET
 ## Verification obligations
 
 - real PostgreSQL 18 migration rehearsal for trigger and function presence, composite self-referencing foreign keys, and `ON DELETE RESTRICT`;
-- both replay lookup indexes present, ready, and valid after separate V8/V9 concurrent builds;
+- both replay lookup indexes present, ready, valid, nonunique, one-column, and bound to the exact source/root columns and `IS NOT NULL` predicates after separate V8/V9 concurrent builds;
 - exact-payload acceptance and immediate-source digest mismatch rejection at both service and database boundaries;
 - owner-safe missing/foreign behavior;
 - same-key replay, key reuse conflict, and concurrent admission tests;
@@ -98,6 +100,10 @@ PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: CREAT
 
 PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: INSERT*. https://www.postgresql.org/docs/18/sql-insert.html
 
+PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: pg_index*. https://www.postgresql.org/docs/18/catalog-pg-index.html
+
 PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: PL/pgSQL trigger functions*. https://www.postgresql.org/docs/18/plpgsql-trigger.html
+
+PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: System information functions and operators*. https://www.postgresql.org/docs/18/functions-info.html
 
 World Wide Web Consortium. (2013). *PROV-O: The PROV ontology*. https://www.w3.org/TR/prov-o/
