@@ -50,6 +50,23 @@ FOREIGN KEY (replay_root_job_record_id, principal_scope_hash)
   REFERENCES etl_job_records (job_record_id, principal_scope_hash)
 ```
 
+Those declarative constraints establish owner scope, existence, self-reference rejection, completeness, deletion restriction, and the generation bound. They do not by themselves prove that a source is terminal, that the selected root is the first lineage row, or that generation advances exactly once. The migration therefore adds a database trigger and PL/pgSQL trigger function as the relational authority for continuity:
+
+```text
+validate_etl_job_replay_lineage()
+etl_job_replay_lineage_guard_trigger
+```
+
+On replay insertion, the trigger requires all of the following:
+
+- the new derived row starts as `PENDING`, attempt zero, with a retained payload;
+- the immediate source exists in the same principal scope and is `FAILED` or `CANCELLED`;
+- the root exists in the same principal scope, is terminal, and has all lineage fields null;
+- generation 1 uses the same row for immediate source and root;
+- later generations inherit the exact first root and equal the source generation plus one.
+
+On updates that name any lineage column, the trigger rejects every changed value. Lineage fields are immutable after insertion, so a maintenance script, import path, or future service cannot silently reparent a job after descendants exist. Ordinary lifecycle updates remain permitted because they do not change the lineage columns.
+
 For the first replay:
 
 ```text
@@ -66,7 +83,7 @@ root = inherited first job
 generation = source generation + 1
 ```
 
-The application still verifies that source and inherited root are owner-scoped to the same principal. The database independently rejects cross-owner lineage through the composite owner-scoped foreign keys. Relational rows remain authoritative even when lineage is later exported as W3C PROV.
+The application independently validates the owner-scoped source, inherited root, and root-row identity before insertion. PostgreSQL independently rejects cross-owner, nonterminal, discontinuous, derived-root, and mutable lineage. Relational rows remain authoritative even when lineage is later exported as W3C PROV.
 
 ## Replay-key authority
 
@@ -97,9 +114,10 @@ One transaction performs the following sequence:
 6. require terminal `FAILED` or `CANCELLED`;
 7. require the supplied payload digest to equal the source `request_digest`;
 8. derive root and bounded generation;
-9. insert one new `PENDING` row with the verified payload and lineage;
-10. let PostgreSQL validate source and root against the same `principal_scope_hash`;
-11. return only the new operator-safe job identity.
+9. require the inherited root to exist in the owner namespace and have null lineage fields;
+10. insert one new `PENDING` row with the verified payload and lineage;
+11. let PostgreSQL validate same-owner references, terminal source, first root, exact generation continuity, and initial lifecycle;
+12. return only the new operator-safe job identity.
 
 The source is never updated. Read-then-write state resurrection is prohibited.
 
@@ -116,7 +134,7 @@ The source is never updated. Read-then-write state resurrection is prohibited.
 | 422 | `etl_job_replay_payload_mismatch` | Resupplied JSON does not match the immutable source digest. |
 | 422 | `etl_job_replay_key_reused` | Replay key already identifies another source or payload. |
 
-All failures use the existing RFC 9457 problem model without payload, principal, key, hash, lineage internals, SQL, or exception text.
+All covered request failures use the existing RFC 9457 problem model without payload, principal, key, hash, lineage internals, SQL, or exception text. A trigger rejection indicates internally inconsistent repository state or an unauthorized writer and is treated as an operator-visible integrity incident rather than reflected with raw database text.
 
 ## Worker compatibility
 
@@ -135,7 +153,7 @@ replay action → prov:used → source job
 new job       → prov:wasGeneratedBy → replay action
 ```
 
-The export must not weaken owner authorization or replace database constraints.
+The export must not weaken owner authorization or replace database constraints and trigger enforcement.
 
 ## Verification
 
@@ -148,12 +166,14 @@ The exact-head suite must prove:
 5. same key with another source or payload fails closed;
 6. foreign and missing sources remain indistinguishable;
 7. pending, running, and succeeded sources are rejected;
-8. replay of replay preserves root and increments generation;
+8. replay of replay preserves the first root and increments generation exactly once;
 9. generation 100 cannot create generation 101;
 10. concurrent creation produces one row and an in-progress or later replay outcome;
 11. the new job can be claimed and follows normal lifecycle contracts;
-12. migration completeness, owner-scoped source and root constraints, cross-owner lineage rejection, self-reference prohibition, naming, deletion restriction, rollout, and rollback are documented and tested;
-13. all added production statements and branches retain zero-missed configured coverage and no project test is skipped.
+12. service defense in depth rejects an inherited root that is itself a replay row;
+13. PostgreSQL 18 rejects cross-owner references, nonterminal sources, generation-one root divergence, derived roots, skipped generations, and lineage mutation;
+14. migration completeness, source and root constraints, trigger/function presence, self-reference prohibition, naming, deletion restriction, rollout, and rollback are documented and tested;
+15. all added production statements and branches retain zero-missed configured coverage and no project test is skipped.
 
 ## Operational limitation
 
@@ -167,6 +187,10 @@ Nottingham, M., Wilde, E., & Dalal, S. (2023). *Problem details for HTTP APIs* (
 
 PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: Constraints*. https://www.postgresql.org/docs/18/ddl-constraints.html
 
+PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: CREATE TRIGGER*. https://www.postgresql.org/docs/18/sql-createtrigger.html
+
 PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: INSERT*. https://www.postgresql.org/docs/18/sql-insert.html
+
+PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: PL/pgSQL trigger functions*. https://www.postgresql.org/docs/18/plpgsql-trigger.html
 
 World Wide Web Consortium. (2013). *PROV-O: The PROV ontology*. https://www.w3.org/TR/prov-o/
