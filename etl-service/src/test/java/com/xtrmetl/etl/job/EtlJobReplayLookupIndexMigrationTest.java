@@ -16,61 +16,79 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>The lineage trigger checks descendants whenever durable terminal evidence changes. Without
  * indexes beginning with the source and root identifiers, ordinary lifecycle updates can degrade
- * into full-table scans as durable-job history grows. The indexes are therefore isolated from the
- * transactional lineage schema and built concurrently.</p>
+ * into full-table scans as durable-job history grows. Each index is isolated from the transactional
+ * lineage schema and from the other index so a concurrent-build failure has one auditable Flyway
+ * repair boundary.</p>
  */
 class EtlJobReplayLookupIndexMigrationTest {
 
     private static final String V7_MIGRATION =
             "etl-service/src/main/resources/db/migration/V7__add_etl_job_replay_lineage.sql";
     private static final String V8_MIGRATION =
-            "etl-service/src/main/resources/db/migration/V8__add_etl_job_replay_lookup_indexes.sql";
+            "etl-service/src/main/resources/db/migration/"
+                    + "V8__add_etl_job_replay_source_lookup_index.sql";
+    private static final String V9_MIGRATION =
+            "etl-service/src/main/resources/db/migration/"
+                    + "V9__add_etl_job_replay_root_lookup_index.sql";
     private static final String V8_CONFIGURATION = V8_MIGRATION + ".conf";
+    private static final String V9_CONFIGURATION = V9_MIGRATION + ".conf";
 
     @Test
     void separatesTransactionalLineageFromConcurrentLookupIndexes() throws IOException {
         String lineageMigration = normalize(read(V7_MIGRATION));
-        String indexMigration = normalize(read(V8_MIGRATION));
+        String sourceIndexMigration = normalize(read(V8_MIGRATION));
+        String rootIndexMigration = normalize(read(V9_MIGRATION));
 
         assertFalse(
                 lineageMigration.contains("CREATE INDEX"),
                 "the transactional lineage migration must not contain a production index build"
         );
-        assertTrue(indexMigration.contains(
+        assertTrue(sourceIndexMigration.contains(
                 "CREATE INDEX CONCURRENTLY etl_job_replay_source_lookup_index"
         ));
-        assertTrue(indexMigration.contains(
+        assertTrue(sourceIndexMigration.contains(
                 "ON etl_job_records ( replay_source_job_record_id, principal_scope_hash )"
         ));
-        assertTrue(indexMigration.contains(
+        assertTrue(sourceIndexMigration.contains(
                 "WHERE replay_source_job_record_id IS NOT NULL"
         ));
-        assertTrue(indexMigration.contains(
+        assertFalse(
+                sourceIndexMigration.contains("etl_job_replay_root_lookup_index"),
+                "one nontransactional migration must own only one concurrent index build"
+        );
+
+        assertTrue(rootIndexMigration.contains(
                 "CREATE INDEX CONCURRENTLY etl_job_replay_root_lookup_index"
         ));
-        assertTrue(indexMigration.contains(
+        assertTrue(rootIndexMigration.contains(
                 "ON etl_job_records ( replay_root_job_record_id, principal_scope_hash )"
         ));
-        assertTrue(indexMigration.contains(
+        assertTrue(rootIndexMigration.contains(
                 "WHERE replay_root_job_record_id IS NOT NULL"
         ));
+        assertFalse(
+                rootIndexMigration.contains("etl_job_replay_source_lookup_index"),
+                "one nontransactional migration must own only one concurrent index build"
+        );
     }
 
     @Test
-    void disablesFlywayTransactionForConcurrentReplayIndexes() throws IOException {
-        Path configurationPath = projectRoot().resolve(V8_CONFIGURATION);
+    void disablesFlywayTransactionForEachConcurrentReplayIndex() throws IOException {
         String applicationProperties = read(
                 "etl-service/src/main/resources/application.properties"
         );
 
-        assertTrue(
-                Files.exists(configurationPath),
-                "the concurrent replay-index migration requires a Flyway script configuration"
-        );
-        assertTrue(
-                Files.readString(configurationPath, StandardCharsets.UTF_8)
-                        .contains("executeInTransaction=false")
-        );
+        for (String configuration : new String[]{V8_CONFIGURATION, V9_CONFIGURATION}) {
+            Path configurationPath = projectRoot().resolve(configuration);
+            assertTrue(
+                    Files.exists(configurationPath),
+                    "each concurrent replay-index migration requires a Flyway script configuration"
+            );
+            assertTrue(
+                    Files.readString(configurationPath, StandardCharsets.UTF_8)
+                            .contains("executeInTransaction=false")
+            );
+        }
         assertTrue(applicationProperties.contains(
                 "spring.flyway.postgresql.transactional-lock=false"
         ));
@@ -91,7 +109,8 @@ class EtlJobReplayLookupIndexMigrationTest {
     void runbookDocumentsConcurrentFailureRecoveryAndRollback() throws IOException {
         String runbook = normalize(read("docs/operations/durable-job-replay.md"));
 
-        assertTrue(runbook.contains("V8__add_etl_job_replay_lookup_indexes.sql"));
+        assertTrue(runbook.contains("V8__add_etl_job_replay_source_lookup_index.sql"));
+        assertTrue(runbook.contains("V9__add_etl_job_replay_root_lookup_index.sql"));
         assertTrue(runbook.contains("CREATE INDEX CONCURRENTLY"));
         assertTrue(runbook.contains("invalid index"));
         assertTrue(runbook.contains(
