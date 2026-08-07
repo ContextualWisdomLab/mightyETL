@@ -101,7 +101,8 @@ import path attempts to pair one tenant's new job with another tenant's source o
 owner predicates remain mandatory, but they are no longer the only tenant-integrity boundary.
 
 Declarative foreign keys and checks do not establish that the selected source is terminal, that the
-root is the first row in the lineage, or that generation advances exactly once. V7 therefore creates:
+root is the first row in the lineage, that the replay request digest equals the immediate source
+digest, or that generation advances exactly once. V7 therefore creates:
 
 ```text
 validate_etl_job_replay_lineage()
@@ -112,6 +113,7 @@ The `BEFORE INSERT OR UPDATE OF` database trigger enforces these additional inva
 
 - replay-created rows start as `PENDING`, with attempt zero and a retained payload;
 - the exact immediate source is same-owner and `FAILED` or `CANCELLED`;
+- the replay row's `request_digest` exactly equals the immediate source `request_digest`;
 - the exact root is same-owner, terminal, and has all lineage fields null;
 - generation 1 uses the same row as immediate source and root;
 - every later generation equals the source generation plus one and inherits the same first root;
@@ -119,16 +121,17 @@ The `BEFORE INSERT OR UPDATE OF` database trigger enforces these additional inva
 - after a descendant references a row as immediate source or root, its status, request evidence,
   attempt/failure state, cancellation evidence, and lifecycle timestamps are immutable.
 
-The trigger uses PostgreSQL `FOR UPDATE` row locking for source/root validation and for referenced-child
-inspection. This creates one fail-closed serialization boundary between child insertion and mutation
-of the parent evidence. A parent update that commits before the child is inserted defines the evidence
-the child subsequently validates. Once the child insertion has locked and referenced the parent, a
-later conflicting parent update observes the descendant and fails with a check-violation-class
-integrity error.
+Child insertion locks the immediate source and root with PostgreSQL `FOR UPDATE` while validating
+lineage. A parent update already owns the parent row lock before the trigger executes; if the update
+would change immutable replay evidence, the trigger performs a bounded descendant existence lookup
+without taking child locks. This preserves one lock direction: a child waits for its source/root,
+while a parent never waits on a child and then reaches back to the ancestor. The result is a
+fail-closed serialization boundary without the child-to-ancestor lock inversion that could otherwise
+deadlock concurrent replay admission and lifecycle maintenance.
 
-The service performs the same root-identity check before insertion as defense in depth. The database
-trigger remains authoritative for maintenance scripts, data imports, and other writers that do not
-execute Java service code.
+The service performs the same root-identity and request-digest checks before insertion as defense in
+depth. The database trigger remains authoritative for maintenance scripts, data imports, and other
+writers that do not execute Java service code.
 
 ```mermaid
 flowchart LR
@@ -140,6 +143,21 @@ flowchart LR
 A replay of a root uses the source as root and generation 1. A replay of a replay inherits the first
 root and increments the immediate source generation. Generation 100 returns
 `409 etl_job_replay_generation_exhausted` instead of creating generation 101.
+
+## Replay lookup indexes
+
+`V8__add_etl_job_replay_source_lookup_index.sql` and
+`V9__add_etl_job_replay_root_lookup_index.sql` build partial indexes whose leading columns are the
+immediate-source and first-root identifiers. They support composite foreign-key enforcement and the
+bounded descendant existence lookup used by immutable-evidence updates.
+
+Each migration owns exactly one `CREATE INDEX CONCURRENTLY` statement so ordinary durable-job
+inserts, lifecycle updates, and deletes remain available during the build. PostgreSQL prohibits
+concurrent index creation inside a transaction block, so the companion `.sql.conf` files set
+`executeInTransaction=false`; application configuration also sets
+`spring.flyway.postgresql.transactional-lock=false` so Flyway does not wrap these migrations in a
+PostgreSQL transactional advisory lock. Migration verification requires both indexes to be
+`indisready` and `indisvalid` before rollout is considered complete.
 
 ## Worker behavior
 
@@ -172,17 +190,23 @@ trigger enforcement, or replay-key idempotency.
 
 ## Rollout
 
-1. Rehearse V7 on a representative PostgreSQL 18 copy and inspect existing row count, support-index
-   build time, table lock duration, foreign-key validation time, and trigger creation.
-2. Verify exact-head cross-platform CI, full reactor tests, zero-missed configured coverage,
+1. Rehearse V7 on a representative PostgreSQL 18 copy and inspect existing row count, table lock
+   duration, foreign-key validation time, and trigger creation.
+2. Rehearse `V8__add_etl_job_replay_source_lookup_index.sql` and
+   `V9__add_etl_job_replay_root_lookup_index.sql` independently and record concurrent build duration,
+   disk growth, lock waits, and whether each resulting index is ready and valid.
+3. Verify exact-head cross-platform CI, full reactor tests, zero-missed configured coverage,
    dependency review, SBOM, SAST, security scan, review threads, and independent approval.
-3. Apply V7 before serving the replay route.
-4. Verify that exactly one `validate_etl_job_replay_lineage` function and one
-   `etl_job_replay_lineage_guard_trigger` exist on `etl_job_records`.
-5. Smoke-test a disposable failed source, exact payload acceptance, same-key retry, and key conflict.
-6. Confirm the source is unchanged and the new row has source/root/generation lineage.
-7. In an isolated migration rehearsal, confirm PostgreSQL rejects:
+4. Apply V7 before serving the replay route, then apply V8 and V9 before treating replay migrations
+   as operationally ready.
+5. Verify that exactly one `validate_etl_job_replay_lineage` function and one
+   `etl_job_replay_lineage_guard_trigger` exist on `etl_job_records`, and that both replay lookup
+   indexes are ready and valid.
+6. Smoke-test a disposable failed source, exact payload acceptance, same-key retry, and key conflict.
+7. Confirm the source is unchanged and the new row has source/root/generation lineage.
+8. In an isolated migration rehearsal, confirm PostgreSQL rejects:
    - nonterminal replay sources;
+   - replay rows whose request digest differs from their immediate source;
    - generation-one rows whose source differs from root;
    - derived replay rows used as root;
    - skipped generations;
@@ -190,11 +214,11 @@ trigger enforcement, or replay-key idempotency.
    - post-insert lineage mutation;
    - request-digest mutation on a referenced lineage root; and
    - failure-evidence mutation on a referenced immediate source.
-8. Confirm both source and root deletion remain protected by `ON DELETE RESTRICT`.
-9. Claim the new pending row through the ordinary worker and verify no replay-only execution path.
-10. Monitor replay acceptance, in-progress conflicts, payload mismatches, generation exhaustion,
-    database lock waits, trigger rejections, and failed foreign-key deletion or tenant-boundary
-    attempts using fixed-cardinality signals.
+9. Confirm both source and root deletion remain protected by `ON DELETE RESTRICT`.
+10. Claim the new pending row through the ordinary worker and verify no replay-only execution path.
+11. Monitor replay acceptance, in-progress conflicts, payload mismatches, generation exhaustion,
+    database lock waits, trigger rejections, concurrent-index failures, and failed foreign-key
+    deletion or tenant-boundary attempts using fixed-cardinality signals.
 
 Logs and metric labels must not contain payloads, raw principals, raw keys, hashes, source/new job
 identifiers, lineage identifiers, SQL, exception messages, or target identities.
@@ -212,6 +236,27 @@ memory. If the exact payload is unavailable, the job is not replayable through t
 Read the already-created replay job associated with the operator's prior request. A key is one
 principal-scoped replay intent and cannot be reused for another source or payload. Use a new key only
 for a deliberately separate replay.
+
+### Concurrent replay-index migration failure
+
+A cancelled or interrupted `CREATE INDEX CONCURRENTLY` can leave an invalid index behind. Stop the
+migration rollout and preserve the exact application SHA, Flyway schema history, PostgreSQL logs, and
+sanitized index metadata. Do not mark the migration successful while either replay lookup index is
+missing, not ready, or invalid.
+
+Confirm no active migration process is still using the affected index, then remove only the invalid
+artifact outside an explicit transaction:
+
+```sql
+DROP INDEX CONCURRENTLY etl_job_replay_source_lookup_index;
+DROP INDEX CONCURRENTLY etl_job_replay_root_lookup_index;
+```
+
+Drop only the index that actually failed; the two commands are shown together as the complete replay
+index inventory. After the invalid index is removed, repair the failed Flyway migration record using
+the approved deployment procedure and rerun that exact migration. Its companion configuration must
+still contain `executeInTransaction=false`. Do not edit an applied migration, create an untracked
+replacement index, or bypass the ready/valid verification query.
 
 ### Trigger, referenced evidence, or lineage integrity rejection
 
@@ -235,12 +280,18 @@ Stop serving replay admission before rolling application binaries back. Older bi
 columns, but deletion or retention tooling might not understand the new `ON DELETE RESTRICT`
 relationships or trigger.
 
+V8 and V9 are nontransactional by design. If a rollback requires removing their indexes, perform
+`DROP INDEX CONCURRENTLY etl_job_replay_root_lookup_index` and
+`DROP INDEX CONCURRENTLY etl_job_replay_source_lookup_index` outside an explicit transaction before
+rolling back V7. Preserve Flyway history and record the operational reason; do not pretend a partial
+concurrent build was atomic.
+
 Do not drop V7 while replay rows exist. Archive or remove replay lineages from leaf to root under an
 approved retention policy, preserving external audit evidence. Then a separately reviewed migration
 may remove the trigger, function, composite foreign keys, `etl_job_owner_identity_unique`, and
 lineage columns. Never edit the applied V7 file or mutate terminal sources back to pending.
 
-A controlled rollback rehearsal must drop the trigger before its function and remove dependent
+A controlled V7 rollback rehearsal must drop the trigger before its function and remove dependent
 constraints before columns, all inside a transaction that is rolled back. After rollback, verify all
 three columns, four named constraints, the trigger, and the function are restored.
 
@@ -264,6 +315,9 @@ https://www.rfc-editor.org/rfc/rfc9457
 
 PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: Constraints*.
 https://www.postgresql.org/docs/18/ddl-constraints.html
+
+PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: CREATE INDEX*.
+https://www.postgresql.org/docs/18/sql-createindex.html
 
 PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: CREATE TRIGGER*.
 https://www.postgresql.org/docs/18/sql-createtrigger.html
