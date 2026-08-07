@@ -112,6 +112,22 @@ class EtlJobReplayMigrationTest {
         );
     }
 
+    @Test
+    void referencedEvidenceLookupRunsOnlyForReplayEligibleTerminalRows() throws IOException {
+        String migration = normalizedMigration();
+        Pattern terminalEvidenceGuard = Pattern.compile(
+                "IF OLD\\.job_status IN \\('FAILED', 'CANCELLED'\\) AND \\( "
+                        + "OLD\\.job_status IS DISTINCT FROM NEW\\.job_status .*"
+                        + "OLD\\.updated_at IS DISTINCT FROM NEW\\.updated_at \\) THEN "
+                        + "PERFORM 1 FROM etl_job_records AS child_record"
+        );
+
+        assertTrue(
+                terminalEvidenceGuard.matcher(migration).find(),
+                "Only replay-eligible terminal rows should pay the descendant lookup cost"
+        );
+    }
+
     private static String normalizedMigration() throws IOException {
         return Files.readString(
                 projectRoot().resolve(
