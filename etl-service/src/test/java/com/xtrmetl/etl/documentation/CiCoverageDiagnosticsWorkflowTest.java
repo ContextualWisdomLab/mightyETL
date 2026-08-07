@@ -45,8 +45,16 @@ class CiCoverageDiagnosticsWorkflowTest {
                 "\"com/xtrmetl/etl/job/EtlJobService\": \"EtlJobService.java\""
         ));
         assertTrue(workflow.contains(
+                "\"com/xtrmetl/etl/job/EtlJobReplayService\": "
+                        + "\"EtlJobReplayService.java\""
+        ));
+        assertTrue(workflow.contains(
                 "\"com/xtrmetl/etl/controller/EtlJobController\": "
                         + "\"EtlJobController.java\""
+        ));
+        assertTrue(workflow.contains(
+                "\"com/xtrmetl/etl/controller/EtlJobReplayController\": "
+                        + "\"EtlJobReplayController.java\""
         ));
         assertTrue(workflow.contains(
                 "\"com/xtrmetl/etl/service/Sha256Digest\": \"Sha256Digest.java\""

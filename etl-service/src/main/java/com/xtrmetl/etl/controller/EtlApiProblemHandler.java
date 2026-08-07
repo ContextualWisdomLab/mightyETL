@@ -30,7 +30,11 @@ import java.net.URI;
  * captured by a broad exception handler and therefore retain their framework-owned status
  * semantics.</p>
  */
-@RestControllerAdvice(assignableTypes = {EtlController.class, EtlJobController.class})
+@RestControllerAdvice(assignableTypes = {
+        EtlController.class,
+        EtlJobController.class,
+        EtlJobReplayController.class
+})
 public class EtlApiProblemHandler {
 
     private static final Logger log = LoggerFactory.getLogger(EtlApiProblemHandler.class);

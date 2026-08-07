@@ -1,0 +1,56 @@
+name: PostgreSQL Migration Integration
+
+on:
+  pull_request:
+    branches:
+      - develop
+    paths:
+      - "etl-service/src/main/resources/db/migration/**"
+      - "etl-service/src/test/postgresql/**"
+      - "scripts/verify-postgresql-migrations.sh"
+      - ".github/workflows/postgresql-migration-integration.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: postgresql-migration-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  replay_lineage_migration:
+    name: replay-lineage-migration
+    if: github.event_name != 'workflow_dispatch' || github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgresql_database:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: mightyetl_replay_test
+          POSTGRES_USER: mightyetl_test
+          POSTGRES_PASSWORD: mightyetl_test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready --username=mightyetl_test --dbname=mightyetl_replay_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGDATABASE: mightyetl_replay_test
+      PGUSER: mightyetl_test
+      PGPASSWORD: mightyetl_test_password
+    steps:
+      - name: Check out exact pull-request head or protected default branch
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Verify versioned migrations and immutable replay lineage
+        shell: bash
+        run: bash scripts/verify-postgresql-migrations.sh
