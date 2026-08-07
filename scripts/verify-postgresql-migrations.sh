@@ -131,6 +131,15 @@ END
 $verification_block$;
 SQL
 
+rehearsal_file="etl-service/src/test/postgresql/replay_lineage_migration.sql"
+if [[ ! -f "${rehearsal_file}" ]]; then
+  printf 'Replay-lineage rehearsal not found: %s\n' "${rehearsal_file}" >&2
+  exit 1
+fi
+
+printf 'Running %s\n' "${rehearsal_file}"
+psql --no-psqlrc --set ON_ERROR_STOP=1 --file "${rehearsal_file}" >/dev/null
+
 pg_dump --schema-only --no-owner --no-privileges > /tmp/mightyetl-postgresql-schema.sql
 if [[ ! -s /tmp/mightyetl-postgresql-schema.sql ]]; then
   printf 'Schema-only dump was empty.\n' >&2
