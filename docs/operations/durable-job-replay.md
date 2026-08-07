@@ -100,15 +100,36 @@ therefore rejects cross-owner lineage even if application code, a maintenance sc
 import path attempts to pair one tenant's new job with another tenant's source or root. Application
 owner predicates remain mandatory, but they are no longer the only tenant-integrity boundary.
 
+Declarative foreign keys and checks do not establish that the selected source is terminal, that the
+root is the first row in the lineage, or that generation advances exactly once. V7 therefore creates:
+
+```text
+validate_etl_job_replay_lineage()
+etl_job_replay_lineage_guard_trigger
+```
+
+The `BEFORE INSERT OR UPDATE OF` database trigger enforces these additional invariants:
+
+- replay-created rows start as `PENDING`, with attempt zero and a retained payload;
+- the exact immediate source is same-owner and `FAILED` or `CANCELLED`;
+- the exact root is same-owner, terminal, and has all lineage fields null;
+- generation 1 uses the same row as immediate source and root;
+- every later generation equals the source generation plus one and inherits the same first root;
+- lineage fields are immutable after insertion.
+
+The service performs the same root-identity check before insertion as defense in depth. The database
+trigger remains authoritative for maintenance scripts, data imports, and other writers that do not
+execute Java service code.
+
 ```mermaid
 flowchart LR
     R0[Root terminal job<br/>generation null] -->|same-owner replay| R1[Replay job<br/>generation 1]
     R1 -->|later terminal + same-owner replay| R2[Replay job<br/>generation 2]
-    R0 -. owner-scoped root reference .-> R2
+    R0 -. owner-scoped first-root reference .-> R2
 ```
 
-A replay of a root uses the source as root and generation 1. A replay of a replay inherits the root
-and increments the immediate source generation. Generation 100 returns
+A replay of a root uses the source as root and generation 1. A replay of a replay inherits the first
+root and increments the immediate source generation. Generation 100 returns
 `409 etl_job_replay_generation_exhausted` instead of creating generation 101.
 
 ## Worker behavior
@@ -116,6 +137,10 @@ and increments the immediate source generation. Generation 100 returns
 The new row is an ordinary `PENDING` job with the verified payload. The existing PostgreSQL claim,
 lease fencing, attempts, retry, success, failure, cancellation, pagination, `Retry-After`, and ETag
 contracts apply unchanged. No replay-specific worker or scheduler exists.
+
+Ordinary lifecycle updates may change status, payload, lease, attempts, failure, or cancellation
+fields while retaining the exact lineage. Any writer that attempts to reparent a replay row or alter
+its generation receives a database constraint failure and must be treated as an integrity incident.
 
 ## Provenance export
 
@@ -131,24 +156,31 @@ new job       → prov:wasGeneratedBy → replay action
 ```
 
 PROV export never grants authority and never substitutes for owner predicates, database constraints,
-or replay-key idempotency.
+trigger enforcement, or replay-key idempotency.
 
 ## Rollout
 
 1. Rehearse V7 on a representative PostgreSQL 18 copy and inspect existing row count, support-index
-   build time, table lock duration, and foreign-key validation time.
+   build time, table lock duration, foreign-key validation time, and trigger creation.
 2. Verify exact-head cross-platform CI, full reactor tests, zero-missed configured coverage,
    dependency review, SBOM, SAST, security scan, review threads, and independent approval.
 3. Apply V7 before serving the replay route.
-4. Smoke-test a disposable failed source, exact payload acceptance, same-key retry, and key conflict.
-5. Confirm the source is unchanged and the new row has source/root/generation lineage.
-6. In an isolated migration rehearsal, attempt source and root references whose
-   `principal_scope_hash` differs from the new row and confirm PostgreSQL rejects both cross-owner
-   lineage writes.
-7. Claim the new pending row through the ordinary worker and verify no replay-only execution path.
-8. Monitor replay acceptance, in-progress conflicts, payload mismatches, generation exhaustion,
-   database lock waits, and failed foreign-key deletion or tenant-boundary attempts using
-   fixed-cardinality signals.
+4. Verify that exactly one `validate_etl_job_replay_lineage` function and one
+   `etl_job_replay_lineage_guard_trigger` exist on `etl_job_records`.
+5. Smoke-test a disposable failed source, exact payload acceptance, same-key retry, and key conflict.
+6. Confirm the source is unchanged and the new row has source/root/generation lineage.
+7. In an isolated migration rehearsal, confirm PostgreSQL rejects:
+   - nonterminal replay sources;
+   - generation-one rows whose source differs from root;
+   - derived replay rows used as root;
+   - skipped generations;
+   - source or root references from another `principal_scope_hash`;
+   - post-insert lineage mutation.
+8. Confirm both source and root deletion remain protected by `ON DELETE RESTRICT`.
+9. Claim the new pending row through the ordinary worker and verify no replay-only execution path.
+10. Monitor replay acceptance, in-progress conflicts, payload mismatches, generation exhaustion,
+    database lock waits, trigger rejections, and failed foreign-key deletion or tenant-boundary
+    attempts using fixed-cardinality signals.
 
 Logs and metric labels must not contain payloads, raw principals, raw keys, hashes, source/new job
 identifiers, lineage identifiers, SQL, exception messages, or target identities.
@@ -167,23 +199,35 @@ Read the already-created replay job associated with the operator's prior request
 principal-scoped replay intent and cannot be reused for another source or payload. Use a new key only
 for a deliberately separate replay.
 
+### Trigger or lineage integrity rejection
+
+Stop replay admission for the affected deployment. Preserve the deployed SHA, Flyway history,
+transaction boundary, fixed error classification, and sanitized database evidence. Do not retry by
+disabling the trigger or rewriting the source, root, or generation. Determine whether the attempted
+write came from a stale binary, maintenance script, import path, migration defect, or unauthorized
+writer. Treat cross-owner attempts as tenant-isolation incidents even when PostgreSQL rejected them.
+
 ### Broken lineage or missing root
 
 Stop replay admission. Preserve affected rows, deployed SHA, Flyway history, and backup evidence.
 Do not null lineage fields to make constraints pass. Repair requires a reviewed migration based on
-verified source/root ownership and generation. Treat any attempted cross-owner lineage write as a
-tenant-isolation incident even when PostgreSQL rejects it.
+verified source/root ownership and generation. Never update lineage columns in place merely to pass
+the trigger.
 
 ## Rollback
 
 Stop serving replay admission before rolling application binaries back. Older binaries ignore lineage
 columns, but deletion or retention tooling might not understand the new `ON DELETE RESTRICT`
-relationships.
+relationships or trigger.
 
 Do not drop V7 while replay rows exist. Archive or remove replay lineages from leaf to root under an
 approved retention policy, preserving external audit evidence. Then a separately reviewed migration
-may remove the composite foreign keys, `etl_job_owner_identity_unique`, and lineage columns. Never
-edit the applied V7 file or mutate terminal sources back to pending.
+may remove the trigger, function, composite foreign keys, `etl_job_owner_identity_unique`, and
+lineage columns. Never edit the applied V7 file or mutate terminal sources back to pending.
+
+A controlled rollback rehearsal must drop the trigger before its function and remove dependent
+constraints before columns, all inside a transaction that is rolled back. After rollback, verify all
+three columns, four named constraints, the trigger, and the function are restored.
 
 The replay-key domain must remain readable while any replay-created row can receive an idempotent
 retry. A domain change requires a versioned migration or dual-read period, not a silent constant edit.
@@ -206,8 +250,14 @@ https://www.rfc-editor.org/rfc/rfc9457
 PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: Constraints*.
 https://www.postgresql.org/docs/18/ddl-constraints.html
 
+PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: CREATE TRIGGER*.
+https://www.postgresql.org/docs/18/sql-createtrigger.html
+
 PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: INSERT*.
 https://www.postgresql.org/docs/18/sql-insert.html
+
+PostgreSQL Global Development Group. (2026). *PostgreSQL 18 documentation: PL/pgSQL trigger functions*.
+https://www.postgresql.org/docs/18/plpgsql-trigger.html
 
 World Wide Web Consortium. (2013). *PROV-O: The PROV ontology*.
 https://www.w3.org/TR/prov-o/
