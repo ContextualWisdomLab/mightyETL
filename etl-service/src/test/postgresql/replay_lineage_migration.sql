@@ -20,39 +20,53 @@ INSERT INTO etl_job_records (
         'PENDING'
     ),
     (
-        '00000000-0000-4000-8000-000000000002',
-        repeat('a', 64),
-        repeat('2', 64),
-        repeat('b', 64),
-        NULL,
-        'FAILED'
-    ),
-    (
         '00000000-0000-4000-8000-000000000003',
         repeat('b', 64),
         repeat('3', 64),
         repeat('c', 64),
         '{}',
         'PENDING'
-    ),
-    (
-        '00000000-0000-4000-8000-000000000004',
-        repeat('b', 64),
-        repeat('4', 64),
-        repeat('d', 64),
-        NULL,
-        'CANCELLED'
     );
 
-UPDATE etl_job_records
-SET failure_code = 'etl_replay_source_failed'
-WHERE job_record_id = '00000000-0000-4000-8000-000000000002';
+INSERT INTO etl_job_records (
+    job_record_id,
+    principal_scope_hash,
+    submission_key_hash,
+    request_digest,
+    request_payload,
+    job_status,
+    failure_code
+) VALUES (
+    '00000000-0000-4000-8000-000000000002',
+    repeat('a', 64),
+    repeat('2', 64),
+    repeat('b', 64),
+    NULL,
+    'FAILED',
+    'etl_replay_source_failed'
+);
 
-UPDATE etl_job_records
-SET cancellation_key_hash = repeat('e', 64),
-    cancellation_code = 'etl_job_cancelled_by_owner',
-    job_cancelled_at = CURRENT_TIMESTAMP
-WHERE job_record_id = '00000000-0000-4000-8000-000000000004';
+INSERT INTO etl_job_records (
+    job_record_id,
+    principal_scope_hash,
+    submission_key_hash,
+    request_digest,
+    request_payload,
+    job_status,
+    cancellation_key_hash,
+    cancellation_code,
+    job_cancelled_at
+) VALUES (
+    '00000000-0000-4000-8000-000000000004',
+    repeat('b', 64),
+    repeat('4', 64),
+    repeat('d', 64),
+    NULL,
+    'CANCELLED',
+    repeat('e', 64),
+    'etl_job_cancelled_by_owner',
+    CURRENT_TIMESTAMP
+);
 
 INSERT INTO etl_job_records (
     job_record_id,
@@ -107,8 +121,8 @@ BEGIN
 
     IF EXISTS (
         SELECT 1
-        FROM etl_job_records
-        WHERE job_record_id = '00000000-0000-4000-8000-000000000006'
+          FROM etl_job_records
+         WHERE job_record_id = '00000000-0000-4000-8000-000000000006'
     ) THEN
         RAISE EXCEPTION 'cross-owner source lineage was accepted';
     END IF;
@@ -146,8 +160,8 @@ BEGIN
 
     IF EXISTS (
         SELECT 1
-        FROM etl_job_records
-        WHERE job_record_id = '00000000-0000-4000-8000-000000000007'
+          FROM etl_job_records
+         WHERE job_record_id = '00000000-0000-4000-8000-000000000007'
     ) THEN
         RAISE EXCEPTION 'cross-owner root lineage was accepted';
     END IF;
@@ -158,7 +172,7 @@ DO $delete_restrict_check$
 BEGIN
     BEGIN
         DELETE FROM etl_job_records
-        WHERE job_record_id = '00000000-0000-4000-8000-000000000002';
+         WHERE job_record_id = '00000000-0000-4000-8000-000000000002';
         RAISE EXCEPTION 'ON DELETE RESTRICT did not protect replay history';
     EXCEPTION
         WHEN foreign_key_violation THEN
@@ -167,7 +181,7 @@ BEGIN
 
     BEGIN
         DELETE FROM etl_job_records
-        WHERE job_record_id = '00000000-0000-4000-8000-000000000001';
+         WHERE job_record_id = '00000000-0000-4000-8000-000000000001';
         RAISE EXCEPTION 'ON DELETE RESTRICT did not protect replay history';
     EXCEPTION
         WHEN foreign_key_violation THEN
