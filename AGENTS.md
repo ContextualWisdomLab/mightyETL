@@ -47,6 +47,19 @@ External review, approval, check, or read-only dependency latency is not a reaso
 productive mightyETL work. Those unavailable gates remain not passing and must never be reused as
 merge or release evidence.
 
+For every failing or blocked outcome, identify the root cause before selecting a remediation. Trace
+the observed evidence to a source, configuration, permission, quota, runner, provider, dependency,
+or policy boundary. A symptom, queued state, repeated retry, or aggregate-green result is not a
+root cause. Generate bounded options that address the identified cause, then test each option
+against current permissions, branch protection, tool capability, runtime and compute budgets,
+dependency state, path ownership, and repository-writer leases.
+
+Classify each option as executable now, requiring an external actor, or unsafe or infeasible.
+Execute the highest-impact safe option that is executable during the current run and rerun the exact
+failing test or gate. If the preferred option is external or infeasible, keep its gate fail-closed
+and immediately continue with the next safe feasible non-overlapping remediation or independent
+bounded product slice. Do not stop merely because the preferred option cannot be executed here.
+
 A pull request is source-actionable only when its exact current head has a valid repository-local
 finding or failing source gate that mightyETL can repair. Queued checks, missing independent
 approval, synthetic-merge-only scanner evidence, and a separately leased dependency that has not
