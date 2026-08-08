@@ -294,20 +294,23 @@ public class CdcService implements DisposableBean {
      * Sends an event and waits for Kafka acknowledgement, retrying once after a terminal failure.
      */
     private void publishWithAcknowledgement(ChangeEvent<String, String> changeEvent) throws InterruptedException {
-        for (int attempt = 1; attempt <= KAFKA_PUBLISH_ATTEMPTS; attempt++) {
-            try {
-                awaitAcknowledgement(changeEvent);
-                kafkaPublishSuccess.incrementAndGet();
-                return;
-            } catch (ExecutionException executionException) {
-                kafkaPublishFailure.incrementAndGet();
-                if (attempt == KAFKA_PUBLISH_ATTEMPTS) {
-                    throw new KafkaException(
-                            "Kafka publication failed after " + KAFKA_PUBLISH_ATTEMPTS + " attempts",
-                            executionException.getCause()
-                    );
-                }
-            }
+        try {
+            awaitAcknowledgement(changeEvent);
+            kafkaPublishSuccess.incrementAndGet();
+            return;
+        } catch (ExecutionException firstFailure) {
+            kafkaPublishFailure.incrementAndGet();
+        }
+
+        try {
+            awaitAcknowledgement(changeEvent);
+            kafkaPublishSuccess.incrementAndGet();
+        } catch (ExecutionException secondFailure) {
+            kafkaPublishFailure.incrementAndGet();
+            throw new KafkaException(
+                    "Kafka publication failed after " + KAFKA_PUBLISH_ATTEMPTS + " attempts",
+                    secondFailure.getCause()
+            );
         }
     }
 
