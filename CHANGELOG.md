@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Scheduled OpenCode maintenance now keeps unavailable external gates fail-closed while continuing exactly one independent, non-overlapping mightyETL slice from protected `develop` when no open pull request is source-actionable; invalid stacks and separately leased dependency repositories remain untouched.
 - Container builds now pin Maven and Eclipse Temurin base-image tags to reviewed SHA-256 digests, with a fail-first contract test preventing mutable registry tags from re-entering the Dockerfile.
 - The model-executing hourly OpenCode maintenance job now has read-only issue access; fail-first workflow-contract coverage proves `issues: write` is unnecessary while preserving issue and roadmap inspection.
 - Pull-request CI and CycloneDX SBOM jobs now check out the literal current source head, immediately assert `git rev-parse HEAD` against `github.event.pull_request.head.sha`, and disable checkout credential persistence; generated merge revisions remain useful compatibility previews but no longer masquerade as direct exact-head source evidence.
@@ -32,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Test-first doctoring for external-wait progress, source-actionable pull-request classification, invalid-stack isolation, and read-only dependency leases in `docs/doctoring/hourly-opencode-nonblocking-progress-evidence.md`.
 - Permanent fail-first exact-head workflow contracts and authoritative evidence in `docs/doctoring/exact-head-source-workflow-evidence.md`, including observed synthetic-merge checkout behavior, cross-platform source identity assertions, the rejected ignored Dependency Review ref-override experiment, corrective pull-request event-endpoint semantics, least-privilege boundaries, stack invalidation rules, rollback prohibition, and APA 7th GitHub references.
 - A separate fail-closed hourly OpenCode maintenance workflow pinned to OpenCode 1.18.13 and `nvidia/deepseek-ai/deepseek-v4-pro`, using only the existing `NVIDIA_NIM_API_KEY` through OpenCode's `NVIDIA_API_KEY` provider variable while preserving the independent review agent and deterministic merge-disposition workflow.
 - Exact-head workflow-run authorization doctoring evidence for the repository-token recursion boundary, before/after SHA snapshots, policy-path exclusion, time-of-check/time-of-use validation, least privilege, test-first regression evidence, and rollback in `docs/doctoring/github-token-exact-head-check-authorization-evidence.md`.
@@ -40,7 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Principal-scoped durable asynchronous ETL job intake and owner-scoped status resources, Flyway `etl_job_records` migration, deterministic replay/conflict coverage, and the explicit worker boundary in `docs/etl/durable-job-intake.md`.
 - Durable idempotency ledger migration, PostgreSQL transaction advisory-lock adapter, deterministic concurrency/rollback coverage, and the operator/client contract `docs/etl/idempotent-retries.md`.
 - ETL problem-details client and operator contract: `docs/api/problem-details.md`.
-- Operator-configurable ETL admission limits under `mightyetl.etl.*` / `xtrmetl.etl.*`, backed by `ETL_MAX_PAYLOAD_BYTES` and `ETL_MAX_BATCH_RECORDS` environment variables with hard safety ceilings.
+- Operator-configurable ETL admission limits under `mightyetl.etl.*` / `xtrmetl.*`, backed by `ETL_MAX_PAYLOAD_BYTES` and `ETL_MAX_BATCH_RECORDS` environment variables with hard safety ceilings.
 - ETL transaction rollback integration coverage and the operator runbook `docs/etl/bounded-atomic-batches.md`.
 - Connector scaffolds (contracts + docs only): Qlik Sense, Databricks, Snowflake under `docs/connectors/` and `etl-service` SPI stubs.
 - Any-to-any CDC design notes and source SPI scaffold: `docs/cdc/any-to-any-cdc.md`, `cdc-service` SPI stubs.
