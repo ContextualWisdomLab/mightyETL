@@ -838,7 +838,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ needs.publish-agent-pull-request.outputs.pr_number }}
           HEAD_REF: ${{ needs.publish-agent-pull-request.outputs.head_ref }}
-          EXPECTED_HEAD: ${{ needs.publish-agent-pull_request.outputs.head_sha }}
+          EXPECTED_HEAD: ${{ needs.publish-agent-pull-request.outputs.head_sha }}
         run: |
           set -euo pipefail
           repository="${GITHUB_REPOSITORY}"
