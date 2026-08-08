@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Scheduled OpenCode maintenance now keeps unavailable external gates fail-closed while continuing exactly one independent, non-overlapping mightyETL slice from protected `develop` when no open pull request is source-actionable; invalid stacks and separately leased dependency repositories remain untouched.
+- Scheduled OpenCode maintenance now performs root-cause analysis, tests remediation feasibility against live authority, protection, resource, dependency, path-ownership, and writer-lease constraints, executes and verifies the best safe option available now, and continues exactly one independent bounded mightyETL slice from protected `develop` when only external blockers remain; invalid stacks and separately leased repositories stay untouched.
 - Container builds now pin Maven and Eclipse Temurin base-image tags to reviewed SHA-256 digests, with a fail-first contract test preventing mutable registry tags from re-entering the Dockerfile.
 - The model-executing hourly OpenCode maintenance job now has read-only issue access; fail-first workflow-contract coverage proves `issues: write` is unnecessary while preserving issue and roadmap inspection.
 - Pull-request CI and CycloneDX SBOM jobs now check out the literal current source head, immediately assert `git rev-parse HEAD` against `github.event.pull_request.head.sha`, and disable checkout credential persistence; generated merge revisions remain useful compatibility previews but no longer masquerade as direct exact-head source evidence.
@@ -33,7 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Test-first doctoring for external-wait progress, source-actionable pull-request classification, invalid-stack isolation, and read-only dependency leases in `docs/doctoring/hourly-opencode-nonblocking-progress-evidence.md`.
+- Test-first doctoring for external-wait progress, root-cause analysis, realistic remediation feasibility, exact post-action verification, source-actionable pull-request classification, invalid-stack isolation, and read-only dependency leases in `docs/doctoring/hourly-opencode-nonblocking-progress-evidence.md`.
 - Permanent fail-first exact-head workflow contracts and authoritative evidence in `docs/doctoring/exact-head-source-workflow-evidence.md`, including observed synthetic-merge checkout behavior, cross-platform source identity assertions, the rejected ignored Dependency Review ref-override experiment, corrective pull-request event-endpoint semantics, least-privilege boundaries, stack invalidation rules, rollback prohibition, and APA 7th GitHub references.
 - A separate fail-closed hourly OpenCode maintenance workflow pinned to OpenCode 1.18.13 and `nvidia/deepseek-ai/deepseek-v4-pro`, using only the existing `NVIDIA_NIM_API_KEY` through OpenCode's `NVIDIA_API_KEY` provider variable while preserving the independent review agent and deterministic merge-disposition workflow.
 - Exact-head workflow-run authorization doctoring evidence for the repository-token recursion boundary, before/after SHA snapshots, policy-path exclusion, time-of-check/time-of-use validation, least privilege, test-first regression evidence, and rollback in `docs/doctoring/github-token-exact-head-check-authorization-evidence.md`.
