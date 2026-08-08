@@ -32,6 +32,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Service
@@ -39,6 +40,7 @@ public class CdcService implements DisposableBean {
 
     private static final Logger log = LoggerFactory.getLogger(CdcService.class);
     private static final int KAFKA_PUBLISH_ATTEMPTS = 2;
+    private static final long KAFKA_ACKNOWLEDGEMENT_WAIT_MS = 65_000L;
 
     private ExecutorService executor;
     private final KafkaTemplate<String, String> kafkaTemplate;
@@ -295,10 +297,10 @@ public class CdcService implements DisposableBean {
     /**
      * Publishes a Debezium batch to Kafka and advances source offsets only after broker acknowledgement.
      *
-     * <p>Each event with a destination is sent as raw Debezium JSON, awaited, and retried once after a terminal
-     * publication failure. A record is marked processed only after an acknowledged send. The batch is marked
-     * finished only after every record has been processed. An interrupt propagates immediately without advancing
-     * the current record or batch.</p>
+     * <p>Each event with a destination is sent as raw Debezium JSON, awaited for at most 65 seconds per
+     * application attempt, and retried once after a terminal publication failure or acknowledgement timeout.
+     * A record is marked processed only after an acknowledged send. The batch is marked finished only after every
+     * record has been processed. An interrupt propagates immediately without advancing the current record or batch.</p>
      *
      * <p>An event without a destination is treated as non-publishable engine metadata and is marked processed
      * without touching Kafka or the publication counters.</p>
@@ -348,12 +350,14 @@ public class CdcService implements DisposableBean {
     }
 
     /**
-     * Performs one Kafka send attempt and blocks interruptibly until that attempt completes.
+     * Performs one Kafka send attempt and waits interruptibly for at most 65 seconds for acknowledgement.
      */
     private void awaitAcknowledgement(ChangeEvent<String, String> changeEvent)
             throws InterruptedException, ExecutionException {
         try {
-            sendChangeEvent(changeEvent).get();
+            sendChangeEvent(changeEvent).get(KAFKA_ACKNOWLEDGEMENT_WAIT_MS, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException timeoutException) {
+            throw new ExecutionException(timeoutException);
         } catch (RuntimeException runtimeException) {
             throw new ExecutionException(runtimeException);
         }
