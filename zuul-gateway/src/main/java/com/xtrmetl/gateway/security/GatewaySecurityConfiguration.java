@@ -3,10 +3,12 @@ package com.xtrmetl.gateway.security;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.security.web.server.SecurityWebFilterChain;
+import org.springframework.security.web.server.authentication.HttpStatusServerEntryPoint;
 
 import java.util.Locale;
 
@@ -53,6 +55,9 @@ public class GatewaySecurityConfiguration {
 
         if (DENY_MODE.equals(mode)) {
             return http
+                    .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint(
+                            new HttpStatusServerEntryPoint(HttpStatus.FORBIDDEN)
+                    ))
                     .authorizeExchange(exchanges -> exchanges
                             .pathMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
                             .anyExchange().denyAll())
