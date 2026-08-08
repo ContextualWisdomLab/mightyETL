@@ -26,7 +26,8 @@ class HourlyOpenCodeProgressPolicyTest {
 
     /**
      * Reads the scheduler's repository instruction and workflow inputs once with normalized line
-     * endings so the contract behaves identically on every supported operating system.
+     * endings and whitespace so the contract behaves identically on every supported operating
+     * system.
      *
      * @throws IOException when either authoritative UTF-8 source cannot be read
      */
@@ -36,11 +37,12 @@ class HourlyOpenCodeProgressPolicyTest {
         agentPolicy = canonicalWhitespace(
                 Files.readString(root.resolve("AGENTS.md"), StandardCharsets.UTF_8)
         );
-        workflow = Files.readString(
+        workflow = canonicalWhitespace(
+                Files.readString(
                         root.resolve(".github/workflows/hourly-opencode-maintenance.yml"),
                         StandardCharsets.UTF_8
                 )
-                .replace("\r\n", "\n");
+        );
     }
 
     /**
@@ -69,6 +71,52 @@ class HourlyOpenCodeProgressPolicyTest {
         assertTrue(agentPolicy.contains(
                 "The independent slice must not depend on, retarget, rewrite, or overlap files "
                         + "changed by the invalid stack."
+        ));
+    }
+
+    /** Requires root-cause evidence and a realistic execution decision before remediation. */
+    @Test
+    void performsRootCauseAnalysisAndFeasibilityClassificationBeforeActing() {
+        assertTrue(workflow.contains(
+                "For every failing or blocked outcome, perform root-cause analysis before choosing "
+                        + "a remediation."
+        ));
+        assertTrue(workflow.contains(
+                "source, configuration, permission, quota, runner, provider, dependency, or policy "
+                        + "boundary"
+        ));
+        assertTrue(workflow.contains(
+                "Generate bounded remediation options that address the identified cause."
+        ));
+        assertTrue(workflow.contains(
+                "test each option's feasibility against current permissions, branch protection, "
+                        + "tool capability, runtime and compute budgets, dependency state, and path "
+                        + "ownership"
+        ));
+        assertTrue(workflow.contains(
+                "Classify each option as executable now, requires an external actor, or unsafe or "
+                        + "infeasible."
+        ));
+    }
+
+    /** Requires the scheduler to act, verify, and continue after an infeasible preferred option. */
+    @Test
+    void executesTheBestFeasibleActionAndContinuesAfterExternalOnlyBlockers() {
+        assertTrue(workflow.contains(
+                "Execute the highest-impact safe option that is executable in this run"
+        ));
+        assertTrue(workflow.contains("rerun the exact failing test or gate"));
+        assertTrue(workflow.contains(
+                "If the preferred option requires an external actor or is infeasible, keep that gate "
+                        + "fail-closed and immediately choose the next safe feasible non-overlapping "
+                        + "remediation or independent bounded product slice instead of stopping."
+        ));
+        assertTrue(workflow.contains(
+                "A pull request with only external blockers is not source-actionable."
+        ));
+        assertTrue(workflow.contains(
+                "When no open pull request is source-actionable, whether or not blocked pull requests "
+                        + "remain open"
         ));
     }
 
