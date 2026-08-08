@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- PostgreSQL→Kafka CDC now waits for Kafka send acknowledgement before advancing Debezium record progress, retries one terminal publication failure without marking the source record, fails the batch after a repeated failure, and requires `acks=all`, producer idempotence, bounded delivery/block timeouts, and at most five in-flight requests per connection. The boundary remains explicitly replay-tolerant rather than an end-to-end exactly-once claim.
 - Durable `POST /api/etl/jobs` submissions now return RFC 9110 `202 Accepted`, a stable pending-job representation, `Location` status-monitor metadata, and explicit replay metadata without changing the synchronous `/api/etl/process` contract. The incomplete intake controller is fail-closed and requires explicit `xtrmetl.etl.jobs.intake-enabled=true` operator opt-in until worker execution and terminal payload clearing are implemented.
 - Concurrent requests using the same authenticated-principal-scoped semantic idempotency key now return immediate RFC 9457 `409 etl_idempotency_request_in_progress` responses through PostgreSQL `pg_try_advisory_xact_lock`; retries after completion still replay the committed response.
 - `POST /api/etl/process` now supports optional authenticated-principal-scoped `Idempotency-Key` retries with atomic target writes, durable response replay, payload-conflict rejection, and explicit replay response metadata.
@@ -22,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- CDC source-publication reliability evidence and operator diagnostics: `kafkaPublishSuccess` / `kafkaPublishFailure` status counters, deterministic acknowledgement/failure/interrupt tests, architecture and operations guidance, and APA 7 primary references in `docs/doctoring/cdc-kafka-acknowledged-delivery.md`.
 - Principal-scoped durable asynchronous ETL job intake and owner-scoped status resources, Flyway `etl_job_records` migration, deterministic replay/conflict coverage, and the explicit worker boundary in `docs/etl/durable-job-intake.md`.
 - Durable idempotency ledger migration, PostgreSQL transaction advisory-lock adapter, deterministic concurrency/rollback coverage, and the operator/client contract `docs/etl/idempotent-retries.md`.
 - ETL problem-details client and operator contract: `docs/api/problem-details.md`.
@@ -249,5 +251,5 @@ This changelog will be updated:
 ---
 
 **Changelog Version**: 1.0  
-**Last Updated**: 2026-08-04  
+**Last Updated**: 2026-08-08  
 **Maintained By**: Development Team
