@@ -54,6 +54,19 @@ public class CdcService implements DisposableBean {
     private DebeziumEngine<ChangeEvent<String, String>> debeziumEngine;
     private Future<?> engineTask;
 
+    /**
+     * Constructs the CDC service with explicit startup, canonical-mapping, and change-mapping dependencies.
+     *
+     * <p>The Kafka template is the publication boundary used by both the compatibility send path and the
+     * acknowledgement-aware Debezium batch path. Automatic startup controls whether the engine starts after
+     * Spring reports application readiness. Canonical mapping is optional observation logic and never grants
+     * permission to advance a Debezium offset.</p>
+     *
+     * @param kafkaTemplate Kafka producer facade used to publish raw Debezium change events
+     * @param autoStart whether the Debezium engine should start after application readiness
+     * @param canonicalMapEnabled whether optional canonical-record mapping should run before publication
+     * @param changeRecordMapper optional canonical mapper; may be {@code null} when mapping is disabled
+     */
     public CdcService(
             KafkaTemplate<String, String> kafkaTemplate,
             @Value("${xtrmetl.cdc.autostart:true}") boolean autoStart,
@@ -67,7 +80,10 @@ public class CdcService implements DisposableBean {
     }
 
     /**
-     * Test helper / backward-compatible constructor.
+     * Constructs a CDC service with canonical mapping disabled for compatibility callers and focused tests.
+     *
+     * @param kafkaTemplate Kafka producer facade used to publish raw Debezium change events
+     * @param autoStart whether the Debezium engine should start after application readiness
      */
     public CdcService(KafkaTemplate<String, String> kafkaTemplate, boolean autoStart) {
         this(kafkaTemplate, autoStart, false, null);
@@ -86,6 +102,12 @@ public class CdcService implements DisposableBean {
         }
     }
 
+    /**
+     * Handles Spring Boot application readiness by applying the configured CDC auto-start policy.
+     *
+     * <p>This lifecycle callback delegates to {@link #maybeAutoStart()}; it does not bypass the configured
+     * auto-start flag and is safe when startup is intentionally disabled for operator-controlled deployments.</p>
+     */
     @EventListener(ApplicationReadyEvent.class)
     public void onApplicationReady() {
         maybeAutoStart();
@@ -160,6 +182,11 @@ public class CdcService implements DisposableBean {
         return engineTask != null && !engineTask.isDone();
     }
 
+    /**
+     * Returns whether automatic CDC startup is enabled.
+     *
+     * @return {@code true} when the application-readiness callback should start the Debezium engine
+     */
     public boolean isAutoStart() {
         return autoStart;
     }
@@ -235,6 +262,12 @@ public class CdcService implements DisposableBean {
                 .build();
     }
 
+    /**
+     * Releases CDC engine and executor resources when the Spring bean is destroyed.
+     *
+     * <p>This framework lifecycle hook delegates to {@link #shutdown()} so explicit shutdown and container-driven
+     * destruction share the same bounded termination and interrupt handling.</p>
+     */
     @Override
     public void destroy() {
         shutdown();
