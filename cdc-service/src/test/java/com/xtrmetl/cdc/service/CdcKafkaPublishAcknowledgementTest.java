@@ -13,7 +13,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -28,7 +27,6 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -102,6 +100,54 @@ class CdcKafkaPublishAcknowledgementTest {
                 CompletableFuture.completedFuture(mock(SendResult.class));
         when(kafkaTemplate.send("orders.customer_updates", "customer-42", "{\"op\":\"u\"}"))
                 .thenReturn(failed, succeeded);
+
+        DebeziumEngine.RecordCommitter<ChangeEvent<String, String>> committer = committer();
+        cdcService.handleChangeBatch(List.of(event), committer);
+
+        verify(kafkaTemplate, times(2)).send(
+                "orders.customer_updates", "customer-42", "{\"op\":\"u\"}"
+        );
+        verify(committer).markProcessed(event);
+        verify(committer).markBatchFinished();
+        assertEquals(1L, cdcService.getStatus().get("kafkaPublishSuccess"));
+        assertEquals(1L, cdcService.getStatus().get("kafkaPublishFailure"));
+    }
+
+    @Test
+    void exhaustsBoundedKafkaPublicationAttemptsWithoutOffsetCommit() {
+        ChangeEvent<String, String> event = event("orders.customer_updates", "customer-42", "{\"op\":\"u\"}");
+        CompletableFuture<SendResult<String, String>> firstFailure = new CompletableFuture<>();
+        firstFailure.completeExceptionally(new KafkaException("broker unavailable"));
+        CompletableFuture<SendResult<String, String>> secondFailure = new CompletableFuture<>();
+        secondFailure.completeExceptionally(new KafkaException("broker still unavailable"));
+        when(kafkaTemplate.send("orders.customer_updates", "customer-42", "{\"op\":\"u\"}"))
+                .thenReturn(firstFailure, secondFailure);
+
+        DebeziumEngine.RecordCommitter<ChangeEvent<String, String>> committer = committer();
+
+        KafkaException failure = assertThrows(
+                KafkaException.class,
+                () -> cdcService.handleChangeBatch(List.of(event), committer)
+        );
+
+        assertTrue(failure.getMessage().contains("2 attempts"));
+        verify(kafkaTemplate, times(2)).send(
+                "orders.customer_updates", "customer-42", "{\"op\":\"u\"}"
+        );
+        verify(committer, never()).markProcessed(any());
+        verify(committer, never()).markBatchFinished();
+        assertEquals(0L, cdcService.getStatus().get("kafkaPublishSuccess"));
+        assertEquals(2L, cdcService.getStatus().get("kafkaPublishFailure"));
+    }
+
+    @Test
+    void retriesSynchronousKafkaSendFailureBeforeOffsetCommit() throws Exception {
+        ChangeEvent<String, String> event = event("orders.customer_updates", "customer-42", "{\"op\":\"u\"}");
+        CompletableFuture<SendResult<String, String>> succeeded =
+                CompletableFuture.completedFuture(mock(SendResult.class));
+        when(kafkaTemplate.send("orders.customer_updates", "customer-42", "{\"op\":\"u\"}"))
+                .thenThrow(new KafkaException("producer temporarily unavailable"))
+                .thenReturn(succeeded);
 
         DebeziumEngine.RecordCommitter<ChangeEvent<String, String>> committer = committer();
         cdcService.handleChangeBatch(List.of(event), committer);
