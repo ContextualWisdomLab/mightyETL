@@ -109,9 +109,13 @@ Source DB → CDC Service → Kafka → Consumer Services
 
 1. Database change occurs (INSERT/UPDATE/DELETE)
 2. Debezium captures change from WAL
-3. CDC Service publishes event to Kafka topic
-4. Consumer services process events at their own pace
-5. Loose coupling between producers and consumers
+3. CDC Service submits the raw change event to Kafka
+4. CDC Service waits for the Kafka send future to complete successfully
+5. Only after acknowledgement, Debezium `RecordCommitter` marks that source record processed
+6. The Debezium batch is marked finished only after every record in the batch is processed
+7. Consumer services process events at their own pace
+
+The source-to-Kafka boundary is intentionally fail-closed for source progress: two terminal application send failures leave the current Debezium record unprocessed and fail the batch. Kafka producer idempotence and `acks=all` strengthen producer retry semantics, but they do not turn PostgreSQL, the file-backed Debezium offset store, Kafka, and downstream consumers into one exactly-once transaction. A crash after Kafka acknowledgement but before durable source-offset flush can replay an event; downstream consumers must remain replay-tolerant. See `docs/doctoring/cdc-kafka-acknowledged-delivery.md`.
 
 ## 3. Data Flow Diagrams
 
@@ -211,6 +215,8 @@ Source DB → CDC Service → Kafka → Consumer Services
 │  - Audit Logs           │
 └─────────────────────────┘
 ```
+
+The diagram shows the transport topology; the source-progress control loop is stricter than a fire-and-forget arrow. `CdcService` awaits Kafka completion before `RecordCommitter.markProcessed(...)`, and calls `markBatchFinished()` only after the complete batch succeeds. A repeated terminal send failure stops source progress for the affected record. The operator status surface exposes `kafkaPublishSuccess` and `kafkaPublishFailure` attempt counters without payload or credential material.
 
 ### 3.3 Authentication Flow
 
@@ -532,6 +538,12 @@ Client Request
 └──────────────────────────────────────────────────────────┘
 ```
 
+#### 8.1.1 Acknowledgement and source-offset boundary
+
+The embedded engine is wired to Debezium's batch `ChangeConsumer` rather than using the one-record callback as the live progress path. For a destination-bearing record, `CdcService` sends to Kafka, waits for the `CompletableFuture<SendResult<...>>`, and only then invokes `RecordCommitter.markProcessed(...)`. The batch is finished only after all records are processed. Two terminal application attempts are permitted; repeated failure aborts the batch without marking the current record. Producer-side `acks=all`, explicit idempotence, and `max.in.flight.requests.per.connection=5` complement this ordering boundary.
+
+This is an at-least-once/replay-tolerant design, not a distributed exactly-once transaction. Debezium source offsets are stored separately from Kafka acknowledgement, so a crash window can replay an already acknowledged event. The full failure model and operator controls are documented in `docs/doctoring/cdc-kafka-acknowledged-delivery.md` and `docs/cdc/ops-and-reliability.md`.
+
 ### 8.2 Spring Retry Mechanism
 
 ```text
@@ -659,6 +671,6 @@ Tuning knobs (replica application, DDL handling, and CDC schema changes):
 
 ---
 
-**Document Version**: 1.0  
-**Last Updated**: 2026-01-08  
+**Document Version**: 1.1  
+**Last Updated**: 2026-08-08  
 **Author**: Technical Architecture Team
