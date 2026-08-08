@@ -41,6 +41,32 @@ workflows, and service-level maintenance.
 - Keep automation explicit and auditable (clear triggers, least-privilege permissions).
 - When unsure, prefer conservative defaults that reduce security and release risk.
 
+## Scheduled maintenance progress contract
+
+External review, approval, check, or read-only dependency latency is not a reason to stop all
+productive mightyETL work. Those unavailable gates remain not passing and must never be reused as
+merge or release evidence.
+
+A pull request is source-actionable only when its exact current head has a valid repository-local
+finding or failing source gate that mightyETL can repair. Queued checks, missing independent
+approval, synthetic-merge-only scanner evidence, and a separately leased dependency that has not
+yet integrated are external-only blockers rather than source-actionable findings.
+
+When no open pull request is source-actionable, select exactly one non-conflicting bounded
+mightyETL slice from the protected `develop` head. Prefer documentation, tests, security,
+reliability, packaging, release evidence, or a buyer-visible vertical slice that can be developed
+and reviewed independently of the blocked stack. Keep the one-candidate-per-run publication
+boundary and all exact-head validation requirements.
+
+Do not deepen an invalid stack or modify a blocked stack branch merely to appear productive. The
+independent slice must not depend on, retarget, rewrite, or overlap files changed by the invalid
+stack. If no such independent slice exists, perform read-only analysis and return without a
+candidate rather than weakening ancestry, tests, or branch protection.
+
+ContextualWisdomLab/.github, naruon, contextual-orchestrator, and every separately leased repository
+remain read-only. Inspect their exact integration state, but never mutate, dispatch a write-capable
+agent, or post a mutation-trigger comment there. Their dedicated loops own those writes.
+
 ## Code-owner review gates — disabled (on hold)
 
 As of 2026-08-04, code-owner review requirements (`require_code_owner_reviews` in branch
