@@ -28,16 +28,16 @@ Env helpers and validation live in `EnvUtils` / `ValidationUtils`.
 
 ## Source-to-Kafka acknowledgement boundary
 
-The live embedded-engine path uses Debezium's batch `ChangeConsumer` / `RecordCommitter` contract. For every destination-bearing change event, mightyETL submits the raw Debezium JSON to `KafkaTemplate`, waits for the returned `CompletableFuture` to complete successfully, and only then calls `RecordCommitter.markProcessed(...)`. `markBatchFinished()` is called only after the complete batch has reached its permitted processed state.
+The live embedded-engine path uses Debezium's batch `ChangeConsumer` / `RecordCommitter` contract. For every destination-bearing change event, mightyETL submits the raw Debezium JSON to `KafkaTemplate`, waits interruptibly for the returned `CompletableFuture` to complete successfully for at most **65 seconds per application attempt**, and only then calls `RecordCommitter.markProcessed(...)`. `markBatchFinished()` is called only after the complete batch has reached its permitted processed state.
 
-Kafka publication uses a maximum of **two application attempts**. The first terminal send failure increments `kafkaPublishFailure` and is retried once. A second terminal failure raises `KafkaException`; the failed record is not marked processed and the batch is not marked finished. Synchronous producer-send failures use the same bounded policy. Interruption while waiting for acknowledgement propagates without advancing the current Debezium record.
+Kafka publication uses a maximum of **two application attempts**. The first terminal send failure or 65-second future timeout increments `kafkaPublishFailure` and is retried once. A second terminal failure or timeout raises `KafkaException`; the failed record is not marked processed and the batch is not marked finished. Synchronous producer-send failures use the same bounded policy. Interruption while waiting for acknowledgement propagates without advancing the current Debezium record.
 
-The producer configuration fixes `acks=all`, enables producer idempotence, and limits `max.in.flight.requests.per.connection` to `5`. `CDC_KAFKA_DELIVERY_TIMEOUT_MS` and `CDC_KAFKA_MAX_BLOCK_MS` bound delivery and producer blocking respectively. These settings strengthen and bound the Kafka side of the contract; the explicit future wait is what binds Kafka completion to the Debezium source-progress decision.
+The producer configuration fixes `acks=all`, enables producer idempotence, and limits `max.in.flight.requests.per.connection` to `5`. `CDC_KAFKA_DELIVERY_TIMEOUT_MS` and `CDC_KAFKA_MAX_BLOCK_MS` bound Kafka producer delivery reporting and producer blocking respectively. The application-level 65-second future wait is an independent guard: after `KafkaTemplate.send(...)` returns a future, mightyETL will not wait on that future indefinitely. The 65-second value deliberately exceeds the default Kafka delivery timeout of 60 seconds so normal producer terminal completion can surface first. Initiating `send(...)` can still be subject to producer blocking such as `max.block.ms`, so 65 seconds is a future-wait bound rather than a claim about total end-to-end attempt duration.
 
 `GET /api/cdc/status` exposes process-lifetime diagnostic counters:
 
 - `kafkaPublishSuccess`: acknowledged sends on the live batch path;
-- `kafkaPublishFailure`: failed application send attempts, including an attempt later recovered by the one bounded retry.
+- `kafkaPublishFailure`: failed application send attempts, including timeouts and attempts later recovered by the one bounded retry.
 
 These counters contain no payloads, record keys, credentials, or exception text.
 
@@ -45,7 +45,8 @@ This boundary is **at-least-once/replay-tolerant rather than an end-to-end exact
 
 ## Reliability features (real)
 
-- Source publish: Kafka acknowledgement is observed before Debezium record progress; repeated terminal failure leaves the source record uncommitted.
+- Source publish: Kafka acknowledgement is observed before Debezium record progress; repeated terminal failure or acknowledgement timeout leaves the source record uncommitted.
+- Source publish future wait: every returned Kafka send future is bounded to 65 seconds per application attempt; a non-terminating future cannot stall the CDC batch forever.
 - Replica consumer: Spring Kafka `DefaultErrorHandler` + **DLT** (`topic.DLT`) after retries.
 - `AckMode.RECORD` after successful apply.
 - Actuator: `health`, `info`, liveness/readiness probes enabled.
@@ -109,12 +110,12 @@ curl -X POST http://localhost:8001/api/cdc/start
 curl -X POST http://localhost:8001/api/cdc/stop
 ```
 
-If `kafkaPublishFailure` rises, inspect broker reachability, topic authorization, producer/broker availability, and the configured delivery/block timeout bounds before restarting the engine. Do not treat a repeated retry as proof that the cause has been removed.
+If `kafkaPublishFailure` rises, inspect broker reachability, topic authorization, producer/broker availability, configured delivery/block timeout bounds, and whether acknowledgement futures are timing out before restarting the engine. Do not treat a repeated retry as proof that the cause has been removed.
 
 ## Tests
 
-Unit tests under `cdc-service/src/test/java/com/xtrmetl/cdc/**` cover controller, service lifecycle mocks, acknowledged Kafka publication before source progress, bounded terminal/synchronous publish failures, interruption, producer durability configuration, replica appliers, Kafka error handler config, and **ops-doc alignment** (`ops/CdcOpsDocsAlignmentTest` — asserts this file names the same paths/health component the shipped `CdcController` / `CdcEngineHealthIndicator` expose). No Testcontainers integration suite in-repo yet.
+Unit tests under `cdc-service/src/test/java/com/xtrmetl/cdc/**` cover controller, service lifecycle mocks, acknowledged Kafka publication before source progress, finite 65-second future-wait behavior, bounded terminal/synchronous publish failures, interruption, producer durability configuration, replica appliers, Kafka error handler config, and **ops-doc alignment** (`ops/CdcOpsDocsAlignmentTest` — asserts this file names the same paths/health component the shipped `CdcController` / `CdcEngineHealthIndicator` expose). No Testcontainers integration suite in-repo yet.
 
 ## Sale-ready honesty
 
-Primary path is **PostgreSQL → Kafka** only. Its embedded source publisher now waits for Kafka acknowledgement before marking a Debezium record processed, but this does not make PostgreSQL, the file-backed Debezium offset store, Kafka, and downstream consumers one exactly-once transaction. Warehouse BI connectors and multi-source any-to-any CDC remain scaffolds (see README support matrix and `docs/connectors/`). Operators should treat unlisted capabilities as **not production-supported**.
+Primary path is **PostgreSQL → Kafka** only. Its embedded source publisher now waits for Kafka acknowledgement with a finite application wait before marking a Debezium record processed, but this does not make PostgreSQL, the file-backed Debezium offset store, Kafka, and downstream consumers one exactly-once transaction. Warehouse BI connectors and multi-source any-to-any CDC remain scaffolds (see README support matrix and `docs/connectors/`). Operators should treat unlisted capabilities as **not production-supported**.
