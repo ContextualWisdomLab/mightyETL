@@ -12,12 +12,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Defines the minimum source-level boundary for replacing the historical example-token gateway
- * filter with Spring Security's reactive OAuth 2.0 Resource Server JWT support.
- *
- * <p>This contract intentionally fails on the legacy implementation before any production change:
- * the gateway still depends on JJWT directly, accepts the literal {@code valid_token}, and has no
- * explicit reactive resource-server security configuration.</p>
+ * Defines the source and operator-contract boundary for replacing the historical example-token
+ * gateway filter with Spring Security's reactive OAuth 2.0 Resource Server JWT support.
  */
 class GatewayJwtSecuritySourceContractTest {
 
@@ -43,6 +39,35 @@ class GatewayJwtSecuritySourceContractTest {
         assertFalse(gatewayPom.contains("<artifactId>jjwt</artifactId>"));
         assertFalse(legacyFilter.contains("\"valid_token\""));
         assertTrue(Files.exists(securityConfiguration));
+    }
+
+    /**
+     * Requires an explicit fail-closed deployment default and an operator contract instead of an
+     * invented issuer, key URL, or secret baked into source control.
+     *
+     * @throws IOException when an authoritative source file cannot be read
+     */
+    @Test
+    void publishesFailClosedDeploymentAndStandardsContract() throws IOException {
+        Path root = projectRoot();
+        String application = Files.readString(
+                root.resolve("zuul-gateway/src/main/resources/application.yml"),
+                StandardCharsets.UTF_8
+        );
+        Path operatorContract = root.resolve("docs/security/gateway-jwt.md");
+
+        assertTrue(application.contains("MIGHTYETL_GATEWAY_SECURITY_MODE:deny"));
+        assertFalse(application.contains("idp.example"));
+        assertTrue(Files.exists(operatorContract));
+        String contract = Files.readString(operatorContract, StandardCharsets.UTF_8);
+        assertTrue(contract.contains("RFC 7519"));
+        assertTrue(contract.contains("RFC 8725"));
+        assertTrue(contract.contains("spring.security.oauth2.resourceserver.jwt.issuer-uri"));
+        assertTrue(contract.contains("spring.security.oauth2.resourceserver.jwt.jwk-set-uri"));
+        assertTrue(contract.contains("spring.security.oauth2.resourceserver.jwt.audiences"));
+        assertTrue(contract.contains("MIGHTYETL_GATEWAY_SECURITY_MODE=jwt"));
+        assertTrue(contract.contains("Authorization"));
+        assertTrue(contract.contains("rollback"));
     }
 
     /**
