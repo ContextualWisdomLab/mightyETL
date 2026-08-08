@@ -114,7 +114,7 @@ class CdcKafkaPublishAcknowledgementTest {
     }
 
     @Test
-    void exhaustsBoundedKafkaPublicationAttemptsWithoutOffsetCommit() {
+    void exhaustsBoundedKafkaPublicationAttemptsWithoutOffsetCommit() throws Exception {
         ChangeEvent<String, String> event = event("orders.customer_updates", "customer-42", "{\"op\":\"u\"}");
         CompletableFuture<SendResult<String, String>> firstFailure = new CompletableFuture<>();
         firstFailure.completeExceptionally(new KafkaException("broker unavailable"));
