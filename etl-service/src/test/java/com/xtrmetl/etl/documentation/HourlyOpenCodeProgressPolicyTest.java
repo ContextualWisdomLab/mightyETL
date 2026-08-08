@@ -33,8 +33,9 @@ class HourlyOpenCodeProgressPolicyTest {
     @BeforeAll
     static void readSchedulerPolicy() throws IOException {
         Path root = projectRoot();
-        agentPolicy = Files.readString(root.resolve("AGENTS.md"), StandardCharsets.UTF_8)
-                .replace("\r\n", "\n");
+        agentPolicy = canonicalWhitespace(
+                Files.readString(root.resolve("AGENTS.md"), StandardCharsets.UTF_8)
+        );
         workflow = Files.readString(
                         root.resolve(".github/workflows/hourly-opencode-maintenance.yml"),
                         StandardCharsets.UTF_8
@@ -85,6 +86,16 @@ class HourlyOpenCodeProgressPolicyTest {
         assertTrue(workflow.contains("Checkout protected default-branch source"));
         assertTrue(workflow.contains("opencode run --model \"${MODEL}\" --auto"));
         assertTrue(workflow.contains("Use the repository-scoped token for read operations only"));
+    }
+
+    /**
+     * Collapses semantically irrelevant Markdown and platform whitespace before phrase matching.
+     *
+     * @param value UTF-8 text whose prose contract must be compared independently of wrapping
+     * @return one-space canonical representation
+     */
+    private static String canonicalWhitespace(String value) {
+        return value.replaceAll("\\s+", " ").trim();
     }
 
     /**
