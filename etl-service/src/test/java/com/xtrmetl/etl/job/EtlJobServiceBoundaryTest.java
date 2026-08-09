@@ -7,19 +7,23 @@ import com.xtrmetl.etl.service.EtlRequestException;
 import com.xtrmetl.etl.service.EtlRequestLock;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.MockedStatic;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.Provider;
+import java.security.Security;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -74,15 +78,25 @@ class EtlJobServiceBoundaryTest {
     }
 
     @Test
-    void reportsPlatformFailureWhenRequiredSha256DigestIsUnavailable()
-            throws NoSuchAlgorithmException {
+    void reportsPlatformFailureWhenRequiredSha256DigestIsUnavailable() {
         JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
         EtlRequestLock requestLock = mock(EtlRequestLock.class);
         EtlJobService service = service(jdbcTemplate, requestLock, new EtlBatchProperties());
+        Provider[] originalProviders = Security.getProviders();
+        Provider[] sha256Providers = Security.getProviders("MessageDigest.SHA-256");
+        assertNotNull(sha256Providers);
+        assertTrue(sha256Providers.length > 0);
 
-        try (MockedStatic<MessageDigest> messageDigests = mockStatic(MessageDigest.class)) {
-            messageDigests.when(() -> MessageDigest.getInstance("SHA-256"))
-                    .thenThrow(new NoSuchAlgorithmException("synthetic coverage probe"));
+        Map<String, Integer> originalPositions = new HashMap<>();
+        for (int index = 0; index < originalProviders.length; index++) {
+            originalPositions.put(originalProviders[index].getName(), index + 1);
+        }
+
+        try {
+            for (Provider provider : sha256Providers) {
+                Security.removeProvider(provider.getName());
+            }
+            assertThrows(NoSuchAlgorithmException.class, () -> MessageDigest.getInstance("SHA-256"));
 
             IllegalStateException exception = assertThrows(
                     IllegalStateException.class,
@@ -91,6 +105,12 @@ class EtlJobServiceBoundaryTest {
 
             assertEquals("SHA-256 is required by the Java platform", exception.getMessage());
             assertEquals(NoSuchAlgorithmException.class, exception.getCause().getClass());
+        } finally {
+            for (Provider provider : originalProviders) {
+                if (Security.getProvider(provider.getName()) == null) {
+                    Security.insertProviderAt(provider, originalPositions.get(provider.getName()));
+                }
+            }
         }
         verifyNoInteractions(requestLock, jdbcTemplate);
     }
