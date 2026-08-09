@@ -16,12 +16,14 @@ import java.util.Map;
  * Reads PostgreSQL logical replication slot state for operator status (no secrets).
  *
  * <p>Uses the primary datasource ({@link JdbcTemplate}). Fail-open: DB errors become
- * {@code available=false} rather than failing the status API.</p>
+ * {@code available=false} rather than failing the status API. Database-driver exception
+ * details are intentionally excluded from both the returned status and ordinary logs.</p>
  */
 @Service
 public class ReplicationSlotProbe {
 
     private static final Logger log = LoggerFactory.getLogger(ReplicationSlotProbe.class);
+    private static final String QUERY_FAILED_MESSAGE = "Replication slot state unavailable";
 
     // restart_lsn / confirmed_flush_lsn are pg_lsn; lag bytes via pg_wal_lsn_diff against current insert LSN.
     private static final String SLOT_SQL = """
@@ -45,15 +47,31 @@ public class ReplicationSlotProbe {
 
     private final JdbcTemplate jdbcTemplate;
 
+    /**
+     * Creates a replication-slot probe backed by the service's primary PostgreSQL datasource.
+     *
+     * @param jdbcTemplate JDBC access used for the read-only replication-slot query
+     */
     public ReplicationSlotProbe(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
     }
 
+    /**
+     * Probes the slot named by {@code CDC_SLOT_NAME}, or the legacy default when it is absent.
+     *
+     * @return a finite operator status map that never includes database-driver diagnostics
+     */
     public Map<String, Object> probeConfiguredSlot() {
         String slotName = EnvUtils.getEnv("CDC_SLOT_NAME", "xtrmetl_slot");
         return probeSlot(slotName);
     }
 
+    /**
+     * Probes one PostgreSQL logical replication slot without exposing connection diagnostics.
+     *
+     * @param slotName replication slot to query
+     * @return slot state when available, or a stable {@code query_failed} status when the query fails
+     */
     public Map<String, Object> probeSlot(String slotName) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("slotName", slotName);
@@ -78,11 +96,11 @@ public class ReplicationSlotProbe {
             result.put("flushLagBytes", toLong(row.get("flush_lag_bytes")));
             return result;
         } catch (DataAccessException e) {
-            log.debug("Replication slot probe failed for {}: {}", slotName, e.toString());
+            log.debug("Replication slot probe unavailable: query_failed");
             result.put("available", false);
             result.put("found", false);
             result.put("error", "query_failed");
-            result.put("message", safeMessage(e));
+            result.put("message", QUERY_FAILED_MESSAGE);
             return result;
         }
     }
@@ -100,16 +118,5 @@ public class ReplicationSlotProbe {
         } catch (NumberFormatException e) {
             return null;
         }
-    }
-
-    private static String safeMessage(DataAccessException e) {
-        String msg = e.getMostSpecificCause() != null
-                ? e.getMostSpecificCause().getMessage()
-                : e.getMessage();
-        if (msg == null || msg.isBlank()) {
-            return e.getClass().getSimpleName();
-        }
-        // Avoid leaking connection strings if drivers embed them.
-        return msg.length() > 200 ? msg.substring(0, 200) + "…" : msg;
     }
 }
