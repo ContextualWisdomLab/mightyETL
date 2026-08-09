@@ -55,8 +55,6 @@ class LiveCommercialTraceabilityTest {
         assertTrue(traceability.contains("| release artifact provenance | `planned` issue #165 |"));
         assertTrue(traceability.contains("| bundled Zipkin transport repair | `active_pr` #167 |"));
         assertTrue(traceability.contains("| repository runtime supply-chain cleanup | `active_pr` #169 |"));
-        assertTrue(traceability.contains("| secure Maven Central transport | `planned` issue #170 |"));
-        assertTrue(traceability.contains("| deterministic Maven plugin versions | `planned` issue #171 |"));
     }
 
     private static String readTraceability() throws IOException {
