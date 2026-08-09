@@ -55,7 +55,8 @@ Package: `com.xtrmetl.cdc.spi`
 - `CdcSourceConnector` — lifecycle + start/stop capture
 - `SourceCapabilities` — declares engine (debezium/logminer/… ), databases supported
 - `PostgresDebeziumCdcSource` — adapter wrapping existing `CdcService` configuration surface
-- `CdcSourceRegistry` — discovery; exposed via `GET /api/cdc/sources` and status payload
+- `CdcSourceRegistry` — production discovery; exposed via `GET /api/cdc/sources` and status payload
+- `MysqlDebeziumCdcSource` — non-production reference scaffold only; intentionally not a Spring component until real MySQL CDC support is implemented
 
 ## Target SPI (Java)
 
@@ -79,11 +80,11 @@ xtrmetl:
 ```
 
 - **Declared** in `application.yml` / `XtrmetlProperties.Cdc.sources` and reported on `GET /api/cdc/status` as `configuredSources` via `CdcSourceFactory`.
-- **Registered types:**
+- **Production-discovered types:**
   | Type id | Status |
   |:--------|:-------|
   | `postgres-debezium` | **Live** — SPI `start`/`stop` delegates to `CdcService` |
-  | `mysql-debezium` | Scaffold only (no connector JAR) |
+  | `mysql-debezium` | **Not registered** — reference scaffold only; configured use resolves as unknown source type |
   | `sqlserver-debezium` | Scaffold only (no connector JAR) |
 - **Live engine:** still a single Debezium Postgres path in `CdcService` (multi-source start not implemented).
 - Targets remain: Kafka (live raw publish) + optional JDBC replica (`replica.enabled`).
