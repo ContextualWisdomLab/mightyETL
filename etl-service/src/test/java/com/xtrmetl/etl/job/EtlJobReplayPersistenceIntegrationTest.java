@@ -26,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Proves the first database-owned durable-job replay transition on the repaired stack.
@@ -108,6 +109,37 @@ class EtlJobReplayPersistenceIntegrationTest {
         assertEquals("FAILED", textColumn(sourceJobRecordId, "job_status"));
         assertNull(textColumn(sourceJobRecordId, "request_payload"));
         assertEquals(sourceUpdatedAt, instantColumn(sourceJobRecordId, "updated_at"));
+    }
+
+    @Test
+    void replaysSameOwnerSourceKeyAndPayloadWithoutSecondInsert() {
+        UUID sourceJobRecordId = insertFailedSource("idempotent-source-submission-key");
+
+        EtlJobReplay first = replayService.replayOwned(
+                sourceJobRecordId,
+                PAYLOAD,
+                REPLAY_KEY,
+                PRINCIPAL
+        );
+        EtlJobReplay replay = replayService.replayOwned(
+                sourceJobRecordId,
+                PAYLOAD,
+                "\"" + REPLAY_KEY + "\"",
+                PRINCIPAL
+        );
+
+        assertFalse(first.replayed());
+        assertTrue(replay.replayed());
+        assertEquals(first.jobRecordId(), replay.jobRecordId());
+        assertEquals(EtlJobStatus.PENDING, replay.jobStatus());
+        assertEquals(
+                1,
+                jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM etl_job_records "
+                                + "WHERE replay_generation_count IS NOT NULL",
+                        Integer.class
+                )
+        );
     }
 
     @Test
