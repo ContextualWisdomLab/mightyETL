@@ -133,6 +133,23 @@ class EtlJobReplayBoundaryTest {
     }
 
     @Test
+    void rejectsCompetingReplayKeyBeforeDatabaseWork() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        EtlJobReplayService service = new EtlJobReplayService(
+                jdbcTemplate,
+                new ObjectMapper(),
+                new EtlBatchProperties(),
+                hash -> false
+        );
+
+        assertErrorCode(
+                "etl_job_replay_in_progress",
+                () -> service.replayOwned(SOURCE_ID, PAYLOAD, REPLAY_KEY, "tenant_alpha")
+        );
+        verifyNoInteractions(jdbcTemplate);
+    }
+
+    @Test
     void rejectsAnAbsentParsedRootBeforeDatabaseWork() {
         JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
         ObjectMapper absentRootMapper = new ObjectMapper() {
