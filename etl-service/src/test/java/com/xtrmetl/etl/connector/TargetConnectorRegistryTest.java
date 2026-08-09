@@ -13,13 +13,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class TargetConnectorRegistryTest {
 
     @Test
-    void registersScaffoldConnectorsForWarehouseAndBiTargets() {
+    void registersOnlyAdvertisedWarehouseScaffolds() {
         TargetConnectorRegistry registry = new TargetConnectorRegistry();
 
-        assertEquals(3, registry.all().size());
+        assertEquals(2, registry.all().size());
         assertTrue(registry.find("databricks").isPresent());
         assertTrue(registry.find("snowflake").isPresent());
-        assertTrue(registry.find("qlik-sense").isPresent());
+        assertFalse(registry.find("qlik-sense").isPresent());
 
         for (TargetConnector connector : registry.all()) {
             assertEquals(ConnectorStatus.SCAFFOLD, connector.status());
