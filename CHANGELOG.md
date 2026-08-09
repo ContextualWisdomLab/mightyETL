@@ -111,7 +111,7 @@ existing xtrmETL platform.
    - Complete data model specifications
    - API specifications with examples
    - Deployment architecture
-   - Use cases and scenarios
+   - Use cases
    - Future enhancements roadmap
    - Success metrics and KPIs
    - Risk assessment and mitigation strategies
@@ -153,7 +153,7 @@ Through code analysis, identified the platform as:
 - Microservices-based architecture using Spring Cloud
 - Real-time Change Data Capture using Debezium
 - Event streaming via Apache Kafka
-- Service discovery and registration
+- Service discovery with Netflix Eureka
 - Distributed tracing with Zipkin
 
 #### Key Components Documented
@@ -175,7 +175,7 @@ Through code analysis, identified the platform as:
    - API Gateway with routing
    - JWT authentication filter
    - Load balancing
-   - Request routing to ETL/CDC services
+   - Request routing to services
 
 4. **Eureka Server** (Port 8761)
    - Service discovery
