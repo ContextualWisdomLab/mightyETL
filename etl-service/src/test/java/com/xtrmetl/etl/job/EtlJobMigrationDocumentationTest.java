@@ -115,6 +115,25 @@ class EtlJobMigrationDocumentationTest {
     }
 
     @Test
+    void runbookDocumentsOwnerScopedKeysetPaginationAndRollback() throws IOException {
+        String runbook = read("docs/etl/durable-job-intake.md").replaceAll("\\s+", " ");
+
+        assertTrue(runbook.contains("GET /api/etl/jobs?limit=50"));
+        assertTrue(runbook.contains("created_at DESC, job_record_id DESC"));
+        assertTrue(runbook.contains("strict tuple boundary"));
+        assertTrue(runbook.contains("Link: <"));
+        assertTrue(runbook.contains("rel=\"next\""));
+        assertTrue(runbook.contains("etl_invalid_job_page_limit"));
+        assertTrue(runbook.contains("etl_invalid_job_page_cursor"));
+        assertTrue(runbook.contains("V5__add_etl_job_owner_pagination_index.sql"));
+        assertTrue(runbook.contains("executeInTransaction=false"));
+        assertTrue(runbook.contains(
+                "DROP INDEX CONCURRENTLY etl_job_owner_pagination_index"
+        ));
+        assertTrue(runbook.contains("RFC 8288"));
+    }
+
+    @Test
     void changelogRecordsLeaseFencedDurableWorkerExecution() throws IOException {
         String changelog = read("CHANGELOG.md").replaceAll("\\s+", " ");
 
