@@ -64,7 +64,7 @@ Historical `/auth/signin`, `/auth/signup`, local password/BCrypt designs are `su
 
 ### CDC — known delivery/lifecycle gaps
 
-- PR #139 is `active_pr` for Kafka acknowledgement before Debezium source progress plus finite future waiting.
+- PR #139 is `active_pr` for Kafka acknowledgement before Debezium source progress plus the bounded acknowledgement wait/retry boundary.
 - Issue #141 is `planned` for truthful graceful stop completion.
 - Until integrated, do not claim exactly-once end-to-end CDC delivery or that the ordinary stop response proves Debezium `run()` termination.
 
