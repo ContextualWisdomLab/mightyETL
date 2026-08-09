@@ -140,6 +140,15 @@ public enum EtlRequestError {
             "Replay requires a supported principal-scoped Idempotency-Key."
     ),
 
+    /** A replay idempotency key already identifies a different source or payload. */
+    JOB_REPLAY_KEY_REUSED(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "etl_job_replay_key_reused",
+            "urn:mightyetl:problem:etl-job-replay-key-reused",
+            "ETL job replay key reused",
+            "The Idempotency-Key already identifies a different durable job replay."
+    ),
+
     /** The durable job was already cancelled with a different cancellation key. */
     JOB_CANCELLATION_KEY_REUSED(
             HttpStatus.UNPROCESSABLE_ENTITY,
