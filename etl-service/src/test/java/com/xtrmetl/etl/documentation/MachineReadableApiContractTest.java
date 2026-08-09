@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -77,6 +78,27 @@ class MachineReadableApiContractTest {
     }
 
     @Test
+    void protectedEtlOperationsDeclareHttpBasicAuthenticationFailures() throws IOException {
+        String openApi = read("contracts/openapi/mightyetl.yaml");
+        String securityConfig = read(
+                "etl-service/src/main/java/com/xtrmetl/etl/security/SecurityConfig.java"
+        );
+
+        assertTrue(securityConfig.contains(".requestMatchers(\"/api/**\").authenticated()"));
+        assertTrue(securityConfig.contains(".httpBasic(Customizer.withDefaults())"));
+        assertEquals(
+                4,
+                countOccurrences(
+                        openApi,
+                        "'401':\n          $ref: '#/components/responses/Unauthorized'"
+                ),
+                "Every protected ETL operation must declare the source-backed 401 surface"
+        );
+        assertTrue(openApi.contains("    Unauthorized:\n"));
+        assertTrue(openApi.contains("WWW-Authenticate:"));
+    }
+
+    @Test
     void asyncApiContractExistsAndDescribesReplayTolerantKafkaCdc() throws IOException {
         String asyncApi = read("contracts/asyncapi/mightyetl-cdc.yaml");
         String cdcService = read("cdc-service/src/main/java/com/xtrmetl/cdc/service/CdcService.java");
@@ -111,6 +133,16 @@ class MachineReadableApiContractTest {
                 () -> "CDC controller no longer declares child route " + childRoute
         );
         assertTrue(openApi.contains(openApiRoute), () -> "OpenAPI missing route " + openApiRoute);
+    }
+
+    private static int countOccurrences(String text, String needle) {
+        int count = 0;
+        int position = 0;
+        while ((position = text.indexOf(needle, position)) >= 0) {
+            count++;
+            position += needle.length();
+        }
+        return count;
     }
 
     private static String read(String relativePath) throws IOException {
