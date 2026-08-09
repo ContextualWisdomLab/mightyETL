@@ -130,7 +130,7 @@ sequenceDiagram
     JC-->>C: 200 + Cache-Control: no-store
 ```
 
-On protected develop the job status domain is `PENDING`, `RUNNING`, `SUCCEEDED`, `FAILED`. The request payload remains retained for active states because the worker/terminal clearing behavior is not yet integrated.
+On protected develop the job status domain is `PENDING`, `RUNNING`, `SUCCEEDED`, `FAILED`. V2 enforces that active rows retain `request_payload` and terminal rows cannot retain it, but protected `develop` has no integrated worker that performs a terminal transition. Consequently terminal payload clearing is a schema invariant rather than a shipped runtime capability, and an enabled intake can retain `PENDING` payloads indefinitely. This is a `known_gap`; durable intake remains disabled by default and production use must remain restricted until an integrated worker/lifecycle or explicit retention policy bounds payload lifetime and proves restart/recovery behavior.
 
 ## 4. Durable Job Active Stack — `active_pr`
 
@@ -168,7 +168,7 @@ sequenceDiagram
     K-->>DC: event stream
 ```
 
-`known_gap`: protected develop does not wait for Kafka broker acknowledgement in `handleChangeEvent`. PR #139 is the `active_pr` acknowledged-delivery path and adds a finite acknowledgement wait/retry boundary before Debezium record progress.
+`known_gap`: protected develop does not wait for Kafka broker acknowledgement in `handleChangeEvent`. PR #139 is the `active_pr` acknowledged-delivery path and adds a bounded acknowledgement wait/retry boundary before Debezium record progress.
 
 ### 5.2 CDC lifecycle
 
@@ -208,7 +208,7 @@ Detailed relationships are in `docs/ERD.md`.
 
 - `processed_data` — local compose primary ETL target.
 - `etl_idempotency_records` — principal/key-hash replay ledger.
-- `etl_job_records` — durable asynchronous intake/status state.
+- `etl_job_records` — durable asynchronous intake/status state; its V2 payload lifecycle check is implemented, while bounded runtime payload retention remains a `known_gap` until execution/retention lifecycle integrates.
 - legacy local compose `users`, `roles`, `user_roles` — persisted bootstrap compatibility objects, not a shipped registration/login service.
 
 ### 7.2 `active_pr`
@@ -276,7 +276,7 @@ This is useful compatibility evidence, but it is not accepted as literal-head pr
 
 ### 10.2 `active_pr` #121
 
-#121 adds explicit head checkout plus exact-SHA verification for source-executing CI/SBOM and carries a separate central-scanner dependency for literal-head hard scanning. `synthetic-merge` evidence remains non-substitutable.
+`#121` adds explicit head checkout plus exact-SHA verification for source-executing CI/SBOM and carries a separate central-scanner dependency for literal-head hard scanning. `synthetic-merge` evidence remains non-substitutable.
 
 ## 11. Monitoring and Observability
 
