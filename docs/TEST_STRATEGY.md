@@ -131,7 +131,8 @@ At every merge decision refetch and classify:
 Documentation tests must compare canonical claims to source reality, not preserve historical claims merely because they were once written. They verify:
 
 - canonical family entry points;
-- status taxonomy (`implemented_on_develop`, `active_pr`, `planned`, `superseded`, `out_of_scope`);
+- status taxonomy (`implemented_on_develop`, `active_pr`, `planned`, `superseded`, `out_of_scope`, `known_gap`);
+- capability-to-status mappings against source-backed API, migration, workflow, or exact-PR evidence rather than accepting unrelated status words elsewhere in a document;
 - current API paths and durable database objects;
 - legacy auth strings are explicitly described as superseded rather than shipped;
 - Mermaid blocks and internal links remain parseable;
