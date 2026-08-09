@@ -1,13 +1,14 @@
 package com.xtrmetl.cdc.spi;
 
-import org.springframework.stereotype.Component;
-
 import java.util.Set;
 
 /**
- * Scaffold for SQL Server CDC via Debezium. Not on the classpath / not started.
+ * Reference scaffold for SQL Server CDC via Debezium.
+ *
+ * <p>This type is intentionally not registered as a Spring component while its runtime start path
+ * remains scaffold-only. Construct it explicitly only for design/reference validation until a
+ * maintained SQL Server Debezium implementation and operational evidence exist.
  */
-@Component
 public final class SqlServerDebeziumCdcSource extends AbstractScaffoldCdcSource {
 
     public static final String ID = "sqlserver-debezium";
