@@ -42,6 +42,7 @@ A capability changes status only after its authoritative source/persistence/API 
 | machine-readable OpenAPI and AsyncAPI contracts | `active_pr` #157 | checked-in HTTP/Kafka contract artifacts on branch | `MachineReadableApiContractTest`; validator/schema proof still required before merge | issue #152, API contract |
 | MySQL CDC scaffold removal from production discovery | `active_pr` #158 | MySQL reference scaffold loses Spring production discovery | `CdcSourceRegistryTest`; shared Jackson security failure tracked separately | issue #153, ADR-0007 |
 | shared Jackson security baseline | `active_pr` #160 | direct-develop Maven dependency management imports Jackson 2.21.5 BOM before Spring Boot | `JacksonSecurityBaselineTest`; CVE-2026-54515, CVE-2026-59889, GHSA-mhm7-754m-9p8w must disappear from accepted security evidence | `docs/doctoring/jackson-2.21.5-security-baseline.md` |
+| non-vacuous durable-job coverage gate | `known_gap` issue #162 | protected JaCoCo plugin-level dotted include patterns are reused where report/check expect class-file filters | hosted CI logged `Analyzed bundle with 0 classes` and still passed JaCoCo checks; repair is sequenced after overlapping #157 POM work stabilizes | issue #162, `docs/TEST_STRATEGY.md` |
 | canonical documentation spine | `active_pr` #149 | PRD/TRD/Architecture/ADR/UML/ERD/API/Security/Test/Operability/Traceability branch | canonical + live commercial documentation contract tests | ADR-0001 |
 | live documentation coverage and traceability closure | `planned` issue #159 | no protected implementation; follow-through tracker for post-#149 drift | source-backed documentation consistency acceptance | `docs/DOCUMENTATION_ASSESSMENT.md` |
 | explicit repository licensing/copyright policy | `planned` issue #151 | no authorized root license decision on protected baseline | owner/legal/product decision plus packaging/SBOM evidence required | acquisition-diligence boundary |
@@ -57,6 +58,7 @@ A capability changes status only after its authoritative source/persistence/API 
 | NVIDIA model credential | `active_pr` #121 | `NVIDIA_NIM_API_KEY` | never substitute `COPILOT_GITHUB_TOKEN` |
 | independent counted review route | `known_gap` | repository/CWL governance plus read-only central reviewer routing | formal non-author APPROVED only where required; current autonomous route must be proven operational |
 | branch-wide writer CAS | `active_pr` #121 | deterministic publisher / scheduler operating contract | exact live parent + prepared descendant + `force=false` ref update; file-CAS fallback requires final ancestry proof |
+| non-vacuous owned-production coverage | `known_gap` issue #162 | `etl-service` JaCoCo configuration | report/check must select the intended compiled class-file set and fail when that set is empty before 100% may be claimed |
 
 ## 4. Conversation-to-repository reconciliation
 
@@ -77,6 +79,7 @@ A capability changes status only after its authoritative source/persistence/API 
 | scaffold connectors must be productionized or removed from production discovery | `active_pr` #156/#158 plus issue #153 for remaining connectors |
 | public HTTP/event contracts need machine-readable artifacts | `active_pr` #157; active-PR routes must not be promoted to protected truth |
 | inherited Jackson findings must be fixed at the shared dependency boundary | `active_pr` #160 uses Jackson 2.21.5 LTS BOM; no CVE suppression or feature-branch duplication |
+| 100% coverage claims must fail closed on an empty production target set | `known_gap` issue #162; current JaCoCo class-file selection can yield a vacuous pass and must be repaired after overlapping POM work stabilizes |
 | licensing/copyright must be explicit before acquisition/release claims | `planned` issue #151; automation must not invent a license |
 | standalone and MSA both matter | ADR-0007 + Architecture |
 | PII masking cannot destroy operational utility | ADR-0008 + Security/Threat Model |
