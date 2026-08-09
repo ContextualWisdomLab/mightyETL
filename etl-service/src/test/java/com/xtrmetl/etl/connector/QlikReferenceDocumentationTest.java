@@ -25,7 +25,7 @@ class QlikReferenceDocumentationTest {
                 StandardCharsets.UTF_8
         );
 
-        assertTrue(source.contains("reference-only design type"));
+        assertTrue(source.contains("Reference-only design type"));
         assertTrue(source.contains("not registered in the production target registry"));
         assertFalse(source.contains("Ships config contract + validation + catalog hooks"));
     }
