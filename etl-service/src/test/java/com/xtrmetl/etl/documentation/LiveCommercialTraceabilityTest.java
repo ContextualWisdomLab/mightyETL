@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Ensures that newly opened material commercial-readiness work is reconciled into the canonical
- * traceability graph instead of living only in pull-request or issue bodies.
+ * traceability and documentation-fitness graph instead of living only in pull-request or issue bodies.
  */
 class LiveCommercialTraceabilityTest {
 
@@ -57,11 +57,32 @@ class LiveCommercialTraceabilityTest {
         assertTrue(traceability.contains("| repository runtime supply-chain cleanup | `active_pr` #169 |"));
     }
 
+    @Test
+    void documentationFitnessAssessmentIncludesCurrentCrossCuttingWork() throws IOException {
+        String assessment = readAssessment();
+
+        assertTrue(assessment.contains("PR #160"));
+        assertTrue(assessment.contains("issue #161"));
+        assertTrue(assessment.contains("issue #162"));
+        assertTrue(assessment.contains("PR #164"));
+        assertTrue(assessment.contains("PR #163"));
+        assertTrue(assessment.contains("issue #165"));
+        assertTrue(assessment.contains("issue #166"));
+        assertTrue(assessment.contains("PR #167"));
+        assertTrue(assessment.contains("issue #168"));
+        assertTrue(assessment.contains("PR #169"));
+    }
+
     private static String readTraceability() throws IOException {
-        return Files.readString(
-                PROJECT_ROOT.resolve("docs/TRACEABILITY.md"),
-                StandardCharsets.UTF_8
-        );
+        return readDocument("docs/TRACEABILITY.md");
+    }
+
+    private static String readAssessment() throws IOException {
+        return readDocument("docs/DOCUMENTATION_ASSESSMENT.md");
+    }
+
+    private static String readDocument(String relativePath) throws IOException {
+        return Files.readString(PROJECT_ROOT.resolve(relativePath), StandardCharsets.UTF_8);
     }
 
     /** Finds the repository root from root- or module-scoped Maven execution. */
