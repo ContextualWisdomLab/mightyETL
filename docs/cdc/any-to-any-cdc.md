@@ -74,7 +74,10 @@ xtrmetl:
         type: postgres-debezium
         enabled: true
       # - id: mysql-1
-      #   type: mysql-debezium   # not registered — status will show unknown_source_type
+      #   type: mysql-debezium   # scaffold only
+      #   enabled: false
+      # - id: sqlserver-1
+      #   type: sqlserver-debezium # not registered — status reports unknown_source_type
       #   enabled: false
 ```
 
@@ -84,7 +87,8 @@ xtrmetl:
   |:--------|:-------|
   | `postgres-debezium` | **Live** — SPI `start`/`stop` delegates to `CdcService` |
   | `mysql-debezium` | Scaffold only (no connector JAR) |
-  | `sqlserver-debezium` | Scaffold only (no connector JAR) |
+  | `sqlserver-debezium` | **Not registered** — reference scaffold only; configured use reports `unknown_source_type` |
+- `SqlServerDebeziumCdcSource` remains explicit design/reference code only. It is not a Spring component and is not production-discoverable until a maintained SQL Server Debezium implementation, lifecycle, offset/schema-history handling, recovery behavior, and realistic integration evidence exist.
 - **Live engine:** still a single Debezium Postgres path in `CdcService` (multi-source start not implemented).
 - Targets remain: Kafka (live raw publish) + optional JDBC replica (`replica.enabled`).
 
