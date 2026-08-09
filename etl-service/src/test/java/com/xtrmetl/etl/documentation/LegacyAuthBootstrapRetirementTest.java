@@ -33,12 +33,18 @@ class LegacyAuthBootstrapRetirementTest {
     @Test
     void legacyCompatibilityIsExplicitAndNeverRunsFromDefaultInitDirectory() throws IOException {
         String compatibility = read("docker/postgres/compat/legacy_auth_tables.sql");
+        String compose = read("docker-compose.yml");
 
         assertTrue(compatibility.contains("DEPRECATED COMPATIBILITY"));
         assertTrue(compatibility.contains("CREATE TABLE IF NOT EXISTS roles"));
         assertTrue(compatibility.contains("CREATE TABLE IF NOT EXISTS users"));
         assertTrue(compatibility.contains("CREATE TABLE IF NOT EXISTS user_roles"));
         assertTrue(compatibility.contains("INSERT INTO roles"));
+
+        assertTrue(compose.contains("./docker/postgres/init:/docker-entrypoint-initdb.d:ro"));
+        assertFalse(compose.contains("./docker/postgres/compat:/docker-entrypoint-initdb.d"));
+        assertFalse(compose.contains("legacy_auth_tables.sql:/docker-entrypoint-initdb.d"));
+
         assertFalse(
                 PROJECT_ROOT.resolve("docker/postgres/compat").normalize()
                         .startsWith(PROJECT_ROOT.resolve("docker/postgres/init").normalize())
