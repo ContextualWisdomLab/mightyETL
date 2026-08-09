@@ -37,6 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class EtlJobReplayPersistenceIntegrationTest {
 
     private static final String PAYLOAD = "[{\"id\":\"record_alpha\"}]";
+    private static final String OTHER_PAYLOAD = "[{\"id\":\"record_beta\"}]";
     private static final String REPLAY_KEY = "1e05bdca-447c-4ad3-882c-e33963ce517c";
     private static final String OTHER_REPLAY_KEY = "519bc126-1398-4b4e-a4e3-1fb18a00f19b";
     private static final String PRINCIPAL = "tenant_alpha";
@@ -160,6 +161,37 @@ class EtlJobReplayPersistenceIntegrationTest {
                 () -> replayService.replayOwned(
                         secondSourceJobRecordId,
                         PAYLOAD,
+                        REPLAY_KEY,
+                        PRINCIPAL
+                )
+        );
+
+        assertEquals("etl_job_replay_key_reused", exception.getMessage());
+        assertEquals(
+                1,
+                jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM etl_job_records "
+                                + "WHERE replay_generation_count IS NOT NULL",
+                        Integer.class
+                )
+        );
+    }
+
+    @Test
+    void rejectsReplayKeyReuseForDifferentPayloadOnSameSource() {
+        UUID sourceJobRecordId = insertFailedSource("reused-key-payload-source");
+        replayService.replayOwned(
+                sourceJobRecordId,
+                PAYLOAD,
+                REPLAY_KEY,
+                PRINCIPAL
+        );
+
+        EtlRequestException exception = assertThrows(
+                EtlRequestException.class,
+                () -> replayService.replayOwned(
+                        sourceJobRecordId,
+                        OTHER_PAYLOAD,
                         REPLAY_KEY,
                         PRINCIPAL
                 )
