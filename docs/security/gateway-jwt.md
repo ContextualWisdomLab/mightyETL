@@ -37,7 +37,7 @@ JWT mode delegates JOSE parsing and cryptographic verification to Spring Securit
 
 Protected-route requests with missing, malformed, unverifiable, expired, materially premature, wrong-issuer, wrong-audience, disallowed-algorithm, unknown-key, or otherwise invalid bearer credentials must fail closed before routing. Unsecured `alg=none` tokens are not an accepted deployment mode. Do not configure a decoder from a token-supplied `jku` or other attacker-selected key URL.
 
-Spring Security maps the authenticated principal from the validated JWT. A production token contract should provide a stable non-sensitive subject identifier and minimize claims to what downstream authorization actually needs. PII masking is not used as an authentication workaround: minimize token claims, restrict access, protect transport and stored configuration, and keep token contents out of logs and telemetry.
+Spring Security maps the authenticated principal from the validated JWT. A production token contract must provide a non-blank `sub` as a stable non-sensitive subject identifier and minimize claims to what downstream authorization actually needs. PII masking is not used as an authentication workaround: minimize token claims, restrict access, protect transport and stored configuration, and keep token contents out of logs and telemetry.
 
 ## Authorization header and downstream trust
 
