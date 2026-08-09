@@ -112,6 +112,10 @@ class EtlJobServiceBoundaryTest {
         );
         assertError(
                 EtlRequestError.INVALID_JSON,
+                () -> service.submit("   ", IDEMPOTENCY_KEY, "tenant_alpha")
+        );
+        assertError(
+                EtlRequestError.INVALID_JSON,
                 () -> service.submit("null", IDEMPOTENCY_KEY, "tenant_alpha")
         );
         assertError(
@@ -156,7 +160,47 @@ class EtlJobServiceBoundaryTest {
         );
         assertError(
                 EtlRequestError.INVALID_RECORD,
+                () -> service.submit(
+                        payloadWithIdentifier("\u00a0record_alpha"),
+                        IDEMPOTENCY_KEY,
+                        "tenant_alpha"
+                )
+        );
+        assertError(
+                EtlRequestError.INVALID_RECORD,
+                () -> service.submit(
+                        payloadWithIdentifier("x".repeat(257)),
+                        IDEMPOTENCY_KEY,
+                        "tenant_alpha"
+                )
+        );
+        assertError(
+                EtlRequestError.INVALID_RECORD,
                 () -> service.submit("[{\"id\":\"record\\u0000alpha\"}]", IDEMPOTENCY_KEY, "tenant_alpha")
+        );
+        assertError(
+                EtlRequestError.INVALID_RECORD,
+                () -> service.submit(
+                        payloadWithIdentifier("record" + Character.toString(0x200e) + "alpha"),
+                        IDEMPOTENCY_KEY,
+                        "tenant_alpha"
+                )
+        );
+        assertError(
+                EtlRequestError.INVALID_RECORD,
+                () -> service.submit(
+                        payloadWithIdentifier("record" + Character.toString(0x2028) + "alpha"),
+                        IDEMPOTENCY_KEY,
+                        "tenant_alpha"
+                )
+        );
+        assertError(
+                EtlRequestError.INVALID_RECORD,
+                () -> service.submit(
+                        payloadWithIdentifier("record" + Character.toString(0x2029) + "alpha"),
+                        IDEMPOTENCY_KEY,
+                        "tenant_alpha"
+                )
         );
         assertError(
                 EtlRequestError.INVALID_RECORD,
@@ -201,6 +245,10 @@ class EtlJobServiceBoundaryTest {
                 () -> service.findOwned(UUID.randomUUID(), null)
         );
         verifyNoInteractions(requestLock, jdbcTemplate);
+    }
+
+    private static String payloadWithIdentifier(String identifier) {
+        return "[{\"id\":\"" + identifier + "\"}]";
     }
 
     private static EtlJobService service(
