@@ -77,7 +77,7 @@ class CanonicalDocumentationContractTest {
                 "etl_job_records",
                 "known_gap",
                 "active_pr",
-                "Kafka acknowledgement"
+                "Kafka broker acknowledgement"
         )) {
             assertTrue(architecture.contains(token), "Architecture misses current contract: " + token);
         }
