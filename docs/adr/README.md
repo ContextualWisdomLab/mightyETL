@@ -8,7 +8,7 @@ This index contains status-bearing decisions that govern mightyETL beyond one fe
 | [0002](0002-atomic-etl-and-idempotency.md) | Accepted | Whole-batch synchronous transaction and principal-scoped idempotency |
 | [0003](0003-durable-job-database-authority.md) | Accepted | PostgreSQL-owned durable-job state, non-destructive stack integration |
 | [0004](0004-cdc-delivery-and-lifecycle-truth.md) | Accepted with known gaps | CDC delivery/progress and graceful-stop truthfulness |
-| [0005](0005-gateway-identity-boundary.md) | Accepted direction / implementation pending | Fail-closed deployment identity; protected example token is not production auth |
+| [0005](0005-gateway-identity-boundary.md) | Accepted with known gaps | Fail-closed deployment identity is governing; protected example token remains a tracked implementation gap until the Resource Server path integrates |
 | [0006](0006-exact-evidence-and-agent-authority.md) | Accepted | Exact-source evidence, separated agent authorities, writer lease/CAS |
 | [0007](0007-standalone-msa-and-connector-truth.md) | Accepted | Standalone + modular MSA operation and honest connector capability |
 | [0008](0008-purpose-bound-pii-controls.md) | Accepted | Purpose-bound PII access instead of blanket masking |
