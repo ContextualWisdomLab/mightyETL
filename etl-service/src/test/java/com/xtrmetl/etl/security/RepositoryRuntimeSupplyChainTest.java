@@ -65,13 +65,14 @@ class RepositoryRuntimeSupplyChainTest {
     }
 
     private static String workflowBlock(String replit, String workflowName) {
+        String normalizedReplit = replit.replace("\r\n", "\n").replace('\r', '\n');
         String marker = "[[workflows.workflow]]\nname = \"" + workflowName + "\"";
-        int start = replit.indexOf(marker);
+        int start = normalizedReplit.indexOf(marker);
         if (start < 0) {
             throw new AssertionError("Missing Replit workflow: " + workflowName);
         }
-        int end = replit.indexOf("[[workflows.workflow]]", start + marker.length());
-        return end < 0 ? replit.substring(start) : replit.substring(start, end);
+        int end = normalizedReplit.indexOf("[[workflows.workflow]]", start + marker.length());
+        return end < 0 ? normalizedReplit.substring(start) : normalizedReplit.substring(start, end);
     }
 
     private static int countOccurrences(String text, String needle) {
