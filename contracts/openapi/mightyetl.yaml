@@ -1,0 +1,369 @@
+openapi: 3.2.0
+info:
+  title: mightyETL protected HTTP API
+  version: 0.1.0-develop
+  description: >-
+    Machine-readable contract for endpoints implemented on protected develop at
+    622e5e6c3d534f230c390f10e3832efadfc01825. Open pull-request capabilities are intentionally excluded.
+servers:
+  - url: /
+tags:
+  - name: etl
+  - name: durable-jobs
+  - name: cdc
+paths:
+  /api/etl/process:
+    post:
+      tags: [etl]
+      operationId: processEtlBatch
+      summary: Process one bounded atomic JSON ETL batch
+      security:
+        - basicAuth: []
+      parameters:
+        - $ref: '#/components/parameters/OptionalIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
+      responses:
+        '200':
+          description: Batch processed successfully
+          headers:
+            Idempotency-Replayed:
+              description: Present for keyed requests; true when a prior successful response was replayed.
+              schema:
+                type: string
+                enum: ['true', 'false']
+          content:
+            text/plain:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+  /api/etl/connectors:
+    get:
+      tags: [etl]
+      operationId: listTargetConnectors
+      summary: List target connector discovery and support state
+      security:
+        - basicAuth: []
+      responses:
+        '200':
+          description: Operator-safe connector catalog
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [product, primaryLoadPath, connectors, docs]
+                properties:
+                  product:
+                    type: string
+                    const: mightyETL
+                  primaryLoadPath:
+                    type: string
+                    const: postgresql
+                  connectors:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+                  docs:
+                    type: string
+  /api/etl/jobs:
+    post:
+      tags: [durable-jobs]
+      operationId: submitDurableEtlJob
+      summary: Accept a feature-gated durable ETL job
+      description: >-
+        This route exists only when xtrmetl.etl.jobs.intake-enabled=true. The protected baseline accepts
+        and exposes pending job state but does not yet include the active-PR worker/pagination/cancellation/replay lifecycle.
+      security:
+        - basicAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
+      responses:
+        '202':
+          description: Durable job accepted; execution success is not implied
+          headers:
+            Location:
+              description: Relative owner-scoped status resource
+              required: true
+              schema:
+                type: string
+            Cache-Control:
+              description: Response is not to be stored
+              required: true
+              schema:
+                type: string
+                const: no-store
+            Idempotency-Replayed:
+              description: Whether this accepted representation replays a prior identical submission
+              required: true
+              schema:
+                type: string
+                enum: ['true', 'false']
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EtlJobAcceptedResponse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+  /api/etl/jobs/{jobRecordId}:
+    get:
+      tags: [durable-jobs]
+      operationId: getDurableEtlJobStatus
+      summary: Read one owner-scoped durable job status
+      description: Route exists only while durable job intake is enabled.
+      security:
+        - basicAuth: []
+      parameters:
+        - name: jobRecordId
+          in: path
+          required: true
+          description: Opaque UUID job identifier. Missing and foreign-owned identifiers share the same not-found surface.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Current operator-safe job status
+          headers:
+            Cache-Control:
+              description: Response is not to be stored
+              required: true
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EtlJobStatusResponse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+  /api/cdc/start:
+    post:
+      tags: [cdc]
+      operationId: startCdc
+      summary: Start the configured PostgreSQL Debezium CDC engine
+      responses:
+        '200':
+          description: Start was requested or the engine was already running
+          content:
+            text/plain:
+              schema:
+                type: string
+  /api/cdc/stop:
+    post:
+      tags: [cdc]
+      operationId: stopCdc
+      summary: Request stop of the configured CDC engine
+      description: Protected develop does not yet prove asynchronous Debezium engine-task completion before returning success.
+      responses:
+        '200':
+          description: The current stop method returned without an IOException; asynchronous task completion is not guaranteed by this baseline.
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: IOException while closing the current engine
+          content:
+            text/plain:
+              schema:
+                type: string
+  /api/cdc/status:
+    get:
+      tags: [cdc]
+      operationId: getCdcStatus
+      summary: Read operator-safe CDC status
+      responses:
+        '200':
+          description: Current CDC runtime/configuration summary without configured secrets
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /api/cdc/sources:
+    get:
+      tags: [cdc]
+      operationId: listCdcSources
+      summary: List registered CDC source descriptors
+      responses:
+        '200':
+          description: Registered source descriptors
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CdcSourceDescriptor'
+  /api/cdc/targets:
+    get:
+      tags: [cdc]
+      operationId: listCdcTargets
+      summary: List registered CDC target descriptors
+      responses:
+        '200':
+          description: Registered target descriptors
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CdcTargetDescriptor'
+components:
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+      description: ETL service protected /api/** baseline uses Spring Security HTTP Basic authentication.
+  parameters:
+    OptionalIdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: Optional bounded key; when supplied the request also requires an authenticated principal.
+      schema:
+        type: string
+    RequiredIdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Required bounded durable-submission key scoped to the authenticated principal.
+      schema:
+        type: string
+  responses:
+    Problem:
+      description: Typed ETL failure
+      headers:
+        Cache-Control:
+          description: Problem responses are not to be stored
+          schema:
+            type: string
+            const: no-store
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+  schemas:
+    ProblemDetail:
+      type: object
+      required: [type, title, status, detail, instance, errorCode]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+          format: uri-reference
+        errorCode:
+          type: string
+      additionalProperties: true
+    EtlJobAcceptedResponse:
+      type: object
+      required: [jobRecordId, jobStatus, statusUrl]
+      properties:
+        jobRecordId:
+          type: string
+          format: uuid
+        jobStatus:
+          $ref: '#/components/schemas/ProtectedJobStatus'
+        statusUrl:
+          type: string
+    EtlJobStatusResponse:
+      type: object
+      required: [jobRecordId, jobStatus, attemptCount, createdAt, updatedAt]
+      properties:
+        jobRecordId:
+          type: string
+          format: uuid
+        jobStatus:
+          $ref: '#/components/schemas/ProtectedJobStatus'
+        attemptCount:
+          type: integer
+          minimum: 0
+        failureCode:
+          type: [string, 'null']
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ProtectedJobStatus:
+      type: string
+      description: Protected develop lifecycle only; cancellation exists only on an active PR.
+      enum: [PENDING, RUNNING, SUCCEEDED, FAILED]
+    CdcSourceDescriptor:
+      type: object
+      required: [id, displayName, engine, databases, scaffoldOnly]
+      properties:
+        id:
+          type: string
+        displayName:
+          type: string
+        engine:
+          type: string
+        databases:
+          type: array
+          items:
+            type: string
+        scaffoldOnly:
+          type: boolean
+    CdcTargetDescriptor:
+      type: object
+      required: [id, displayName, scaffoldOnly]
+      properties:
+        id:
+          type: string
+        displayName:
+          type: string
+        scaffoldOnly:
+          type: boolean
