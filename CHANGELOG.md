@@ -244,7 +244,7 @@ This release addresses the GitHub issue requesting reverse-engineering of the pr
 
 For more information, see:
 
-- [README.md](README.md) - Quick start guide and project overview
+- [README.md](README.md) - Quick start guide
 - [PRD.md](PRD.md) - Product Requirements Document  
 - [ARCHITECTURE.md](ARCHITECTURE.md) - Technical architecture
 - [SUMMARY_KR.md](SUMMARY_KR.md) - Korean summary
