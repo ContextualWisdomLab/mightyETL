@@ -16,6 +16,7 @@ import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -250,17 +251,29 @@ public class EtlJobReplayService {
     }
 
     private JsonNode validateReplayPayload(@Nullable String requestBody) {
-        if (requestBody == null || requestBody.isEmpty()) {
+        if (requestBody == null) {
             throw new EtlRequestException(EtlRequestError.INVALID_JSON);
         }
+        int payloadBytes = requestBody.getBytes(StandardCharsets.UTF_8).length;
+        if (payloadBytes > batchProperties.getMaxPayloadBytes()) {
+            throw new EtlRequestException(EtlRequestError.PAYLOAD_TOO_LARGE);
+        }
+
+        final JsonNode root;
         try {
-            JsonNode root = objectMapper.readTree(requestBody);
-            if (root == null || !root.isArray()) {
-                throw new EtlRequestException(EtlRequestError.INVALID_JSON);
-            }
-            return root;
+            root = objectMapper.readTree(requestBody);
         } catch (JsonProcessingException exception) {
             throw new EtlRequestException(EtlRequestError.INVALID_JSON, exception);
         }
+        if (root == null || root.isNull() || !root.isArray()) {
+            throw new EtlRequestException(EtlRequestError.INVALID_JSON);
+        }
+        if (root.size() > batchProperties.getMaxBatchRecords()) {
+            throw new EtlRequestException(EtlRequestError.BATCH_TOO_LARGE);
+        }
+        for (JsonNode record : root) {
+            EtlJobService.validateRecord(record);
+        }
+        return root;
     }
 }
