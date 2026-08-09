@@ -142,7 +142,7 @@ Delivery semantics are replay-tolerant/at-least-once; protected develop does not
 
 ## 8. Problem Details
 
-`EtlApiProblemHandler` owns stable RFC 9457 response shaping for covered ETL failures. A problem response may include public classification fields such as status, type, title, detail, path, and `errorCode`, but not:
+`EtlApiProblemHandler` owns stable RFC 9457 response shaping for covered ETL failures. A problem response may include public classification fields such as status, type, title, detail, `instance`, and `errorCode`, but not:
 
 - SQL or database exception text;
 - Java exception class/message as client detail;
@@ -152,6 +152,8 @@ Delivery semantics are replay-tolerant/at-least-once; protected develop does not
 - request payload;
 - lease identity;
 - connector secret/target credentials.
+
+The protected implementation sets RFC 9457 `instance` to the request URI through `ProblemDetail.setInstance(...)`; it does not expose a separate public `path` alias.
 
 ## 9. Authentication reality
 
