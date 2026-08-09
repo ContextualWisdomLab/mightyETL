@@ -347,23 +347,28 @@ public class EtlJobService {
                 validatedJobId,
                 principalScopeHash
         );
+        if (storedCancellation == null) {
+            throw new EtlRequestException(EtlRequestError.JOB_NOT_FOUND);
+        }
         if (updatedRows == 1) {
-            if (storedCancellation == null
-                    || storedCancellation.snapshot().jobStatus() != EtlJobStatus.CANCELLED) {
+            if (storedCancellation.snapshot().jobStatus() != EtlJobStatus.CANCELLED) {
                 throw new EtlRequestException(EtlRequestError.JOB_CANCELLATION_IN_PROGRESS);
             }
             return new EtlJobCancellation(storedCancellation.snapshot(), false);
         }
-        if (storedCancellation == null) {
-            throw new EtlRequestException(EtlRequestError.JOB_NOT_FOUND);
-        }
-        if (storedCancellation.snapshot().jobStatus() == EtlJobStatus.CANCELLED) {
-            if (cancellationKeyHash.equals(storedCancellation.cancellationKeyHash())) {
-                return new EtlJobCancellation(storedCancellation.snapshot(), true);
+        return switch (storedCancellation.snapshot().jobStatus()) {
+            case CANCELLED -> {
+                if (!cancellationKeyHash.equals(storedCancellation.cancellationKeyHash())) {
+                    throw new EtlRequestException(EtlRequestError.JOB_CANCELLATION_KEY_REUSED);
+                }
+                yield new EtlJobCancellation(storedCancellation.snapshot(), true);
             }
-            throw new EtlRequestException(EtlRequestError.JOB_CANCELLATION_KEY_REUSED);
-        }
-        throw new EtlRequestException(EtlRequestError.JOB_CANCELLATION_IN_PROGRESS);
+            case SUCCEEDED -> throw new EtlRequestException(EtlRequestError.JOB_ALREADY_SUCCEEDED);
+            case FAILED -> throw new EtlRequestException(EtlRequestError.JOB_ALREADY_FAILED);
+            case PENDING, RUNNING -> throw new EtlRequestException(
+                    EtlRequestError.JOB_CANCELLATION_IN_PROGRESS
+            );
+        };
     }
 
     /**
