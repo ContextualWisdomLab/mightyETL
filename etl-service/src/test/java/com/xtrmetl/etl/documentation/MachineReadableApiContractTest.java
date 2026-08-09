@@ -60,8 +60,9 @@ class MachineReadableApiContractTest {
                 "cdc-service/src/main/java/com/xtrmetl/cdc/controller/CdcController.java"
         );
 
-        assertSourceRouteDocumented(etlController, openApi, "/api/etl/process");
-        assertSourceRouteDocumented(etlController, openApi, "/api/etl/connectors");
+        assertTrue(etlController.contains("@RequestMapping(\"/api/etl\")"));
+        assertChildRouteDocumented(etlController, openApi, "/process", "/api/etl/process:");
+        assertChildRouteDocumented(etlController, openApi, "/connectors", "/api/etl/connectors:");
 
         assertTrue(jobController.contains("@RequestMapping(\"/api/etl/jobs\")"));
         assertTrue(jobController.contains("@PostMapping"));
@@ -117,11 +118,6 @@ class MachineReadableApiContractTest {
         assertTrue(asyncApi.contains("raw Debezium JSON"));
     }
 
-    private static void assertSourceRouteDocumented(String source, String openApi, String route) {
-        assertTrue(source.contains(route), () -> "production source no longer declares route " + route);
-        assertTrue(openApi.contains(route + ":"), () -> "OpenAPI missing production route " + route);
-    }
-
     private static void assertChildRouteDocumented(
             String source,
             String openApi,
@@ -130,7 +126,7 @@ class MachineReadableApiContractTest {
     ) {
         assertTrue(
                 source.contains("(\"" + childRoute + "\")"),
-                () -> "CDC controller no longer declares child route " + childRoute
+                () -> "controller no longer declares child route " + childRoute
         );
         assertTrue(openApi.contains(openApiRoute), () -> "OpenAPI missing route " + openApiRoute);
     }
