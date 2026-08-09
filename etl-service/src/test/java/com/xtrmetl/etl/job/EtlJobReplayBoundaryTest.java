@@ -1,14 +1,18 @@
 package com.xtrmetl.etl.job;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xtrmetl.etl.service.EtlBatchProperties;
 import org.junit.jupiter.api.Test;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.mock;
 
 /**
- * Captures the first immutable replay-result contract on the repaired durable-job stack.
+ * Captures immutable replay-result and collaborator-construction contracts on the repaired stack.
  */
 class EtlJobReplayBoundaryTest {
 
@@ -35,5 +39,30 @@ class EtlJobReplayBoundaryTest {
                 NullPointerException.class,
                 () -> new EtlJobReplay(SOURCE_ID, null, false)
         );
+    }
+
+    @Test
+    void constructorsRejectMissingCollaborators() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        ObjectMapper mapper = new ObjectMapper();
+        EtlBatchProperties properties = new EtlBatchProperties();
+
+        assertThrows(
+                NullPointerException.class,
+                () -> new EtlJobReplayService(null, mapper, properties, hash -> true)
+        );
+        assertThrows(
+                NullPointerException.class,
+                () -> new EtlJobReplayService(jdbcTemplate, null, properties, hash -> true)
+        );
+        assertThrows(
+                NullPointerException.class,
+                () -> new EtlJobReplayService(jdbcTemplate, mapper, null, hash -> true)
+        );
+        assertThrows(
+                NullPointerException.class,
+                () -> new EtlJobReplayService(jdbcTemplate, mapper, properties, null)
+        );
+        new EtlJobReplayService(jdbcTemplate, mapper, properties);
     }
 }
