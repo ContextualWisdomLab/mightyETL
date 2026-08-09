@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -152,6 +153,21 @@ class CanonicalDocumentationContractTest {
     }
 
     @Test
+    void liveCommercialWorkIsTrackedWithoutPromotingItToProtectedDevelop() throws IOException {
+        String traceability = read("docs/TRACEABILITY.md");
+        for (String row : List.of(
+                "| legacy local-auth bootstrap retirement | `active_pr` #155 |",
+                "| Qlik row-write scaffold removal from production discovery | `active_pr` #156 |",
+                "| machine-readable OpenAPI and AsyncAPI contracts | `active_pr` #157 |",
+                "| MySQL CDC scaffold removal from production discovery | `active_pr` #158 |",
+                "| canonical documentation spine | `active_pr` #149 |",
+                "| live documentation coverage and traceability closure | `planned` issue #159 |"
+        )) {
+            assertTrue(traceability.contains(row), "Traceability misses live work/status binding: " + row);
+        }
+    }
+
+    @Test
     void adrIndexCarriesCoreCrossCuttingDecisions() throws IOException {
         String index = read("docs/adr/README.md");
         for (String adr : List.of("0001", "0002", "0003", "0004", "0005", "0006", "0007", "0008")) {
@@ -159,6 +175,28 @@ class CanonicalDocumentationContractTest {
         }
         assertTrue(index.contains("Accepted"));
         assertTrue(index.contains("Known gaps") || index.contains("known gaps"));
+    }
+
+    @Test
+    void adrIndexUsesOnlyDeclaredStatusValues() throws IOException {
+        String index = read("docs/adr/README.md");
+        Set<String> allowedStatuses = Set.of(
+                "Proposed",
+                "Accepted",
+                "Accepted with known gaps",
+                "Superseded",
+                "Rejected"
+        );
+
+        for (String line : index.split("\\n")) {
+            if (!line.startsWith("| [")) {
+                continue;
+            }
+            String[] cells = line.split("\\|", -1);
+            assertTrue(cells.length >= 4, "Malformed ADR index row: " + line);
+            String status = cells[2].trim();
+            assertTrue(allowedStatuses.contains(status), "ADR index uses undeclared status: " + status);
+        }
     }
 
     private static String read(String relativePath) throws IOException {
