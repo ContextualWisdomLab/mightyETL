@@ -45,6 +45,20 @@ class LiveCommercialTraceabilityTest {
         assertTrue(traceability.contains("class-file"));
     }
 
+    @Test
+    void currentCommercialWorkIsBoundIntoTraceability() throws IOException {
+        String traceability = readTraceability();
+
+        assertTrue(traceability.contains("| direct ETL service authentication | `known_gap` issue #161 |"));
+        assertTrue(traceability.contains("| non-vacuous coverage repair | `active_pr` #164 |"));
+        assertTrue(traceability.contains("| SQL Server CDC scaffold retirement | `active_pr` #163 |"));
+        assertTrue(traceability.contains("| release artifact provenance | `planned` issue #165 |"));
+        assertTrue(traceability.contains("| bundled Zipkin transport repair | `active_pr` #167 |"));
+        assertTrue(traceability.contains("| repository runtime supply-chain cleanup | `active_pr` #169 |"));
+        assertTrue(traceability.contains("| secure Maven Central transport | `planned` issue #170 |"));
+        assertTrue(traceability.contains("| deterministic Maven plugin versions | `planned` issue #171 |"));
+    }
+
     private static String readTraceability() throws IOException {
         return Files.readString(
                 PROJECT_ROOT.resolve("docs/TRACEABILITY.md"),
