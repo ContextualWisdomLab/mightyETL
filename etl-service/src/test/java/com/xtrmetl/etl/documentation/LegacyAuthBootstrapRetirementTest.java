@@ -51,6 +51,30 @@ class LegacyAuthBootstrapRetirementTest {
         );
     }
 
+    @Test
+    void retirementDocumentsCleanInstallExistingVolumeAndRecoveryBoundaries() throws IOException {
+        String operations = read("docs/data/legacy-auth-bootstrap-retirement.md");
+        String changelog = read("CHANGELOG.md");
+
+        for (String heading : new String[] {
+                "## Clean-install boundary",
+                "## Existing-volume boundary",
+                "## Rollback and forward recovery",
+                "## External-consumer uncertainty"
+        }) {
+            assertTrue(operations.contains(heading), "Retirement operations doc misses " + heading);
+        }
+        for (String legacyObject : new String[] {"`users`", "`roles`", "`user_roles`"}) {
+            assertTrue(operations.contains(legacyObject), "Operations doc misses " + legacyObject);
+        }
+        assertTrue(operations.contains("docker/postgres/compat/legacy_auth_tables.sql"));
+        assertTrue(operations.contains("does not prove absence of private or external consumers"));
+        assertTrue(
+                changelog.contains("Retired abandoned local-auth tables from the default clean-install PostgreSQL bootstrap"),
+                "CHANGELOG must record the compatibility-impacting clean-install change"
+        );
+    }
+
     private static String read(String relativePath) throws IOException {
         return Files.readString(PROJECT_ROOT.resolve(relativePath), StandardCharsets.UTF_8)
                 .replace("\r\n", "\n")
