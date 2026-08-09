@@ -131,6 +131,15 @@ public enum EtlRequestError {
             "Cancellation requires a supported principal-scoped Idempotency-Key."
     ),
 
+    /** The replay key is absent or outside the bounded safe idempotency profile. */
+    JOB_REPLAY_KEY_REQUIRED(
+            HttpStatus.BAD_REQUEST,
+            "etl_job_replay_key_required",
+            "urn:mightyetl:problem:etl-job-replay-key-required",
+            "ETL job replay key required",
+            "Replay requires a supported principal-scoped Idempotency-Key."
+    ),
+
     /** The durable job was already cancelled with a different cancellation key. */
     JOB_CANCELLATION_KEY_REUSED(
             HttpStatus.UNPROCESSABLE_ENTITY,
