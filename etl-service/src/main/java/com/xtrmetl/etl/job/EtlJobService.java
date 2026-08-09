@@ -357,9 +357,11 @@ public class EtlJobService {
         if (storedCancellation == null) {
             throw new EtlRequestException(EtlRequestError.JOB_NOT_FOUND);
         }
-        if (storedCancellation.snapshot().jobStatus() == EtlJobStatus.CANCELLED
-                && cancellationKeyHash.equals(storedCancellation.cancellationKeyHash())) {
-            return new EtlJobCancellation(storedCancellation.snapshot(), true);
+        if (storedCancellation.snapshot().jobStatus() == EtlJobStatus.CANCELLED) {
+            if (cancellationKeyHash.equals(storedCancellation.cancellationKeyHash())) {
+                return new EtlJobCancellation(storedCancellation.snapshot(), true);
+            }
+            throw new EtlRequestException(EtlRequestError.JOB_CANCELLATION_KEY_REUSED);
         }
         throw new EtlRequestException(EtlRequestError.JOB_CANCELLATION_IN_PROGRESS);
     }
