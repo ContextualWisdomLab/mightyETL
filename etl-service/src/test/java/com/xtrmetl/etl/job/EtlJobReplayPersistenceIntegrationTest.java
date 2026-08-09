@@ -34,6 +34,7 @@ class EtlJobReplayPersistenceIntegrationTest {
 
     private static final String PAYLOAD = "[{\"id\":\"record_alpha\"}]";
     private static final String REPLAY_KEY = "1e05bdca-447c-4ad3-882c-e33963ce517c";
+    private static final String OTHER_REPLAY_KEY = "519bc126-1398-4b4e-a4e3-1fb18a00f19b";
     private static final String PRINCIPAL = "tenant_alpha";
 
     private final EtlJobReplayService replayService;
@@ -80,21 +81,7 @@ class EtlJobReplayPersistenceIntegrationTest {
 
     @Test
     void createsFirstGenerationPendingReplayWithoutMutatingTerminalSource() {
-        UUID sourceJobRecordId = UUID.randomUUID();
-        jdbcTemplate.update(
-                """
-                INSERT INTO etl_job_records (
-                    job_record_id, principal_scope_hash, submission_key_hash,
-                    request_digest, request_payload, job_status, attempt_count,
-                    failure_code
-                ) VALUES (?, ?, ?, ?, NULL, 'FAILED', 1, ?)
-                """,
-                sourceJobRecordId,
-                Sha256Digest.digest(PRINCIPAL),
-                Sha256Digest.digest("original-submission-key"),
-                Sha256Digest.digest(PAYLOAD),
-                "etl_target_failure"
-        );
+        UUID sourceJobRecordId = insertFailedSource("original-submission-key");
         Instant sourceUpdatedAt = instantColumn(sourceJobRecordId, "updated_at");
 
         EtlJobReplay replay = replayService.replayOwned(
@@ -120,6 +107,44 @@ class EtlJobReplayPersistenceIntegrationTest {
         assertEquals("FAILED", textColumn(sourceJobRecordId, "job_status"));
         assertNull(textColumn(sourceJobRecordId, "request_payload"));
         assertEquals(sourceUpdatedAt, instantColumn(sourceJobRecordId, "updated_at"));
+    }
+
+    @Test
+    void acceptsStructuredReplayKeyForIndependentFailedSource() {
+        UUID sourceJobRecordId = insertFailedSource("second-original-submission-key");
+
+        EtlJobReplay replay = replayService.replayOwned(
+                sourceJobRecordId,
+                PAYLOAD,
+                "\"" + OTHER_REPLAY_KEY + "\"",
+                PRINCIPAL
+        );
+
+        assertFalse(replay.replayed());
+        assertEquals(EtlJobStatus.PENDING, replay.jobStatus());
+        assertEquals(
+                sourceJobRecordId,
+                uuidColumn(replay.jobRecordId(), "replay_source_job_record_id")
+        );
+    }
+
+    private UUID insertFailedSource(String submissionKey) {
+        UUID sourceJobRecordId = UUID.randomUUID();
+        jdbcTemplate.update(
+                """
+                INSERT INTO etl_job_records (
+                    job_record_id, principal_scope_hash, submission_key_hash,
+                    request_digest, request_payload, job_status, attempt_count,
+                    failure_code
+                ) VALUES (?, ?, ?, ?, NULL, 'FAILED', 1, ?)
+                """,
+                sourceJobRecordId,
+                Sha256Digest.digest(PRINCIPAL),
+                Sha256Digest.digest(submissionKey),
+                Sha256Digest.digest(PAYLOAD),
+                "etl_target_failure"
+        );
+        return sourceJobRecordId;
     }
 
     private String textColumn(UUID jobRecordId, String columnName) {
