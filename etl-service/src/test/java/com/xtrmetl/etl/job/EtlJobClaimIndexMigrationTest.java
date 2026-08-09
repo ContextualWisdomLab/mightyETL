@@ -26,6 +26,10 @@ class EtlJobClaimIndexMigrationTest {
     private static final String V4_MIGRATION =
             "etl-service/src/main/resources/db/migration/V4__add_etl_job_claim_eligibility_index.sql";
     private static final String V4_CONFIGURATION = V4_MIGRATION + ".conf";
+    private static final String APPLICATION_PROPERTIES =
+            "etl-service/src/main/resources/application.properties";
+    private static final String ROLLOUT_RUNBOOK =
+            "docs/operations/durable-job-claim-index-rollout.md";
 
     @Test
     void keepsTransactionalLeaseSchemaSeparateFromConcurrentIndexBuild() throws IOException {
@@ -48,28 +52,35 @@ class EtlJobClaimIndexMigrationTest {
     void disablesFlywayTransactionsAndPostgresqlTransactionalLocksForConcurrentDdl()
             throws IOException {
         Path configurationPath = projectRoot().resolve(V4_CONFIGURATION);
-        String applicationProperties = read(
-                "etl-service/src/main/resources/application.properties"
-        );
+        Path applicationPropertiesPath = projectRoot().resolve(APPLICATION_PROPERTIES);
 
         assertTrue(
                 Files.exists(configurationPath),
                 "the concurrent migration requires a matching Flyway script configuration"
         );
         assertTrue(
+                Files.exists(applicationPropertiesPath),
+                "concurrent PostgreSQL Flyway DDL requires explicit non-transactional locking config"
+        );
+        assertTrue(
                 Files.readString(configurationPath, StandardCharsets.UTF_8)
                         .contains("executeInTransaction=false")
         );
-        assertTrue(applicationProperties.contains(
-                "spring.flyway.postgresql.transactional-lock=false"
-        ));
+        assertTrue(
+                Files.readString(applicationPropertiesPath, StandardCharsets.UTF_8).contains(
+                        "spring.flyway.postgresql.transactional-lock=false"
+                )
+        );
     }
 
     @Test
     void runbookDocumentsConcurrentFailureRecoveryAndRollback() throws IOException {
-        String runbook = normalize(read(
-                "docs/operations/durable-job-claim-index-rollout.md"
-        ));
+        Path runbookPath = projectRoot().resolve(ROLLOUT_RUNBOOK);
+        assertTrue(
+                Files.exists(runbookPath),
+                "concurrent index rollout requires an operator recovery and rollback runbook"
+        );
+        String runbook = normalize(Files.readString(runbookPath, StandardCharsets.UTF_8));
 
         assertTrue(runbook.contains("V4__add_etl_job_claim_eligibility_index.sql"));
         assertTrue(runbook.contains("CREATE INDEX CONCURRENTLY"));
@@ -90,6 +101,8 @@ class EtlJobClaimIndexMigrationTest {
 
     /**
      * Finds the reactor root from either repository-root or module-local Maven execution.
+     *
+     * @return absolute repository root containing the source under test
      */
     private static Path projectRoot() {
         Path current = Paths.get(System.getProperty("user.dir")).toAbsolutePath();
