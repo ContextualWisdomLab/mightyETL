@@ -156,6 +156,21 @@ class DocumentationValidationTest {
                 }
             }
         }
+
+        @Test
+        void capabilityStatusLabelsCannotBeSatisfiedByUnrelatedTokens() throws IOException {
+            String traceability = read("docs/TRACEABILITY.md");
+            String apiContract = read("docs/API_CONTRACT.md");
+            String erd = read("docs/ERD.md");
+
+            assertTrue(traceability.contains("| owner cancellation / CANCELLED | `active_pr` #147 |"));
+            assertTrue(traceability.contains("| production JWT Resource Server | `active_pr` #142 |"));
+            assertTrue(traceability.contains("| protected gateway current state | `known_gap` |"));
+            assertTrue(traceability.contains("| any-to-any canonical CDC | `planned` |"));
+            assertTrue(apiContract.contains("`instance`, and `errorCode`"));
+            assertTrue(apiContract.contains("does not expose a separate public `path` alias"));
+            assertTrue(erd.contains("`implemented_on_develop` schema, `known_gap` runtime retention"));
+        }
     }
 
     @Nested
