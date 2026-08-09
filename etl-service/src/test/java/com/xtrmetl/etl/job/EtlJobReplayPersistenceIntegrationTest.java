@@ -2,6 +2,7 @@ package com.xtrmetl.etl.job;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xtrmetl.etl.service.EtlBatchProperties;
+import com.xtrmetl.etl.service.EtlRequestException;
 import com.xtrmetl.etl.service.EtlRequestLock;
 import com.xtrmetl.etl.service.Sha256Digest;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,6 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -132,6 +134,38 @@ class EtlJobReplayPersistenceIntegrationTest {
         assertTrue(replay.replayed());
         assertEquals(first.jobRecordId(), replay.jobRecordId());
         assertEquals(EtlJobStatus.PENDING, replay.jobStatus());
+        assertEquals(
+                1,
+                jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM etl_job_records "
+                                + "WHERE replay_generation_count IS NOT NULL",
+                        Integer.class
+                )
+        );
+    }
+
+    @Test
+    void rejectsReplayKeyReuseAcrossDifferentSources() {
+        UUID firstSourceJobRecordId = insertFailedSource("reused-key-first-source");
+        replayService.replayOwned(
+                firstSourceJobRecordId,
+                PAYLOAD,
+                REPLAY_KEY,
+                PRINCIPAL
+        );
+        UUID secondSourceJobRecordId = insertFailedSource("reused-key-second-source");
+
+        EtlRequestException exception = assertThrows(
+                EtlRequestException.class,
+                () -> replayService.replayOwned(
+                        secondSourceJobRecordId,
+                        PAYLOAD,
+                        REPLAY_KEY,
+                        PRINCIPAL
+                )
+        );
+
+        assertEquals("etl_job_replay_key_reused", exception.getMessage());
         assertEquals(
                 1,
                 jdbcTemplate.queryForObject(
