@@ -122,6 +122,24 @@ public enum EtlRequestError {
             "The ETL job page cursor is invalid or uses an unsupported opaque format."
     ),
 
+    /** The cancellation key is absent or outside the bounded safe idempotency profile. */
+    JOB_CANCELLATION_KEY_REQUIRED(
+            HttpStatus.BAD_REQUEST,
+            "etl_job_cancellation_key_required",
+            "urn:mightyetl:problem:etl-job-cancellation-key-required",
+            "ETL job cancellation key required",
+            "Cancellation requires a supported principal-scoped Idempotency-Key."
+    ),
+
+    /** An eligible job remained active after the authoritative cancellation update. */
+    JOB_CANCELLATION_IN_PROGRESS(
+            HttpStatus.CONFLICT,
+            "etl_job_cancellation_in_progress",
+            "urn:mightyetl:problem:etl-job-cancellation-in-progress",
+            "ETL job cancellation in progress",
+            "The durable job cancellation could not yet establish a terminal outcome."
+    ),
+
     /** The requested job does not exist in the authenticated principal's namespace. */
     JOB_NOT_FOUND(
             HttpStatus.NOT_FOUND,
