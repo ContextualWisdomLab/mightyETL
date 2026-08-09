@@ -1,7 +1,7 @@
 # Documentation Completeness Assessment
 
 **Baseline:** protected `develop@622e5e6c3d534f230c390f10e3832efadfc01825`  
-**Assessment date:** 2026-08-09  
+**Assessment date:** 2026-08-10  
 **Purpose:** acquisition-diligence and implementation truthfulness
 
 ## Verdict
@@ -74,14 +74,31 @@ Protected develop publishes Debezium JSON to Kafka without awaiting broker ackno
 
 Protected develop's pull-request CI still uses default `actions/checkout` event-ref semantics. Under GitHub `pull_request`, that means the generated merge ref can be checked out. PR #121 carries literal-head CI/SBOM controls and the separately permissioned OpenCode scheduler design, but remains `active_pr` and must not be described as deployed automation until merge.
 
+### Service and observability trust boundaries
+
+Protected `etl-service` is published directly by the default Compose topology and independently uses HTTP Basic for `/api/**`. Gateway JWT work does not by itself establish a downstream service identity or prove gateway-only reachability. Issue #161 therefore remains a `known_gap` until the direct/east-west ETL boundary is replaced with a supported fail-closed mechanism.
+
+Protected tracing configuration also repeats a non-standard Zipkin 9412 service-side port contract. Issue #166 and PR #167 carry the bounded host-compatibility/internal-9411 repair, while issue #168 and PR #169 separately retire unsafe Replit Zipkin bootstrap execution and overlapping runtime launch authority. None of that work is shipped until protected integration.
+
+### Coverage evidence
+
+The protected JaCoCo durable-job gate can select zero production classes and report all configured zero-missed checks as satisfied. Issue #162 owns the quality defect; PR #164 is the active repair that separates report/check class-file filters and adds a non-empty class-count invariant. A zero-class bundle must never be represented as 100% owned-production coverage.
+
 ## Live work opened after the canonical spine was drafted
 
-The documentation graph must expand while implementation continues. At this assessment, all of the following remain unshipped and therefore must stay visibly `active_pr` rather than being silently omitted or promoted to protected truth:
+The documentation graph must expand while implementation continues. At this assessment, all of the following remain unshipped and therefore must stay visibly `active_pr`, `planned`, or `known_gap` rather than being silently omitted or promoted to protected truth:
 
 - PR #155 — remove abandoned local-auth tables from new default PostgreSQL clean installations while preserving explicit compatibility handling for existing/private consumers;
 - PR #156 — remove the misleading Qlik row-write scaffold from production connector discovery;
 - PR #157 — establish checked-in machine-readable OpenAPI/AsyncAPI contracts without advertising active-PR lifecycle behavior;
-- PR #158 — remove the nonfunctional MySQL Debezium scaffold from automatic Spring production discovery.
+- PR #158 — remove the nonfunctional MySQL Debezium scaffold from automatic Spring production discovery;
+- PR #160 — establish the shared Jackson 2.21.5 security baseline required to remove inherited Databind advisories without suppressing scanner findings;
+- issue #161 — replace the independently reachable ETL HTTP Basic trust boundary with a supported service-authentication contract;
+- issue #162 / PR #164 — make the durable-job JaCoCo gate non-vacuous and prove a real production class set is analyzed before any 100% claim;
+- PR #163 — remove the nonfunctional SQL Server Debezium scaffold from automatic Spring production discovery;
+- issue #165 — establish exact protected-head release artifacts, reproducibility, SBOM/provenance binding, attestation verification, and publication authority after prerequisites are satisfied;
+- issue #166 / PR #167 — restore the bundled Zipkin transport to the upstream collector's internal 9411 contract while preserving an explicit host compatibility mapping;
+- issue #168 / PR #169 — remove opaque/unverifiable Zipkin runtime bootstrapping and the tracked root JAR once the canonical documentation path no longer depends on it.
 
 The legal/release boundary also remains unresolved: issue #151 requires an explicit owner-approved licensing/copyright decision. Automation must not invent a root license merely to make packaging or documentation appear complete.
 
@@ -99,7 +116,10 @@ The spine is necessary but file count alone is not sufficient. Each category bel
 6. standards/research doctoring with APA 7 references linked to decisions and tests;
 7. connector support matrix distinguishing production, scaffold, removed-from-discovery and planned integrations;
 8. SLI/SLO targets versus actually measured attainment;
-9. acquisition-diligence controls covering security, rights, dependency obligations, recovery, data authority and residual known risks.
+9. acquisition-diligence controls covering security, rights, dependency obligations, recovery, data authority and residual known risks;
+10. identity/trust-boundary authority distinguishing gateway authentication from direct/east-west ETL authentication;
+11. quality-gate evidence semantics distinguishing literal source, synthetic merge, and vacuous versus non-vacuous coverage evidence;
+12. repository-runtime and observability supply-chain authority, including provenance for third-party binaries/images and supported startup paths.
 
 These categories may be satisfied by existing canonical sections if they are indexed and machine-checkably discoverable. They must not be represented as complete merely because an issue or PR body describes them.
 
@@ -130,8 +150,9 @@ A future feature that changes a public API, persisted state, security/trust boun
 - fixing the gateway identity production code in PR #142;
 - fixing CDC delivery or graceful-stop production code in PR #139 / issue #141;
 - merging the OpenCode scheduler in PR #121;
-- integrating the source changes in #155–#158;
+- integrating the source changes in #155–#169;
 - choosing a license on behalf of the owner in issue #151;
+- implementing release publication before issue #165 prerequisites are satisfied;
 - inventing SLO attainment data that has not been measured on protected production-like infrastructure.
 
 ## References
