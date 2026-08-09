@@ -79,7 +79,7 @@ When the disabled-by-default durable-intake feature is explicitly enabled:
 - successful submissions use `202 Accepted`, `Location`, and `Idempotency-Replayed` metadata;
 - malformed, missing, and foreign-owned identifiers share one non-enumerating not-found surface.
 
-The protected baseline is intake-only. Worker execution, pagination, polling advice, conditional status, cancellation, and replay are not described as shipped.
+The protected baseline is intake-only. Worker execution, pagination, polling advice, conditional status, cancellation, and replay are not described as shipped. V2 requires terminal rows to have a null `request_payload`, but protected `develop` has no worker that transitions accepted jobs to terminal state; therefore an enabled intake can retain `PENDING` payloads without a bounded runtime lifetime. This retention boundary is a `known_gap`, and durable intake remains disabled by default until an integrated worker/lifecycle or explicit retention policy proves bounded retention and restart/recovery behavior.
 
 #### CDC
 
@@ -119,6 +119,8 @@ A downstream active PR may depend on an earlier active PR. Nothing in this table
 Protected develop still contains a placeholder gateway class named `JwtAuthenticationFilter` whose validator accepts only the literal example token `valid_token`. This is **not** a cryptographic JWT validation boundary. PR #142 is the active remediation. Until it integrates, deployments must not advertise protected develop as providing production-grade JWT authentication.
 
 Protected develop CDC `stop()` requests engine close and clears the task reference without waiting for the asynchronous engine task to return. Issue #141 is the accepted reliability remediation path.
+
+Protected develop durable intake persists request payloads for active rows and has no integrated worker/TTL that guarantees an accepted `PENDING` row becomes terminal. The V2 terminal-null constraint prevents payload retention *after* a terminal transition, but does not itself create that transition or a TTL. Keep durable intake disabled by default and restrict production enablement until the worker/retention lifecycle is integrated and validated.
 
 ## 4. Functional Requirements
 
@@ -161,6 +163,7 @@ Protected develop CDC `stop()` requests engine close and clears the task referen
 - Submission requires a principal and bounded idempotency key.
 - Status lookup is owner-scoped and no-store.
 - Intake-only protected develop must not claim worker execution.
+- Protected develop must keep intake disabled by default while active `request_payload` lifetime is not operationally bounded by an integrated worker or retention policy.
 
 ### 4.2 CDC
 
@@ -227,47 +230,47 @@ The local compose bootstrap still creates legacy user/role tables; persistence e
 
 ## 5. Non-Functional Requirements
 
-#### NFR-REL-1: Atomicity
+### NFR-REL-1: Atomicity
 
 For synchronous ETL, a failure after admission must not commit a successful prefix of the request.
 
-#### NFR-REL-2: Idempotency
+### NFR-REL-2: Idempotency
 
 Repeated committed same-intent requests must converge on the same durable result without duplicate target effects within the documented transaction boundary.
 
-#### NFR-REL-3: Restart tolerance
+### NFR-REL-3: Restart tolerance
 
-Durable job intake records and idempotency ledger records survive application restart. CDC consumers and targets must tolerate documented at-least-once/replay behavior.
+Durable job intake records and idempotency ledger records survive application restart. CDC consumers and targets must tolerate documented at-least-once/replay behavior. Restart persistence alone does not satisfy bounded retention: accepted durable-job payloads require an integrated execution/retention lifecycle before production enablement is considered complete.
 
-#### NFR-SEC-1: Least privilege
+### NFR-SEC-1: Least privilege
 
 Workflows, services, and connector credentials use the narrowest practical privilege and fail closed at trust boundaries.
 
-#### NFR-SEC-2: Sensitive-data handling
+### NFR-SEC-2: Sensitive-data handling
 
-PII and business identifiers are not blanket-masked out of the product. Instead, access is purpose-bound, authorized, encrypted where stored/in transit, retained minimally, and audited. Logs/error responses must not disclose raw principals, idempotency keys, payloads, SQL, exception text, lease identifiers, or credentials.
+PII and business identifiers are not blanket-masked out of the product. Instead, access is purpose-bound, authorized, encrypted where stored/in transit, retained minimally, and audited. Logs/error responses must not disclose raw principals, idempotency keys, payloads, SQL, exception text, lease identifiers, or credentials. Durable request-payload lifetime must be operationally bounded before the intake path is promoted for production use.
 
-#### NFR-QUAL-1: Coverage
+### NFR-QUAL-1: Coverage
 
 Owned production code must maintain 100% configured statement/line/method/branch coverage where the selected tool exposes the metric. Skipped tests never count as passing evidence.
 
-#### NFR-QUAL-2: Documentation
+### NFR-QUAL-2: Documentation
 
 Public production APIs require beginner-readable documentation. Canonical architecture documents must be machine-validated against shipped source contracts.
 
-#### NFR-OPS-1: Observability
+### NFR-OPS-1: Observability
 
 Use finite-cardinality metrics, structured logs, health/status endpoints, correlation identifiers where available, and OpenTelemetry-compatible semantic naming for new cross-service telemetry.
 
-#### NFR-OPS-2: Recovery
+### NFR-OPS-2: Recovery
 
 Migrations, durable state, connector operations, and releases require bounded rollback/recovery instructions. A rollback claim must identify irreversible external side effects explicitly.
 
-#### NFR-PERF-1: Resource bounds
+### NFR-PERF-1: Resource bounds
 
 No user request may create unbounded per-record thread fan-out, unbounded batch growth, unbounded retry, or unbounded in-memory retained payload without a documented limit.
 
-#### NFR-COMP-1: Standalone and MSA interoperability
+### NFR-COMP-1: Standalone and MSA interoperability
 
 Each service remains independently operable through documented configuration while composed deployments preserve stable APIs/event/connector contracts.
 
@@ -301,7 +304,7 @@ CREATE TABLE etl_idempotency_records (
 );
 ```
 
-### 6.3 Durable job intake — `implemented_on_develop`
+### 6.3 Durable job intake — `implemented_on_develop` schema, `known_gap` runtime retention
 
 ```sql
 CREATE TABLE etl_job_records (
@@ -318,7 +321,7 @@ CREATE TABLE etl_job_records (
 );
 ```
 
-Protected-develop lifecycle values are `PENDING`, `RUNNING`, `SUCCEEDED`, and `FAILED`. Lease, pagination, cancellation, and replay fields live only on active stack PRs and are not part of this baseline DDL.
+Protected-develop lifecycle values are `PENDING`, `RUNNING`, `SUCCEEDED`, and `FAILED`. V2 enforces payload presence for active rows and null payload for terminal rows, but protected `develop` does not integrate the worker transition that realizes terminal clearing. Thus bounded runtime retention remains a `known_gap` and durable intake remains disabled by default. Lease, pagination, cancellation, and replay fields live only on active stack PRs and are not part of this baseline DDL.
 
 ## 7. API Specifications
 
@@ -394,6 +397,7 @@ The following are release/operations targets, not claims of already measured pro
 - **0** duplicate target effects for committed same-principal/same-key/same-payload idempotent retries within the transactional boundary.
 - **100%** release artifacts with SBOM/provenance evidence required by repository policy.
 - CDC acknowledged-delivery and graceful-stop SLOs remain **not yet claimed** until PR #139 / issue #141 integrate and production-like measurements exist.
+- Durable asynchronous intake has no production-retention SLO claim until pending payload lifetime is operationally bounded and recovery-tested.
 
 ## 10. Risk Assessment and Mitigation
 
@@ -402,6 +406,7 @@ The following are release/operations targets, not claims of already measured pro
 | Placeholder gateway token logic mistaken for production auth | unauthorized access / diligence failure | explicit `known_gap`; fail-closed deployment; PR #142; threat-model/test gates |
 | Batch partial commit | data corruption | whole-batch prevalidation + transaction + rollback tests |
 | Duplicate idempotent retry | duplicate target effects | principal/key hash, request digest, try-lock, atomic ledger/target transaction |
+| Durable pending payload retained without worker/TTL | privacy/retention and storage growth risk | keep intake disabled by default; mark `known_gap`; integrate worker/retention lifecycle with restart/recovery tests before production promotion |
 | CDC publish before broker acknowledgement | offset/data-loss ambiguity | PR #139 acknowledged-delivery path; retain at-least-once/replay-tolerant claim until integrated |
 | CDC stop reports early | false operator state | issue #141 bounded completion wait contract |
 | Active PR documented as shipped | procurement/operations error | status taxonomy + machine-checked traceability |
