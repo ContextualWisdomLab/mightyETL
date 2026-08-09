@@ -51,14 +51,19 @@ class ReplicationSlotProbeTest {
     }
 
     @Test
-    void failOpenOnDataAccessError() {
+    void failOpenOnDataAccessErrorWithoutExposingDriverDiagnostics() {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        String sensitiveDriverMessage =
+                "jdbc:postgresql://db.internal:5432/prod?user=admin&password=super-secret";
         when(jdbc.queryForList(anyString(), eq("xtrmetl_slot")))
-                .thenThrow(new DataAccessResourceFailureException("down"));
+                .thenThrow(new DataAccessResourceFailureException(sensitiveDriverMessage));
 
         Map<String, Object> result = new ReplicationSlotProbe(jdbc).probeSlot("xtrmetl_slot");
 
         assertFalse((Boolean) result.get("available"));
         assertEquals("query_failed", result.get("error"));
+        assertEquals("Replication slot state unavailable", result.get("message"));
+        assertFalse(result.toString().contains("super-secret"));
+        assertFalse(result.toString().contains("jdbc:postgresql://"));
     }
 }
