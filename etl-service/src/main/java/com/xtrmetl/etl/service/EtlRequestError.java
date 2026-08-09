@@ -149,6 +149,15 @@ public enum EtlRequestError {
             "The Idempotency-Key already identifies a different durable job replay."
     ),
 
+    /** Another transaction owns the same principal-scoped replay identity. */
+    JOB_REPLAY_IN_PROGRESS(
+            HttpStatus.CONFLICT,
+            "etl_job_replay_in_progress",
+            "urn:mightyetl:problem:etl-job-replay-in-progress",
+            "ETL job replay in progress",
+            "A durable job replay with the same principal-scoped Idempotency-Key is being created."
+    ),
+
     /** The durable job was already cancelled with a different cancellation key. */
     JOB_CANCELLATION_KEY_REUSED(
             HttpStatus.UNPROCESSABLE_ENTITY,
