@@ -1,13 +1,14 @@
 package com.xtrmetl.cdc.spi;
 
-import org.springframework.stereotype.Component;
-
 import java.util.Set;
 
 /**
- * Scaffold for MySQL binlog CDC via Debezium. Not on the classpath / not started.
+ * Non-production reference scaffold for a future MySQL binlog CDC integration via Debezium.
+ *
+ * <p>This type is intentionally not a Spring component. Production source discovery must not
+ * advertise MySQL until the connector dependency, lifecycle, offsets/history, prerequisites,
+ * recovery and realistic integration behavior are implemented and verified.</p>
  */
-@Component
 public final class MysqlDebeziumCdcSource extends AbstractScaffoldCdcSource {
 
     public static final String ID = "mysql-debezium";
