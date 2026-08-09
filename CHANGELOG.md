@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ETL request errors now use RFC 9457 `application/problem+json` responses with a stable `errorCode`, fixed type URI, explicit 400/401/404/409/413/422/503/500 taxonomy, and no internal exception text in client responses.
 - ETL requests now enforce bounded UTF-8 payload and record-count limits, prevalidate and transform the complete batch before the first JDBC call, and commit accepted records inside one Spring transaction.
 - ETL transformations now preserve comma/colon-bearing values, use locale-independent text conversion and deterministic `BigDecimal` amount formatting, and retry only transient Spring data-access failures.
+- The SQL Server Debezium scaffold is no longer a Spring component or production-discoverable source. `SqlServerDebeziumCdcSource` remains explicit reference/design code only, and configured `sqlserver-debezium` use fails closed as `unknown_source_type` until a maintained implementation and operational evidence exist.
 - Product branding: user-facing docs and suggested image tags use **mightyETL** (formerly xtrmETL).
   - Legacy Java packages (`com.xtrmetl.*`), Maven `artifactId` `xtrmETL`, and some env/topic defaults remain for compatibility.
   - See `docs/rebrand-name-matrix.md`.
@@ -44,7 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `GET /api/cdc/targets` for target SPI discovery.
 - Actuator `cdcEngine` health indicator (engine running + slot details).
 - SPI lifecycle: `PostgresDebeziumCdcSource.start/stop` delegates to `CdcService`.
-- Scaffold CDC sources: `mysql-debezium`, `sqlserver-debezium` (discovery only).
+- CDC scaffold references: `mysql-debezium` remains discovery-only; `sqlserver-debezium` is reference-only and not production-discoverable.
 - Root POM `<name>mightyETL</name>` (artifactId remains `xtrmETL`).
 - README honest “Supported today” matrix; compose file product-name header.
 
