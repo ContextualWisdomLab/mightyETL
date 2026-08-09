@@ -79,13 +79,17 @@ class CdcControllerTest {
     }
 
     @Test
-    void testStopCdcWithException() throws IOException {
-        doThrow(new IOException("Error stopping CDC")).when(cdcService).stop();
+    void testStopCdcWithExceptionDoesNotExposeInternalDiagnostics() throws IOException {
+        String sensitiveDiagnostic =
+                "Error closing offset store at jdbc:postgresql://db.internal/prod?password=driver-secret";
+        doThrow(new IOException(sensitiveDiagnostic)).when(cdcService).stop();
 
         ResponseEntity<String> response = cdcController.stopCdc();
 
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
-        assertEquals("Error stopping CDC process: Error stopping CDC", response.getBody());
+        assertEquals("CDC process could not be stopped", response.getBody());
+        assertFalse(response.getBody().contains("driver-secret"));
+        assertFalse(response.getBody().contains("jdbc:postgresql://"));
         verify(cdcService, times(1)).stop();
     }
 
