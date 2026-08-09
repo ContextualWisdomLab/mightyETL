@@ -149,6 +149,24 @@ public enum EtlRequestError {
             "The durable job cancellation could not yet establish a terminal outcome."
     ),
 
+    /** Durable success committed before the cancellation transition. */
+    JOB_ALREADY_SUCCEEDED(
+            HttpStatus.CONFLICT,
+            "etl_job_already_succeeded",
+            "urn:mightyetl:problem:etl-job-already-succeeded",
+            "ETL job already succeeded",
+            "The durable job succeeded before cancellation could commit."
+    ),
+
+    /** Durable failure committed before the cancellation transition. */
+    JOB_ALREADY_FAILED(
+            HttpStatus.CONFLICT,
+            "etl_job_already_failed",
+            "urn:mightyetl:problem:etl-job-already-failed",
+            "ETL job already failed",
+            "The durable job failed before cancellation could commit."
+    ),
+
     /** The requested job does not exist in the authenticated principal's namespace. */
     JOB_NOT_FOUND(
             HttpStatus.NOT_FOUND,
