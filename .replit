@@ -27,19 +27,11 @@ args = "Build Project"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "Run Eureka Server"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
 args = "Run All Tests"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
 args = "Check Test Status"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Build and Run Microservices"
 
 [[workflows.workflow]]
 name = "Run Microservices"
