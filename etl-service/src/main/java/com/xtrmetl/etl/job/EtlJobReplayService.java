@@ -25,9 +25,9 @@ import java.util.regex.Pattern;
  *
  * <p>The service validates replay identity, authenticated principal scope, and JSON shape before
  * database work. The first persistence increment admits only an owner's first-generation replay of
- * a {@code FAILED} source whose resupplied payload has the exact source request digest. Later
- * test-first increments add the remaining terminal states, idempotent replay lookup, concurrency,
- * and generation-depth policies before the HTTP replay resource is exposed.</p>
+ * a {@code FAILED} or {@code CANCELLED} source whose resupplied payload has the exact source request
+ * digest. Later test-first increments add idempotent replay lookup, concurrency, and
+ * generation-depth policies before the HTTP replay resource is exposed.</p>
  */
 @Service
 public class EtlJobReplayService {
@@ -41,13 +41,13 @@ public class EtlJobReplayService {
             "\"(" + IDEMPOTENCY_KEY_VALUE_EXPRESSION + ")\""
     );
     private static final String REPLAY_KEY_HASH_DOMAIN = "mightyetl:durable-job-replay-key:v1:";
-    private static final String SELECT_FIRST_GENERATION_FAILED_SOURCE_SQL = """
+    private static final String SELECT_FIRST_GENERATION_TERMINAL_SOURCE_SQL = """
             SELECT job_record_id
               FROM etl_job_records
              WHERE job_record_id = ?
                AND principal_scope_hash = ?
                AND request_digest = ?
-               AND job_status = 'FAILED'
+               AND job_status IN ('FAILED', 'CANCELLED')
                AND replay_source_job_record_id IS NULL
                AND replay_root_job_record_id IS NULL
                AND replay_generation_count IS NULL
@@ -126,7 +126,7 @@ public class EtlJobReplayService {
     }
 
     /**
-     * Creates one first-generation replay of an owner-scoped failed durable job.
+     * Creates one first-generation replay of an owner-scoped failed or cancelled durable job.
      *
      * <p>Authentication scope and byte-exact payload digest are part of the source-row predicate,
      * and the source row is locked before the child is inserted. The source row is never mutated.
@@ -159,7 +159,7 @@ public class EtlJobReplayService {
         String principalScopeHash = Sha256Digest.digest(validatedPrincipalName);
         String requestDigest = Sha256Digest.digest(requestBody);
         UUID lockedSourceJobRecordId = jdbcTemplate.queryForObject(
-                SELECT_FIRST_GENERATION_FAILED_SOURCE_SQL,
+                SELECT_FIRST_GENERATION_TERMINAL_SOURCE_SQL,
                 UUID.class,
                 validatedSourceJobRecordId,
                 principalScopeHash,
