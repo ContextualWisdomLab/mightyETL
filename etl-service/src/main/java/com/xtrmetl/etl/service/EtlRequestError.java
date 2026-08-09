@@ -131,6 +131,15 @@ public enum EtlRequestError {
             "Cancellation requires a supported principal-scoped Idempotency-Key."
     ),
 
+    /** The durable job was already cancelled with a different cancellation key. */
+    JOB_CANCELLATION_KEY_REUSED(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "etl_job_cancellation_key_reused",
+            "urn:mightyetl:problem:etl-job-cancellation-key-reused",
+            "ETL job cancellation key reused",
+            "The durable job was already cancelled with a different Idempotency-Key."
+    ),
+
     /** An eligible job remained active after the authoritative cancellation update. */
     JOB_CANCELLATION_IN_PROGRESS(
             HttpStatus.CONFLICT,
