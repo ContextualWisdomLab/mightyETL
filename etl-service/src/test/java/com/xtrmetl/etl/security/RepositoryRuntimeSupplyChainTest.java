@@ -9,11 +9,13 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.regex.Pattern;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Guards repository-owned developer launch configuration against executing opaque bundled
- * observability binaries or mutable remote shell bootstrap content.
+ * Guards repository-owned developer launch configuration against unsafe or conflicting
+ * developer-runtime authority paths.
  */
 class RepositoryRuntimeSupplyChainTest {
 
@@ -40,8 +42,46 @@ class RepositoryRuntimeSupplyChainTest {
         );
     }
 
+    @Test
+    void projectRunButtonDelegatesToOneMicroserviceTopology() throws IOException {
+        String projectWorkflow = workflowBlock(readReplit(), "Project");
+        int serviceTopologyDelegates = countOccurrences(projectWorkflow, "args = \"Run Microservices\"")
+                + countOccurrences(projectWorkflow, "args = \"Run Eureka Server\"")
+                + countOccurrences(projectWorkflow, "args = \"Build and Run Microservices\"");
+
+        assertEquals(
+                1,
+                serviceTopologyDelegates,
+                "The Replit run button must not launch overlapping copies of the same microservice topology"
+        );
+        assertTrue(
+                projectWorkflow.contains("args = \"Run Microservices\""),
+                "The Replit run button must delegate service startup to the canonical Run Microservices workflow"
+        );
+    }
+
     private static String readReplit() throws IOException {
         return Files.readString(PROJECT_ROOT.resolve(".replit"), StandardCharsets.UTF_8);
+    }
+
+    private static String workflowBlock(String replit, String workflowName) {
+        String marker = "[[workflows.workflow]]\nname = \"" + workflowName + "\"";
+        int start = replit.indexOf(marker);
+        if (start < 0) {
+            throw new AssertionError("Missing Replit workflow: " + workflowName);
+        }
+        int end = replit.indexOf("[[workflows.workflow]]", start + marker.length());
+        return end < 0 ? replit.substring(start) : replit.substring(start, end);
+    }
+
+    private static int countOccurrences(String text, String needle) {
+        int count = 0;
+        int cursor = 0;
+        while ((cursor = text.indexOf(needle, cursor)) >= 0) {
+            count++;
+            cursor += needle.length();
+        }
+        return count;
     }
 
     private static Path projectRoot() {
