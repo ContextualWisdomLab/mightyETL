@@ -38,10 +38,11 @@ A capability changes status only after its authoritative source/persistence/API 
 | target connector lifecycle/catalog | `implemented_on_develop` | `TargetConnectorDispatcher`, `GET /api/etl/connectors` | connector lifecycle/catalog tests | ADR-0007, connector docs |
 | any-to-any canonical CDC | `planned` | partial registry/mapper scaffold; live path remains raw PostgreSQL→Kafka | mapper/SPI tests prove scaffold only | `docs/cdc/any-to-any-cdc.md` |
 | legacy local-auth bootstrap retirement | `active_pr` #155 | default Docker PostgreSQL init plus explicit compatibility artifact | `LegacyAuthBootstrapRetirementTest` and exact-head PR evidence | issue #150, ERD/data-governance follow-through |
-| Qlik row-write scaffold removal from production discovery | `active_pr` #156 | `TargetConnectorRegistry` branch removes misleading registered row-write target | registry/dispatcher/controller catalog tests | issue #153, ADR-0007 |
+| Qlik row-write scaffold removal from production discovery | `active_pr` #156 | target registry and production configuration binding are removed on branch | registry/catalog/config retirement tests | issue #153, ADR-0007 |
 | machine-readable OpenAPI and AsyncAPI contracts | `active_pr` #157 | checked-in HTTP/Kafka contract artifacts on branch | `MachineReadableApiContractTest`; validator/schema proof still required before merge | issue #152, API contract |
-| MySQL CDC scaffold removal from production discovery | `active_pr` #158 | MySQL reference scaffold loses Spring production discovery | `CdcSourceRegistryTest` and exact-head PR evidence | issue #153, ADR-0007 |
-| canonical documentation spine | `active_pr` #149 | PRD/TRD/Architecture/ADR/UML/ERD/API/Security/Test/Operability/Traceability branch | canonical documentation contract tests | ADR-0001 |
+| MySQL CDC scaffold removal from production discovery | `active_pr` #158 | MySQL reference scaffold loses Spring production discovery | `CdcSourceRegistryTest`; shared Jackson security failure tracked separately | issue #153, ADR-0007 |
+| shared Jackson security baseline | `active_pr` #160 | direct-develop Maven dependency management imports Jackson 2.21.5 BOM before Spring Boot | `JacksonSecurityBaselineTest`; CVE-2026-54515, CVE-2026-59889, GHSA-mhm7-754m-9p8w must disappear from accepted security evidence | `docs/doctoring/jackson-2.21.5-security-baseline.md` |
+| canonical documentation spine | `active_pr` #149 | PRD/TRD/Architecture/ADR/UML/ERD/API/Security/Test/Operability/Traceability branch | canonical + live commercial documentation contract tests | ADR-0001 |
 | live documentation coverage and traceability closure | `planned` issue #159 | no protected implementation; follow-through tracker for post-#149 drift | source-backed documentation consistency acceptance | `docs/DOCUMENTATION_ASSESSMENT.md` |
 | explicit repository licensing/copyright policy | `planned` issue #151 | no authorized root license decision on protected baseline | owner/legal/product decision plus packaging/SBOM evidence required | acquisition-diligence boundary |
 
@@ -75,6 +76,7 @@ A capability changes status only after its authoritative source/persistence/API 
 | default clean installs must stop recreating abandoned local-auth persistence | `active_pr` #155; existing-volume compatibility remains explicit and non-destructive |
 | scaffold connectors must be productionized or removed from production discovery | `active_pr` #156/#158 plus issue #153 for remaining connectors |
 | public HTTP/event contracts need machine-readable artifacts | `active_pr` #157; active-PR routes must not be promoted to protected truth |
+| inherited Jackson findings must be fixed at the shared dependency boundary | `active_pr` #160 uses Jackson 2.21.5 LTS BOM; no CVE suppression or feature-branch duplication |
 | licensing/copyright must be explicit before acquisition/release claims | `planned` issue #151; automation must not invent a license |
 | standalone and MSA both matter | ADR-0007 + Architecture |
 | PII masking cannot destroy operational utility | ADR-0008 + Security/Threat Model |
