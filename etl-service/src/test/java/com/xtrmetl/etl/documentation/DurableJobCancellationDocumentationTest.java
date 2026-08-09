@@ -85,7 +85,7 @@ class DurableJobCancellationDocumentationTest {
     void changelogRecordsTheBuyerVisibleCancellationSlice() throws IOException {
         String changelog = read("CHANGELOG.md").replaceAll("\\s+", " ");
 
-        assertTrue(changelog.contains("owner-scoped durable-job cancellation"));
+        assertTrue(changelog.contains("Owner-scoped durable-job cancellation"));
         assertTrue(changelog.contains("CANCELLED"));
         assertTrue(changelog.contains("cancellation_key_hash"));
         assertTrue(changelog.contains("Cancellation-first"));
