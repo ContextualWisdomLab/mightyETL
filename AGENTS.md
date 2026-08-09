@@ -103,6 +103,6 @@ Find and remove production demo stubs, hard-coded success, fake integrations, ob
 
 ## Standards, research, and commercial readiness
 
-Use current authoritative standards/primary technical documentation and peer-reviewed research when material, recording APA 7 references in doctoring/ADRs. Design for defensible SOC 2/CSAP acquisition diligence without falsely claiming certification.
+Use current authoritative standards/primary technical documentation and peer-reviewed research when material. Record APA 7 references in the affected canonical document under `docs/` and, for material architectural decisions, in the corresponding decision record under `docs/adr/` linked from `docs/adr/README.md`. Design for defensible SOC 2/CSAP acquisition diligence without falsely claiming certification.
 
 Release only from an integrated protected head that passes all required tests, exact coverage, security, migration/rollback, compatibility, packaging, SBOM/provenance, review, approval, operational, and release-acceptance gates. Update `CHANGELOG.md` and verify published artifacts.
