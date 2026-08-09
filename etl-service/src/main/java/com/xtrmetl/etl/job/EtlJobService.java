@@ -124,7 +124,7 @@ public class EtlJobService {
               AND principal_scope_hash = ?
               AND job_status IN (?, ?)
             """;
-    private static final String CANCELLED_BY_OWNER_CODE = "etl_job_cancelled_by_owner";
+    static final String CANCELLED_BY_OWNER_CODE = "etl_job_cancelled_by_owner";
     private static final String CANCELLATION_KEY_DOMAIN = "mightyetl:durable-job-cancellation:v1:";
     private static final int MAX_PRINCIPAL_SCOPE_CODE_POINTS = 512;
     private static final int MAX_RECORD_ID_CODE_POINTS = 256;
