@@ -16,6 +16,7 @@ import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -24,10 +25,11 @@ import java.util.regex.Pattern;
  * Admits owner-scoped durable-job replay requests on the repaired stack.
  *
  * <p>The service validates replay identity, authenticated principal scope, and JSON shape before
- * database work. The first persistence increment admits only an owner's first-generation replay of
- * a {@code FAILED} or {@code CANCELLED} source whose resupplied payload has the exact source request
- * digest. Later test-first increments add idempotent replay lookup, concurrency, and
- * generation-depth policies before the HTTP replay resource is exposed.</p>
+ * database work. The first persistence increments admit an owner's first-generation replay of a
+ * {@code FAILED} or {@code CANCELLED} source and return the already-created job for an identical
+ * owner/source/key/payload replay. Later test-first increments add conflicting-key classification,
+ * concurrent replay serialization, and generation-depth policies before the HTTP replay resource
+ * is exposed.</p>
  */
 @Service
 public class EtlJobReplayService {
@@ -41,6 +43,14 @@ public class EtlJobReplayService {
             "\"(" + IDEMPOTENCY_KEY_VALUE_EXPRESSION + ")\""
     );
     private static final String REPLAY_KEY_HASH_DOMAIN = "mightyetl:durable-job-replay-key:v1:";
+    private static final String SELECT_IDENTICAL_EXISTING_REPLAY_SQL = """
+            SELECT job_record_id, job_status
+              FROM etl_job_records
+             WHERE principal_scope_hash = ?
+               AND submission_key_hash = ?
+               AND request_digest = ?
+               AND replay_source_job_record_id = ?
+            """;
     private static final String SELECT_FIRST_GENERATION_TERMINAL_SOURCE_SQL = """
             SELECT job_record_id
               FROM etl_job_records
@@ -102,7 +112,7 @@ public class EtlJobReplayService {
      * @param jdbcTemplate parameterized durable job persistence
      * @param objectMapper JSON parser configuration to copy
      * @param batchProperties bounded request limits
-     * @param requestLock transaction-lifetime replay-key lock reserved for the idempotency increment
+     * @param requestLock transaction-lifetime replay-key lock reserved for the concurrency increment
      */
     @Autowired
     public EtlJobReplayService(
@@ -126,18 +136,19 @@ public class EtlJobReplayService {
     }
 
     /**
-     * Creates one first-generation replay of an owner-scoped failed or cancelled durable job.
+     * Creates or returns one first-generation replay of an owner-scoped terminal durable job.
      *
-     * <p>Authentication scope and byte-exact payload digest are part of the source-row predicate,
-     * and the source row is locked before the child is inserted. The source row is never mutated.
-     * Replay-key normalization is domain-separated before reuse of the existing durable submission
-     * key column so replay and ordinary submission key material cannot collide accidentally.</p>
+     * <p>An identical committed replay is looked up by the full owner/key/source/payload identity
+     * and returned without a second insert. A new replay still locks the immutable terminal source
+     * before inserting a fresh {@code PENDING} child. Conflicting replay-key reuse intentionally
+     * remains fail-closed at the database uniqueness boundary until its dedicated error contract is
+     * introduced test-first.</p>
      *
      * @param sourceJobRecordId terminal durable job whose intent is being replayed
      * @param requestBody bounded JSON-array payload resupplied by the authenticated owner
      * @param rawReplayKey principal-scoped idempotency key for this replay request
      * @param principalName authenticated principal namespace
-     * @return newly created pending replay job
+     * @return newly created or previously committed replay job
      * @throws NullPointerException when the source job identifier is absent
      * @throws EtlRequestException when key, principal, or JSON validation fails
      */
@@ -158,6 +169,25 @@ public class EtlJobReplayService {
 
         String principalScopeHash = Sha256Digest.digest(validatedPrincipalName);
         String requestDigest = Sha256Digest.digest(requestBody);
+        String replayKeyHash = Sha256Digest.digest(
+                REPLAY_KEY_HASH_DOMAIN + principalScopeHash + ":" + validatedReplayKey
+        );
+        List<EtlJobReplay> existingReplays = jdbcTemplate.query(
+                SELECT_IDENTICAL_EXISTING_REPLAY_SQL,
+                (resultSet, rowNumber) -> new EtlJobReplay(
+                        resultSet.getObject("job_record_id", UUID.class),
+                        EtlJobStatus.valueOf(resultSet.getString("job_status")),
+                        true
+                ),
+                principalScopeHash,
+                replayKeyHash,
+                requestDigest,
+                validatedSourceJobRecordId
+        );
+        if (!existingReplays.isEmpty()) {
+            return existingReplays.getFirst();
+        }
+
         UUID lockedSourceJobRecordId = jdbcTemplate.queryForObject(
                 SELECT_FIRST_GENERATION_TERMINAL_SOURCE_SQL,
                 UUID.class,
@@ -166,9 +196,6 @@ public class EtlJobReplayService {
                 requestDigest
         );
         UUID replayJobRecordId = UUID.randomUUID();
-        String replayKeyHash = Sha256Digest.digest(
-                REPLAY_KEY_HASH_DOMAIN + principalScopeHash + ":" + validatedReplayKey
-        );
         jdbcTemplate.update(
                 INSERT_FIRST_GENERATION_REPLAY_SQL,
                 replayJobRecordId,
