@@ -130,6 +130,28 @@ class CanonicalDocumentationContractTest {
     }
 
     @Test
+    void capabilityStatusesAreBoundToSourceBackedClaims() throws IOException {
+        String traceability = read("docs/TRACEABILITY.md");
+        String apiContract = read("docs/API_CONTRACT.md");
+
+        for (String row : List.of(
+                "| bounded whole-batch ETL admission | `implemented_on_develop` |",
+                "| principal-scoped Idempotency-Key | `implemented_on_develop` |",
+                "| durable asynchronous intake/status | `implemented_on_develop` |",
+                "| owner cancellation / CANCELLED | `active_pr` #147 |",
+                "| production JWT Resource Server | `active_pr` #142 |",
+                "| protected gateway current state | `known_gap` |",
+                "| any-to-any canonical CDC | `planned` |"
+        )) {
+            assertTrue(traceability.contains(row), "Traceability misses capability/status binding: " + row);
+        }
+
+        assertTrue(apiContract.contains("`instance`, and `errorCode`"));
+        assertTrue(apiContract.contains("ProblemDetail.setInstance(...)"));
+        assertTrue(apiContract.contains("does not expose a separate public `path` alias"));
+    }
+
+    @Test
     void adrIndexCarriesCoreCrossCuttingDecisions() throws IOException {
         String index = read("docs/adr/README.md");
         for (String adr : List.of("0001", "0002", "0003", "0004", "0005", "0006", "0007", "0008")) {
