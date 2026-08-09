@@ -23,8 +23,8 @@ Evidence is always bound to the revision that produced it. `queued`, `pending`, 
 
 - Java runtime/compiler: 25.
 - Build: Maven Wrapper from the repository; root reactor is authoritative.
-- Spring Boot baseline: 3.5.9.
-- Spring Cloud baseline: 2025.0.1.
+- Spring Boot baseline: 3.5.16.
+- Spring Cloud baseline: 2025.0.3.
 - Debezium API/Embedded/PostgreSQL connector baseline: 3.4.0.Final.
 - PostgreSQL is the production ETL target and PostgreSQL logical replication is the shipped CDC source type.
 - Kafka is the current live CDC publication transport.
