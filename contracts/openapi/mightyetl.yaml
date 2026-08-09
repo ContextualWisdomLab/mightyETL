@@ -45,6 +45,8 @@ paths:
                 type: string
         '400':
           $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '409':
           $ref: '#/components/responses/Problem'
         '413':
@@ -84,6 +86,8 @@ paths:
                       additionalProperties: true
                   docs:
                     type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /api/etl/jobs:
     post:
       tags: [durable-jobs]
@@ -132,6 +136,8 @@ paths:
                 $ref: '#/components/schemas/EtlJobAcceptedResponse'
         '400':
           $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '409':
           $ref: '#/components/responses/Problem'
         '413':
@@ -174,6 +180,8 @@ paths:
                 $ref: '#/components/schemas/EtlJobStatusResponse'
         '400':
           $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/Problem'
         '500':
@@ -274,8 +282,15 @@ components:
       schema:
         type: string
   responses:
+    Unauthorized:
+      description: Authentication is required or the supplied HTTP Basic credentials are invalid.
+      headers:
+        WWW-Authenticate:
+          description: HTTP authentication challenge emitted by the Spring Security Basic entry point.
+          schema:
+            type: string
     Problem:
-      description: Typed ETL failure
+      description: Typed ETL failure after the request reaches the ETL application error boundary.
       headers:
         Cache-Control:
           description: Problem responses are not to be stored
