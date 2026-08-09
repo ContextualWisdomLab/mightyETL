@@ -300,8 +300,8 @@ class EtlJobServiceIntegrationTest {
                 )
         );
 
-        assertEquals(EtlRequestError.JOB_ALREADY_SUCCEEDED, successConflict.error());
-        assertEquals(EtlRequestError.JOB_ALREADY_FAILED, failureConflict.error());
+        assertEquals("etl_job_already_succeeded", successConflict.error().errorCode());
+        assertEquals("etl_job_already_failed", failureConflict.error().errorCode());
     }
 
     @Test
