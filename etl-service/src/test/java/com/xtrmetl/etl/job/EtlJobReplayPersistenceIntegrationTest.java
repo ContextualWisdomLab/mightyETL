@@ -21,6 +21,7 @@ import javax.sql.DataSource;
 import java.time.Instant;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -128,6 +129,40 @@ class EtlJobReplayPersistenceIntegrationTest {
         );
     }
 
+    @Test
+    void createsFirstGenerationPendingReplayFromCancelledSourceWithoutMutatingCancellationEvidence() {
+        UUID sourceJobRecordId = insertCancelledSource();
+        Instant sourceUpdatedAt = instantColumn(sourceJobRecordId, "updated_at");
+
+        EtlJobReplay replay = assertDoesNotThrow(() -> replayService.replayOwned(
+                sourceJobRecordId,
+                PAYLOAD,
+                REPLAY_KEY,
+                PRINCIPAL
+        ));
+
+        assertFalse(replay.replayed());
+        assertEquals(EtlJobStatus.PENDING, replay.jobStatus());
+        assertNotEquals(sourceJobRecordId, replay.jobRecordId());
+        assertEquals(
+                sourceJobRecordId,
+                uuidColumn(replay.jobRecordId(), "replay_source_job_record_id")
+        );
+        assertEquals(
+                sourceJobRecordId,
+                uuidColumn(replay.jobRecordId(), "replay_root_job_record_id")
+        );
+        assertEquals(1, integerColumn(replay.jobRecordId(), "replay_generation_count"));
+        assertEquals(PAYLOAD, textColumn(replay.jobRecordId(), "request_payload"));
+        assertEquals("CANCELLED", textColumn(sourceJobRecordId, "job_status"));
+        assertEquals(
+                EtlJobService.CANCELLED_BY_OWNER_CODE,
+                textColumn(sourceJobRecordId, "cancellation_code")
+        );
+        assertNull(textColumn(sourceJobRecordId, "request_payload"));
+        assertEquals(sourceUpdatedAt, instantColumn(sourceJobRecordId, "updated_at"));
+    }
+
     private UUID insertFailedSource(String submissionKey) {
         UUID sourceJobRecordId = UUID.randomUUID();
         jdbcTemplate.update(
@@ -143,6 +178,26 @@ class EtlJobReplayPersistenceIntegrationTest {
                 Sha256Digest.digest(submissionKey),
                 Sha256Digest.digest(PAYLOAD),
                 "etl_target_failure"
+        );
+        return sourceJobRecordId;
+    }
+
+    private UUID insertCancelledSource() {
+        UUID sourceJobRecordId = UUID.randomUUID();
+        jdbcTemplate.update(
+                """
+                INSERT INTO etl_job_records (
+                    job_record_id, principal_scope_hash, submission_key_hash,
+                    request_digest, request_payload, job_status, attempt_count,
+                    cancellation_key_hash, cancellation_code, job_cancelled_at
+                ) VALUES (?, ?, ?, ?, NULL, 'CANCELLED', 1, ?, ?, CURRENT_TIMESTAMP)
+                """,
+                sourceJobRecordId,
+                Sha256Digest.digest(PRINCIPAL),
+                Sha256Digest.digest("cancelled-original-submission-key"),
+                Sha256Digest.digest(PAYLOAD),
+                "d".repeat(64),
+                EtlJobService.CANCELLED_BY_OWNER_CODE
         );
         return sourceJobRecordId;
     }
