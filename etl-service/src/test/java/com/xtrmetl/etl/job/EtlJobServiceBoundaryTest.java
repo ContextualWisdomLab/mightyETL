@@ -7,15 +7,19 @@ import com.xtrmetl.etl.service.EtlRequestException;
 import com.xtrmetl.etl.service.EtlRequestLock;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -67,6 +71,28 @@ class EtlJobServiceBoundaryTest {
         assertEquals(EtlRequestError.JOB_SUBMISSION_IN_PROGRESS, exception.error());
         verify(requestLock).tryLock(anyString());
         verifyNoInteractions(jdbcTemplate);
+    }
+
+    @Test
+    void reportsPlatformFailureWhenRequiredSha256DigestIsUnavailable()
+            throws NoSuchAlgorithmException {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        EtlRequestLock requestLock = mock(EtlRequestLock.class);
+        EtlJobService service = service(jdbcTemplate, requestLock, new EtlBatchProperties());
+
+        try (MockedStatic<MessageDigest> messageDigests = mockStatic(MessageDigest.class)) {
+            messageDigests.when(() -> MessageDigest.getInstance("SHA-256"))
+                    .thenThrow(new NoSuchAlgorithmException("synthetic coverage probe"));
+
+            IllegalStateException exception = assertThrows(
+                    IllegalStateException.class,
+                    () -> service.findOwned(UUID.randomUUID(), "tenant_alpha")
+            );
+
+            assertEquals("SHA-256 is required by the Java platform", exception.getMessage());
+            assertEquals(NoSuchAlgorithmException.class, exception.getCause().getClass());
+        }
+        verifyNoInteractions(requestLock, jdbcTemplate);
     }
 
     @Test
