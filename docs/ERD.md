@@ -70,9 +70,9 @@ The local compose bootstrap creates this target table and synchronous `EtlServic
 
 This is the durable synchronous replay ledger. The primary key is a principal-scoped semantic idempotency hash, not a raw client key. `request_digest` binds replay to exact payload intent; `response_body` is committed in the same transaction as target writes.
 
-### `etl_job_records` — `implemented_on_develop`
+### `etl_job_records` — `implemented_on_develop` schema, `known_gap` runtime retention
 
-This table owns durable asynchronous job intake. Protected-develop status is restricted to `PENDING`, `RUNNING`, `SUCCEEDED`, `FAILED`. Active states retain `request_payload`; terminal states clear it by schema contract. The protected baseline does not yet contain lease, pagination, cancellation, or replay-lineage fields.
+This table owns durable asynchronous job intake. Protected-develop status is restricted to `PENDING`, `RUNNING`, `SUCCEEDED`, `FAILED`. V2 enforces a schema invariant that active rows have `request_payload IS NOT NULL` and terminal rows have `request_payload IS NULL`; however protected `develop` has no integrated worker that transitions accepted jobs to terminal state. Therefore runtime terminal clearing is **not** a shipped protected-develop execution capability, and an enabled intake can retain a pending payload indefinitely if no worker consumes it. Durable intake remains disabled by default; production enablement must account for this `known_gap` until the worker/retention lifecycle integrates. The protected baseline does not yet contain lease, pagination, cancellation, or replay-lineage fields.
 
 ### `users`, `roles`, `user_roles` — legacy persisted compatibility state
 
@@ -152,7 +152,8 @@ Before #148 leaves Draft, this section must be reconciled against its exact migr
 ## 7. Data lifecycle and privacy
 
 - raw authenticated principals and raw idempotency/cancellation keys are not stored in the durable ledgers;
-- request payload retention is bounded by lifecycle state and is cleared on terminal transitions as each protected migration integrates;
+- V2 constrains terminal rows to a null `request_payload`, but protected `develop` does not yet execute the worker transition that would realize terminal clearing; pending-payload lifetime is therefore a `known_gap` while intake is enabled without a worker;
+- request-payload retention must become operationally bounded by an integrated worker/lifecycle or an explicit retention policy before durable intake is promoted beyond its disabled-by-default protected baseline;
 - payloads, principal hashes, key hashes, lease identifiers, SQL, and internal errors are not ordinary response/metric data;
 - hashes are pseudonymous internal security data, not safe public identifiers;
 - external connector side effects are not represented as transactionally rolled back unless the connector participates in the same atomic boundary or provides its own tested compensation/idempotency contract.
