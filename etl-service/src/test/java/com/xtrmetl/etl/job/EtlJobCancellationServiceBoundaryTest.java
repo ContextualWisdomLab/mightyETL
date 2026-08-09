@@ -97,6 +97,19 @@ class EtlJobCancellationServiceBoundaryTest {
         assertEquals(EtlRequestError.JOB_CANCELLATION_IN_PROGRESS, exception.error());
     }
 
+    @Test
+    void failsClosedWhenUpdateCountClaimsTransitionButReturnedRowIsStillActive() {
+        TransactionSynchronizationManager.setActualTransactionActive(true);
+        EtlJobService service = service(new UnchangedPendingJobJdbcTemplate(JOB_RECORD_ID, 1));
+
+        EtlRequestException exception = assertThrows(
+                EtlRequestException.class,
+                () -> service.cancelOwned(JOB_RECORD_ID, CANCELLATION_KEY, "tenant_alpha")
+        );
+
+        assertEquals(EtlRequestError.JOB_CANCELLATION_IN_PROGRESS, exception.error());
+    }
+
     private static EtlJobService service(JdbcTemplate jdbcTemplate) {
         return new EtlJobService(
                 jdbcTemplate,
@@ -112,19 +125,25 @@ class EtlJobCancellationServiceBoundaryTest {
     }
 
     /**
-     * Deterministic JDBC double for the concurrency branch where another writer retains PENDING.
+     * Deterministic JDBC double for concurrency boundaries that return an unchanged PENDING row.
      */
     private static final class UnchangedPendingJobJdbcTemplate extends JdbcTemplate {
 
         private final UUID jobRecordId;
+        private final int updatedRows;
 
         private UnchangedPendingJobJdbcTemplate(UUID jobRecordId) {
+            this(jobRecordId, 0);
+        }
+
+        private UnchangedPendingJobJdbcTemplate(UUID jobRecordId, int updatedRows) {
             this.jobRecordId = jobRecordId;
+            this.updatedRows = updatedRows;
         }
 
         @Override
         public int update(String sql, Object... args) {
-            return 0;
+            return updatedRows;
         }
 
         @Override
