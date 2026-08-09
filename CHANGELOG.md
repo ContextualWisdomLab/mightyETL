@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Owner-scoped durable-job status responses now emit deterministic weak SHA-256 `ETag` validators; ordinary and wildcard `If-None-Match` requests return an empty RFC 9110 `304 Not Modified` response only after authenticated owner-safe lookup, while `Cache-Control: no-store` remains unchanged.
 - Active durable-job status responses now emit an RFC 9110 `Retry-After` delay for `PENDING` and `RUNNING` states only when local worker execution is enabled, derived from the bounded worker fixed-delay configuration with upward whole-second rounding; terminal states and intake-only maintenance mode omit the advisory.
 - Durable job operators can now list only their own jobs through bounded newest-first keyset pagination with canonical opaque cursors, deterministic timestamp-plus-UUID ordering, `Cache-Control: no-store`, and RFC 8288 next-page links without offset drift or cross-tenant existence leakage.
 - The durable job pagination index uses PostgreSQL `CREATE INDEX CONCURRENTLY` with migration-local Flyway `executeInTransaction=false`, preserving production writers while documenting invalid-index recovery and concurrent rollback.
@@ -37,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Deterministic ordinary, wildcard, changed-state, changed-failure-code, null-versus-empty, and unrelated-response conditional polling tests, complete controller Javadoc, privacy and rollback guidance, and APA 7th standards evidence in `docs/etl/durable-job-polling.md`.
 - Controller-scoped polling advice, deterministic active/terminal lifecycle tests, disabled-worker fail-closed behavior, sub-second rounding coverage, rollback guidance, and APA 7th standards evidence in `docs/etl/durable-job-polling.md`.
 - Owner-scoped durable job list models and HTTP contract, strict cursor and page-limit validation, one-extra-row next-page detection, the descriptive `etl_job_owner_pagination_index`, deterministic tenant-isolation and equal-timestamp tests, migration rollback guidance, and APA 7th standards evidence in `docs/etl/durable-job-intake.md`.
 - Test-first doctoring for external-wait progress, root-cause analysis, realistic remediation feasibility, exact post-action verification, source-actionable pull-request classification, invalid-stack isolation, and read-only dependency leases in `docs/doctoring/hourly-opencode-nonblocking-progress-evidence.md`.
@@ -151,7 +153,7 @@ Through code analysis, identified the platform as:
 - Microservices-based architecture using Spring Cloud
 - Real-time Change Data Capture using Debezium
 - Event streaming via Apache Kafka
-- Service discovery with Netflix Eureka
+- Service discovery and registration
 - Distributed tracing with Zipkin
 
 #### Key Components Documented
@@ -173,7 +175,7 @@ Through code analysis, identified the platform as:
    - API Gateway with routing
    - JWT authentication filter
    - Load balancing
-   - Request routing to services
+   - Request routing to ETL/CDC services
 
 4. **Eureka Server** (Port 8761)
    - Service discovery
