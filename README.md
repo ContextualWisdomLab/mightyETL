@@ -111,14 +111,22 @@ Protected-develop public surfaces:
 
 Key behavior:
 
+- Bounded, fully prevalidated, transaction-scoped request batches;
 - exact UTF-8 byte and record-count limits;
 - strict JSON parsing/validation before target writes;
 - deterministic uppercase/lowercase/decimal transformations;
 - one transaction for accepted synchronous rows;
-- retry only for transient data-access failures;
+- Retry limited to transient database failures;
 - RFC 9457 typed failure responses;
 - optional principal-scoped idempotency with `Idempotency-Replayed` evidence;
 - durable intake disabled by default until deliberately enabled by the operator.
+
+Error and retry contract:
+
+- typed failures are returned as `application/problem+json` and documented in [problem details](docs/api/problem-details.md);
+- deterministic admission, validation, and conflict outcomes use the documented `400/409/413/422` family and are not generic retry signals;
+- `503` represents a transient target-unavailable boundary and may be retried only with bounded backoff and an idempotency strategy appropriate to the operation;
+- Do not automatically retry `500`; investigate the unexpected failure and confirm request safety before replay.
 
 Detailed contracts:
 
@@ -254,4 +262,4 @@ Do not release because one PR is green. A release requires the exact integrated 
 
 ## License
 
-See [LICENSE](LICENSE).
+No repository license file is present on the protected baseline assessed by this documentation set. Do not assume redistribution or reuse rights; establish and review the intended license before external distribution or acquisition diligence relies on one.
