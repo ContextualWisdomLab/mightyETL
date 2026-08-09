@@ -36,7 +36,7 @@ A capability changes status only after its authoritative source/persistence/API 
 | production JWT Resource Server | `active_pr` #142 | gateway replacement branch | registered-chain runtime tests | ADR-0005 |
 | protected gateway current state | `known_gap` | `JwtAuthenticationFilter` literal `valid_token` | placeholder tests only | ADR-0005, THREAT_MODEL |
 | target connector lifecycle/catalog | `implemented_on_develop` | `TargetConnectorDispatcher`, `GET /api/etl/connectors` | connector lifecycle/catalog tests | ADR-0007, connector docs |
-| any-to-any canonical CDC | `planned` / partial scaffold | registry/mapper scaffold; live path remains raw PostgreSQL→Kafka | mapper/SPI tests | `docs/cdc/any-to-any-cdc.md` |
+| any-to-any canonical CDC | `planned` | partial registry/mapper scaffold; live path remains raw PostgreSQL→Kafka | mapper/SPI tests prove scaffold only | `docs/cdc/any-to-any-cdc.md` |
 
 ## 3. CI, security, and automation traceability
 
