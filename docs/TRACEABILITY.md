@@ -1,7 +1,7 @@
 # Requirement, Decision, Implementation, and Evidence Traceability
 
 **Protected baseline:** `develop@622e5e6c3d534f230c390f10e3832efadfc01825`  
-**Last reconciled:** 2026-08-09
+**Last reconciled:** 2026-08-10
 
 This matrix prevents chat history, issue bodies, or active PR descriptions from silently becoming product truth.
 
@@ -35,6 +35,7 @@ A capability changes status only after its authoritative source/persistence/API 
 | graceful CDC stop completion | `planned` issue #141 | protected `CdcService.stop()` remains early-clear | deterministic Future/latch RED required before source repair | ADR-0004, OPERABILITY |
 | production JWT Resource Server | `active_pr` #142 | gateway replacement branch | registered-chain runtime tests | ADR-0005 |
 | protected gateway current state | `known_gap` | `JwtAuthenticationFilter` literal `valid_token` | placeholder tests only | ADR-0005, THREAT_MODEL |
+| direct ETL service authentication | `known_gap` issue #161 | protected ETL service remains independently reachable and uses local HTTP Basic without a supported service-identity/token-relay contract from the gateway | authenticated east-west/direct-service boundary requires purpose-bound service authentication and runtime integration evidence | SECURITY, THREAT_MODEL, issue #161 |
 | target connector lifecycle/catalog | `implemented_on_develop` | `TargetConnectorDispatcher`, `GET /api/etl/connectors` | connector lifecycle/catalog tests | ADR-0007, connector docs |
 | any-to-any canonical CDC | `planned` | partial registry/mapper scaffold; live path remains raw PostgreSQL→Kafka | mapper/SPI tests prove scaffold only | `docs/cdc/any-to-any-cdc.md` |
 | legacy local-auth bootstrap retirement | `active_pr` #155 | default Docker PostgreSQL init plus explicit compatibility artifact | `LegacyAuthBootstrapRetirementTest` and exact-head PR evidence | issue #150, ERD/data-governance follow-through |
@@ -42,7 +43,14 @@ A capability changes status only after its authoritative source/persistence/API 
 | machine-readable OpenAPI and AsyncAPI contracts | `active_pr` #157 | checked-in HTTP/Kafka contract artifacts on branch | `MachineReadableApiContractTest`; validator/schema proof still required before merge | issue #152, API contract |
 | MySQL CDC scaffold removal from production discovery | `active_pr` #158 | MySQL reference scaffold loses Spring production discovery | `CdcSourceRegistryTest`; shared Jackson security failure tracked separately | issue #153, ADR-0007 |
 | shared Jackson security baseline | `active_pr` #160 | direct-develop Maven dependency management imports Jackson 2.21.5 BOM before Spring Boot | `JacksonSecurityBaselineTest`; CVE-2026-54515, CVE-2026-59889, GHSA-mhm7-754m-9p8w must disappear from accepted security evidence | `docs/doctoring/jackson-2.21.5-security-baseline.md` |
-| non-vacuous durable-job coverage gate | `known_gap` issue #162 | protected JaCoCo plugin-level dotted include patterns are reused where report/check expect class-file filters | hosted CI logged `Analyzed bundle with 0 classes` and still passed JaCoCo checks; repair is sequenced after overlapping #157 POM work stabilizes | issue #162, `docs/TEST_STRATEGY.md` |
+| non-vacuous durable-job coverage gate | `known_gap` issue #162 | protected JaCoCo plugin-level dotted include patterns are reused where report/check expect class-file filters | hosted CI logged `Analyzed bundle with 0 classes` and still passed JaCoCo checks; do not claim 100% coverage from this control | issue #162, `docs/TEST_STRATEGY.md` |
+| non-vacuous coverage repair | `active_pr` #164 | direct-`develop` JaCoCo report/check use class-file filters plus a BUNDLE class-count invariant | current PR evidence analyzes eight production classes; merge acceptance still requires accepted source identity and review | issue #162, `docs/TEST_STRATEGY.md` |
+| SQL Server CDC scaffold retirement | `active_pr` #163 | SQL Server reference scaffold loses Spring production discovery | factory/registry tests prove configured use reports `unknown_source_type`; active PR is not shipped truth | issue #153, ADR-0007 |
+| release artifact provenance | `planned` issue #165 | no protected release/provenance acceptance implementation yet | exact integrated protected head plus artifact/SBOM/provenance/reproducibility acceptance required | release/provenance authority |
+| bundled Zipkin transport repair | `active_pr` #167 | Compose branch maps host 9412 to container 9411 and services use the internal 9411 endpoint | `DockerComposeZipkinTransportTest`; current feature evidence remains PR evidence until protected integration | issue #166, OPERABILITY |
+| repository runtime supply-chain cleanup | `active_pr` #169 | `.replit` branch stops opaque JAR execution, mutable remote-script piping, and duplicate service delegates | `RepositoryRuntimeSupplyChainTest`; tracked root `zipkin.jar` cleanup remains issue #168 follow-through | issue #168, SECURITY/OPERABILITY |
+| secure Maven Central transport | `planned` issue #170 | repository/bootstrap defaults still require an explicit supported HTTPS transport contract | source/runtime transport contract must be implemented test-first | supply-chain/release controls |
+| deterministic Maven plugin versions | `planned` issue #171 | reproducible build authority is incomplete while relevant plugin versions remain implicit | source/build pinning contract and reproducibility proof required | supply-chain/release controls |
 | canonical documentation spine | `active_pr` #149 | PRD/TRD/Architecture/ADR/UML/ERD/API/Security/Test/Operability/Traceability branch | canonical + live commercial documentation contract tests | ADR-0001 |
 | live documentation coverage and traceability closure | `planned` issue #159 | no protected implementation; follow-through tracker for post-#149 drift | source-backed documentation consistency acceptance | `docs/DOCUMENTATION_ASSESSMENT.md` |
 | explicit repository licensing/copyright policy | `planned` issue #151 | no authorized root license decision on protected baseline | owner/legal/product decision plus packaging/SBOM evidence required | acquisition-diligence boundary |
@@ -58,7 +66,7 @@ A capability changes status only after its authoritative source/persistence/API 
 | NVIDIA model credential | `active_pr` #121 | `NVIDIA_NIM_API_KEY` | never substitute `COPILOT_GITHUB_TOKEN` |
 | independent counted review route | `known_gap` | repository/CWL governance plus read-only central reviewer routing | formal non-author APPROVED only where required; current autonomous route must be proven operational |
 | branch-wide writer CAS | `active_pr` #121 | deterministic publisher / scheduler operating contract | exact live parent + prepared descendant + `force=false` ref update; file-CAS fallback requires final ancestry proof |
-| non-vacuous owned-production coverage | `known_gap` issue #162 | `etl-service` JaCoCo configuration | report/check must select the intended compiled class-file set and fail when that set is empty before 100% may be claimed |
+| non-vacuous owned-production coverage | `known_gap` issue #162 | protected `etl-service` JaCoCo configuration; repair `active_pr` #164 | report/check must select the intended compiled class-file set and fail when that set is empty before 100% may be claimed |
 
 ## 4. Conversation-to-repository reconciliation
 
@@ -75,11 +83,15 @@ A capability changes status only after its authoritative source/persistence/API 
 | Kafka acknowledgement before offset progress | `active_pr` #139 |
 | CDC stop must await actual task completion | `planned` issue #141 |
 | gateway example token must be replaced by real Resource Server JWT | `active_pr` #142 |
+| independently reachable ETL traffic requires a supported service-identity boundary | `known_gap` issue #161; do not assume gateway-only reachability |
 | default clean installs must stop recreating abandoned local-auth persistence | `active_pr` #155; existing-volume compatibility remains explicit and non-destructive |
-| scaffold connectors must be productionized or removed from production discovery | `active_pr` #156/#158 plus issue #153 for remaining connectors |
+| scaffold connectors must be productionized or removed from production discovery | `active_pr` #156/#158/#163 plus issue #153 for remaining connectors |
 | public HTTP/event contracts need machine-readable artifacts | `active_pr` #157; active-PR routes must not be promoted to protected truth |
 | inherited Jackson findings must be fixed at the shared dependency boundary | `active_pr` #160 uses Jackson 2.21.5 LTS BOM; no CVE suppression or feature-branch duplication |
-| 100% coverage claims must fail closed on an empty production target set | `known_gap` issue #162; current JaCoCo class-file selection can yield a vacuous pass and must be repaired after overlapping POM work stabilizes |
+| 100% coverage claims must fail closed on an empty production target set | `known_gap` issue #162; repair is `active_pr` #164 and is no longer sequenced behind #157 |
+| bundled tracing must use Zipkin's real internal collector port while preserving an explicit host compatibility contract | `active_pr` #167; not shipped until protected integration |
+| repository launch paths must not execute opaque binaries or mutable remote scripts as trusted bootstrap | `active_pr` #169 plus issue #168 follow-through |
+| build and dependency transport must be reproducible and secure by default | `planned` issues #170/#171 |
 | licensing/copyright must be explicit before acquisition/release claims | `planned` issue #151; automation must not invent a license |
 | standalone and MSA both matter | ADR-0007 + Architecture |
 | PII masking cannot destroy operational utility | ADR-0008 + Security/Threat Model |
