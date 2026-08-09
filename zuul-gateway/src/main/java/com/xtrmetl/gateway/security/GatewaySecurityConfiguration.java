@@ -3,12 +3,17 @@ package com.xtrmetl.gateway.security;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.convert.converter.Converter;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.config.Customizer;
+import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
+import org.springframework.security.oauth2.jwt.BadJwtException;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.security.web.server.authentication.HttpStatusServerEntryPoint;
+import reactor.core.publisher.Mono;
 
 import java.util.Locale;
 
@@ -20,8 +25,8 @@ import java.util.Locale;
  * It exposes only the narrow actuator health and information endpoints and denies all routed
  * application traffic. Operators enable standards-based bearer authentication explicitly with
  * {@code mightyetl.gateway.security.mode=jwt} and Spring Boot's supported reactive resource-server
- * JWT properties. In JWT mode, Spring Security validates bearer tokens before requests can reach
- * the ETL or CDC routes.</p>
+ * JWT properties. In JWT mode, Spring Security validates bearer tokens and requires a non-blank
+ * stable subject before requests can reach the ETL or CDC routes.</p>
  */
 @Configuration
 @EnableWebFluxSecurity
@@ -37,8 +42,9 @@ public class GatewaySecurityConfiguration {
      * <p>{@code deny} is the secure standalone default. {@code jwt} enables OAuth 2.0 Resource
      * Server JWT authentication and therefore also requires a valid {@code ReactiveJwtDecoder}
      * supplied through supported Spring Boot issuer, JWK-set, public-key configuration, or an
-     * explicit application bean. Unknown values fail application startup instead of silently
-     * weakening authentication.</p>
+     * explicit application bean. A decoder-validated JWT must also contain a non-blank stable
+     * {@code sub} claim; missing or blank subjects fail authentication before routing. Unknown
+     * mode values fail application startup instead of silently weakening authentication.</p>
      *
      * @param http Spring Security's reactive HTTP security builder
      * @param configuredMode configured gateway security mode; defaults to {@code deny}
@@ -69,12 +75,30 @@ public class GatewaySecurityConfiguration {
                             .pathMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
                             .pathMatchers("/etl/**", "/cdc/**").authenticated()
                             .anyExchange().denyAll())
-                    .oauth2ResourceServer(resourceServer -> resourceServer.jwt(Customizer.withDefaults()))
+                    .oauth2ResourceServer(resourceServer -> resourceServer.jwt(jwt ->
+                            jwt.jwtAuthenticationConverter(stableSubjectAuthenticationConverter())
+                    ))
                     .build();
         }
         throw new IllegalArgumentException(
                 "Unsupported " + SECURITY_MODE_PROPERTY + " value: " + configuredMode
         );
+    }
+
+    private static Converter<Jwt, Mono<? extends AbstractAuthenticationToken>>
+    stableSubjectAuthenticationConverter() {
+        JwtAuthenticationConverter delegate = new JwtAuthenticationConverter();
+        return jwt -> {
+            String subject = jwt.getSubject();
+            if (subject == null || subject.isBlank()) {
+                return Mono.error(new BadJwtException("JWT subject is required"));
+            }
+            AbstractAuthenticationToken authentication = delegate.convert(jwt);
+            if (authentication == null) {
+                return Mono.error(new BadJwtException("JWT authentication conversion failed"));
+            }
+            return Mono.just(authentication);
+        };
     }
 
     private static void disableBrowserSessionFeatures(ServerHttpSecurity http) {
