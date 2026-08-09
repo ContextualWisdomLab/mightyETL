@@ -19,7 +19,7 @@ This README distinguishes protected `develop` behavior from open work. Canonical
 | Truthful graceful CDC stop completion | **planned issue #141** | Protected `stop()` clears task references before proving async engine completion |
 | Gateway production JWT Resource Server | **active_pr #142** | Protected gateway still has the `valid_token` example-token placeholder |
 | PostgreSQL ETL target | **implemented_on_develop** | Primary production load path |
-| Databricks / Snowflake / Qlik | **scaffold** | Discovery/configuration surfaces only; do not market as production loaders |
+| Databricks / Snowflake / Qlik | **known_gap** | Scaffold-only discovery/configuration surfaces; do not market as production loaders |
 | Literal-head CI/SBOM + hourly NVIDIA OpenCode maintenance | **active_pr #121** | Protected develop still uses default PR checkout semantics |
 
 **Do not market active PRs, scaffolds, or historical reverse-engineering designs as shipped capability.**
