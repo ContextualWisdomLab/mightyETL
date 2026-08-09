@@ -71,6 +71,7 @@ class EtlJobPollingAdviceTest {
 
         assertTerminalHeaderRemoved(advice, EtlJobStatus.SUCCEEDED);
         assertTerminalHeaderRemoved(advice, EtlJobStatus.FAILED);
+        assertTerminalHeaderRemoved(advice, EtlJobStatus.CANCELLED);
     }
 
     @Test
