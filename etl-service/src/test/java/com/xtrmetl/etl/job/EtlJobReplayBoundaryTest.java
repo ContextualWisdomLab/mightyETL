@@ -23,6 +23,8 @@ class EtlJobReplayBoundaryTest {
     );
     private static final String PAYLOAD = "[{\"id\":\"record_alpha\"}]";
     private static final String REPLAY_KEY = "1e05bdca-447c-4ad3-882c-e33963ce517c";
+    private static final String PERSISTENCE_NOT_AVAILABLE =
+            "Durable ETL job replay persistence is not yet available";
 
     @Test
     void replayResultRequiresIdentityAndStatusButPreservesCurrentState() {
@@ -114,6 +116,10 @@ class EtlJobReplayBoundaryTest {
         );
         assertErrorCode(
                 "etl_invalid_json",
+                () -> service.replayOwned(SOURCE_ID, " ", REPLAY_KEY, "tenant_alpha")
+        );
+        assertErrorCode(
+                "etl_invalid_json",
                 () -> service.replayOwned(SOURCE_ID, "null", REPLAY_KEY, "tenant_alpha")
         );
         assertErrorCode(
@@ -124,6 +130,35 @@ class EtlJobReplayBoundaryTest {
                 "etl_invalid_json",
                 () -> service.replayOwned(SOURCE_ID, "{}", REPLAY_KEY, "tenant_alpha")
         );
+        verifyNoInteractions(jdbcTemplate);
+    }
+
+    @Test
+    void acceptsRawAndStructuredReplayKeysThenFailsClosedBeforePersistence() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        EtlJobReplayService service = new EtlJobReplayService(
+                jdbcTemplate,
+                new ObjectMapper(),
+                new EtlBatchProperties(),
+                hash -> true
+        );
+
+        IllegalStateException rawKeyFailure = assertThrows(
+                IllegalStateException.class,
+                () -> service.replayOwned(SOURCE_ID, PAYLOAD, REPLAY_KEY, "tenant_alpha")
+        );
+        assertEquals(PERSISTENCE_NOT_AVAILABLE, rawKeyFailure.getMessage());
+
+        IllegalStateException structuredKeyFailure = assertThrows(
+                IllegalStateException.class,
+                () -> service.replayOwned(
+                        SOURCE_ID,
+                        PAYLOAD,
+                        "\"" + REPLAY_KEY + "\"",
+                        "tenant_alpha"
+                )
+        );
+        assertEquals(PERSISTENCE_NOT_AVAILABLE, structuredKeyFailure.getMessage());
         verifyNoInteractions(jdbcTemplate);
     }
 
