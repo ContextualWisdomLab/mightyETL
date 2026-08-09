@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Ensures that newly opened material commercial-readiness work is reconciled into the canonical
- * traceability graph instead of living only in pull-request bodies.
+ * traceability graph instead of living only in pull-request or issue bodies.
  */
 class LiveCommercialTraceabilityTest {
 
@@ -20,10 +20,7 @@ class LiveCommercialTraceabilityTest {
 
     @Test
     void sharedJacksonSecurityRepairIsTrackedAsUnshippedLiveWork() throws IOException {
-        String traceability = Files.readString(
-                PROJECT_ROOT.resolve("docs/TRACEABILITY.md"),
-                StandardCharsets.UTF_8
-        );
+        String traceability = readTraceability();
 
         assertTrue(
                 traceability.contains("| shared Jackson security baseline | `active_pr` #160 |"),
@@ -33,6 +30,26 @@ class LiveCommercialTraceabilityTest {
         assertTrue(traceability.contains("CVE-2026-54515"));
         assertTrue(traceability.contains("CVE-2026-59889"));
         assertTrue(traceability.contains("GHSA-mhm7-754m-9p8w"));
+    }
+
+    @Test
+    void vacuousCoverageGateIsTrackedAsAProtectedKnownGap() throws IOException {
+        String traceability = readTraceability();
+
+        assertTrue(
+                traceability.contains("| non-vacuous durable-job coverage gate | `known_gap` issue #162 |"),
+                "A protected quality gate that analyzes zero production classes must be visible as a known gap"
+        );
+        assertTrue(traceability.contains("Analyzed bundle with 0 classes"));
+        assertTrue(traceability.contains("JaCoCo"));
+        assertTrue(traceability.contains("class-file"));
+    }
+
+    private static String readTraceability() throws IOException {
+        return Files.readString(
+                PROJECT_ROOT.resolve("docs/TRACEABILITY.md"),
+                StandardCharsets.UTF_8
+        );
     }
 
     /** Finds the repository root from root- or module-scoped Maven execution. */
