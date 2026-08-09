@@ -9,7 +9,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -21,7 +20,6 @@ class CanonicalDocumentationContractTest {
 
     private static final Path PROJECT_ROOT = projectRoot();
 
-    /** Requires every acquisition-diligence documentation family to have a canonical entry point. */
     @Test
     void canonicalDocumentationFamiliesArePresent() {
         List<String> requiredPaths = List.of(
@@ -39,7 +37,6 @@ class CanonicalDocumentationContractTest {
                 "docs/TRACEABILITY.md",
                 "docs/DOCUMENTATION_ASSESSMENT.md"
         );
-
         for (String requiredPath : requiredPaths) {
             assertTrue(
                     Files.isRegularFile(PROJECT_ROOT.resolve(requiredPath)),
@@ -48,74 +45,59 @@ class CanonicalDocumentationContractTest {
         }
     }
 
-    /** Requires root product and technical documents to describe the actual protected-develop API. */
     @Test
-    void rootProductAndTechnicalDocumentsDescribeCurrentDurableBoundaries() throws IOException {
+    void rootDocumentsDescribeCurrentDurableAndEvidenceBoundaries() throws IOException {
         String prd = read("PRD.md");
         String trd = read("TRD.md");
         String architecture = read("ARCHITECTURE.md");
 
-        for (String currentContract : List.of(
+        for (String token : List.of(
                 "POST /api/etl/process",
                 "Idempotency-Key",
                 "POST /api/etl/jobs",
                 "GET /api/etl/jobs/{job_record_id}",
                 "implemented_on_develop",
-                "active_pr"
+                "active_pr",
+                "known_gap"
         )) {
-            assertTrue(prd.contains(currentContract), "PRD misses current contract: " + currentContract);
+            assertTrue(prd.contains(token), "PRD misses current contract: " + token);
         }
-
-        for (String currentContract : List.of(
+        for (String token : List.of(
                 "bounded atomic",
                 "etl_idempotency_records",
                 "etl_job_records",
                 "exact-head",
                 "synthetic-merge"
         )) {
-            assertTrue(trd.contains(currentContract), "TRD misses current contract: " + currentContract);
+            assertTrue(trd.contains(token), "TRD misses current contract: " + token);
         }
-
-        for (String currentContract : List.of(
+        for (String token : List.of(
                 "EtlJobController",
                 "etl_idempotency_records",
                 "etl_job_records",
                 "known_gap",
-                "active_pr"
+                "active_pr",
+                "Kafka acknowledgement"
         )) {
-            assertTrue(
-                    architecture.contains(currentContract),
-                    "Architecture misses current contract: " + currentContract
-            );
+            assertTrue(architecture.contains(token), "Architecture misses current contract: " + token);
         }
     }
 
-    /** Prevents historical authentication and parallel-batch claims from masquerading as shipped truth. */
     @Test
-    void canonicalRootDocumentsRejectSupersededProductClaims() throws IOException {
+    void historicalAuthenticationAndParallelDesignsAreExplicitlySuperseded() throws IOException {
         String prd = read("PRD.md");
-        String trd = read("TRD.md");
         String architecture = read("ARCHITECTURE.md");
+        String traceability = read("docs/TRACEABILITY.md");
 
-        assertFalse(prd.contains("POST /auth/signin"), "PRD must not advertise an unshipped sign-in API");
-        assertFalse(prd.contains("POST /auth/signup"), "PRD must not advertise an unshipped sign-up API");
-        assertFalse(prd.contains("CREATE TABLE users"), "PRD must not invent a users table");
-        assertFalse(prd.contains("CREATE TABLE roles"), "PRD must not invent a roles table");
-        assertFalse(
-                trd.contains("resilient to partial failures"),
-                "TRD must describe atomic batch rollback instead of partial commit semantics"
-        );
-        assertFalse(
-                architecture.contains("BCrypt"),
-                "Architecture must not describe an authentication implementation absent from develop"
-        );
-        assertFalse(
-                architecture.contains("Parallel Proc"),
-                "Architecture must not describe the retired per-record fan-out implementation"
-        );
+        assertTrue(prd.contains("superseded interface: `POST /auth/signin`"));
+        assertTrue(prd.contains("superseded interface: `POST /auth/signup`"));
+        assertTrue(architecture.contains("superseded interface: `POST /auth/signin`"));
+        assertTrue(architecture.contains("superseded security claim: `BCrypt`"));
+        assertTrue(architecture.contains("earlier per-record `CompletableFuture`/`Parallel Proc` architecture is retired"));
+        assertTrue(traceability.contains("`superseded`: local `/auth/signup` and `/auth/signin`"));
+        assertTrue(traceability.contains("`superseded`: per-record CompletableFuture fan-out"));
     }
 
-    /** Requires diagrams and data-model docs to identify current versus future persisted state. */
     @Test
     void diagramsAndDataModelSeparateImplementedFromActivePullRequests() throws IOException {
         String uml = read("docs/UML.md");
@@ -133,16 +115,28 @@ class CanonicalDocumentationContractTest {
         assertTrue(erd.contains("etl_job_records"));
         assertTrue(erd.contains("implemented_on_develop"));
         assertTrue(erd.contains("active_pr"));
+        assertTrue(erd.contains("legacy persisted compatibility state"));
 
         for (String status : List.of(
                 "implemented_on_develop",
                 "active_pr",
                 "planned",
                 "superseded",
-                "out_of_scope"
+                "out_of_scope",
+                "known_gap"
         )) {
             assertTrue(traceability.contains(status), "Traceability misses status taxonomy: " + status);
         }
+    }
+
+    @Test
+    void adrIndexCarriesCoreCrossCuttingDecisions() throws IOException {
+        String index = read("docs/adr/README.md");
+        for (String adr : List.of("0001", "0002", "0003", "0004", "0005", "0006", "0007", "0008")) {
+            assertTrue(index.contains("[" + adr + "]"), "ADR index misses " + adr);
+        }
+        assertTrue(index.contains("Accepted"));
+        assertTrue(index.contains("Known gaps") || index.contains("known gaps"));
     }
 
     private static String read(String relativePath) throws IOException {

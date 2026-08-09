@@ -1,664 +1,331 @@
 # mightyETL System Architecture
 
-## System Architecture Overview
+**Canonical protected baseline:** `develop@622e5e6c3d534f230c390f10e3832efadfc01825`  
+**Last reconciled:** 2026-08-09
 
-This document provides a comprehensive view of the mightyETL platform architecture,
-component interactions, and data flow.
+This document describes the architecture that actually exists on protected `develop`, then overlays open work with an explicit `active_pr` label. A diagram containing an active PR is not a statement that the feature is deployed.
 
-> Product name: **mightyETL** (formerly xtrmETL). Runtime packages remain `com.xtrmetl.*` for compatibility — see [docs/rebrand-name-matrix.md](docs/rebrand-name-matrix.md).
+## 1. Architecture Status Vocabulary
 
-## 1. High-Level Architecture
+- `implemented_on_develop` — protected baseline reality.
+- `active_pr` — open PR only.
+- `planned` — issue/design, no protected implementation.
+- `superseded` — historical path, not an integration target.
+- `out_of_scope` — intentionally excluded.
+- `known_gap` — protected behavior with a material limitation.
 
-```text
-┌─────────────────────────────────────────────────────────────────────────┐
-│                            External Clients                              │
-│                     (Web Apps, CLI Tools, Services)                      │
-└────────────────────────────────┬────────────────────────────────────────┘
-                                 │ HTTPS/HTTP
-                                 │ JWT Token
-                                 v
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         Zuul API Gateway (8080)                          │
-│  ┌───────────────────┐  ┌──────────────────┐  ┌───────────────────┐   │
-│  │ Authentication    │  │  Request Routing │  │ Load Balancing    │   │
-│  │ Filter (JWT)      │  │  /etl/** /cdc/** │  │                   │   │
-│  └───────────────────┘  └──────────────────┘  └───────────────────┘   │
-└──────────┬────────────────────────────────────────────┬────────────────┘
-           │                                            │
-           v                                            v
-┌──────────────────────────┐              ┌──────────────────────────────┐
-│   ETL Service (8000)     │              │   CDC Service (8001)         │
-│  ┌────────────────────┐  │              │  ┌────────────────────────┐ │
-│  │ EtlController      │  │              │  │ CdcController          │ │
-│  │ /api/etl/process   │  │              │  │ /api/cdc/start | stop    │ │
-│  └──────────┬─────────┘  │              │  └────────┬───────────────┘ │
-│             v             │              │            v                 │
-│  ┌────────────────────┐  │              │  ┌────────────────────────┐ │
-│  │ EtlService         │  │              │  │ CdcService (Debezium)  │ │
-│  │ - Extract          │  │              │  │ - PostgreSQL Connector │ │
-│  │ - Transform        │  │              │  │ - Change Detection     │ │
-│  │ - Load             │  │              │  │ - Event Publishing     │ │
-│  │ - Parallel Proc    │  │              │  └────────┬───────────────┘ │
-│  └──────────┬─────────┘  │              │            │                 │
-│             v             │              │            v                 │
-│  ┌────────────────────┐  │              │  ┌────────────────────────┐ │
-│  │ JDBC Template      │  │              │  │ KafkaTemplate          │ │
-│  └──────────┬─────────┘  │              │  └────────┬───────────────┘ │
-└─────────────┼────────────┘              └────────────┼─────────────────┘
-              │                                        │
-              v                                        v
-┌──────────────────────────┐              ┌──────────────────────────────┐
-│  PostgreSQL (Target DB)  │              │   Apache Kafka               │
-│  ┌────────────────────┐  │              │  ┌────────────────────────┐ │
-│  │ processed_data     │  │              │  │ Topics:                │ │
-│  │ users              │  │              │  │ - xtrmetl-cdc.*.table  │ │
-│  │ roles              │  │              │  │                        │ │
-│  │ user_roles         │  │              │  └────────────────────────┘ │
-│  └────────────────────┘  │              └──────────────────────────────┘
-└──────────────────────────┘                           │
-                                                       v
-                                          ┌──────────────────────────────┐
-                                          │   Downstream Consumers       │
-                                          │   (Other Services, Analytics)│
-                                          └──────────────────────────────┘
+## 2. High-Level Component Architecture
 
-┌──────────────────────────┐              ┌──────────────────────────────┐
-│ PostgreSQL (Source DB)   │──Monitor────▶│   CDC Service               │
-│ (Monitored for Changes)  │   WAL        │   (via Debezium)            │
-└──────────────────────────┘              └──────────────────────────────┘
+```mermaid
+flowchart TB
+    Client[External client / operator]
+    Gateway[Spring Cloud Gateway\nport 8080\nknown_gap identity on develop]
+    ETL[ETL Service\nport 8000]
+    CDC[CDC Service\nport 8001]
+    Eureka[Eureka Server\nport 8761]
+    Config[Config Server\nport 8888]
+    Zipkin[Zipkin / tracing\nport 9412 when enabled]
+    Target[(PostgreSQL target)]
+    Source[(PostgreSQL CDC source)]
+    Kafka[(Apache Kafka)]
+    Consumers[Downstream consumers]
 
-                    Infrastructure Services
-┌─────────────────────────────────────────────────────────────────────────┐
-│  ┌──────────────────────┐           ┌──────────────────────────┐       │
-│  │ Eureka Server (8761) │           │ Config Server (8888)     │       │
-│  │ Service Discovery    │           │ Configuration Management │       │
-│  └──────────────────────┘           └──────────────────────────┘       │
-│                                                                          │
-│  ┌──────────────────────┐                                               │
-│  │ Zipkin (9412)        │                                               │
-│  │ Distributed Tracing  │                                               │
-│  └──────────────────────┘                                               │
-└─────────────────────────────────────────────────────────────────────────┘
+    Client --> Gateway
+    Gateway --> ETL
+    Gateway --> CDC
+    ETL --> Target
+    Source -->|WAL / pgoutput| CDC
+    CDC -->|raw Debezium JSON| Kafka
+    Kafka --> Consumers
+    Gateway -. discovery .-> Eureka
+    ETL -. discovery .-> Eureka
+    CDC -. discovery .-> Eureka
+    Gateway -. optional config .-> Config
+    ETL -. telemetry .-> Zipkin
+    CDC -. telemetry .-> Zipkin
 ```
 
-## 2. Service Communication Patterns
+The service decomposition is compatible with independent operation: an ETL-only deployment does not need a CDC engine, and a CDC deployment does not require an unused warehouse connector. Composition adds routing/discovery/observability; it does not erase service boundaries.
 
-### 2.1 Synchronous Communication (REST)
-
-```text
-Client → Zuul Gateway → Microservice
-          (HTTP/REST)     (HTTP/REST)
-```
-
-**Flow**:
-
-1. Client sends HTTP request with JWT token
-2. Zuul validates token via JWT filter
-3. Zuul routes request to appropriate service (Eureka lookup)
-4. Service processes request and returns response
-5. Response flows back through Zuul to client
-
-### 2.2 Asynchronous Communication (Kafka)
-
-```text
-Source DB → CDC Service → Kafka → Consumer Services
-            (Debezium)    (Event Stream)
-```
-
-**Flow**:
-
-1. Database change occurs (INSERT/UPDATE/DELETE)
-2. Debezium captures change from WAL
-3. CDC Service publishes event to Kafka topic
-4. Consumer services process events at their own pace
-5. Loose coupling between producers and consumers
-
-## 3. Data Flow Diagrams
+## 3. ETL Service Architecture — `implemented_on_develop`
 
 ### 3.1 ETL Processing Flow
 
-```text
-┌─────────────┐
-│   Client    │
-└──────┬──────┘
-       │ 1. POST /api/etl/process
-       │    + JWT Token
-       │    + JSON Array
-       v
-┌─────────────────────────┐
-│   Zuul Gateway          │
-│   - Validate JWT        │
-│   - Route to ETL        │
-└──────┬──────────────────┘
-       │ 2. Forward request
-       v
-┌─────────────────────────┐
-│   ETL Controller        │
-│   - Accept JSON         │
-│   - Validate format     │
-└──────┬──────────────────┘
-       │ 3. Process data
-       v
-┌─────────────────────────┐
-│   ETL Service           │
-│   ┌─────────────────┐   │
-│   │ For each record │   │
-│   │  - Extract      │───┼─┐
-│   │  - Transform    │   │ │ 4. Parallel
-│   │  - Load         │◀──┼─┘    Processing
-│   └─────────────────┘   │      (CompletableFuture)
-└──────┬──────────────────┘
-       │ 5. INSERT INTO processed_data
-       v
-┌─────────────────────────┐
-│   PostgreSQL            │
-│   - Store transformed   │
-│     data                │
-└──────┬──────────────────┘
-       │ 6. Return results
-       v
-┌─────────────┐
-│   Client    │
-│   (Success) │
-└─────────────┘
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant EC as EtlController
+    participant ES as EtlService
+    participant DB as PostgreSQL target
+
+    C->>EC: POST /api/etl/process + JSON array
+    EC->>ES: processData(payload)
+    ES->>ES: enforce byte/record limits
+    ES->>ES: strict parse + validate all records
+    ES->>ES: transform all records
+    Note over ES,DB: No JDBC target write before whole-batch preparation succeeds
+    loop prepared records in input order
+        ES->>DB: parameterized INSERT processed_data
+    end
+    DB-->>ES: transaction commit
+    ES-->>EC: deterministic result body
+    EC-->>C: 200 text/plain
 ```
 
-### 3.2 CDC Event Capture Flow
+The earlier per-record `CompletableFuture`/`Parallel Proc` architecture is retired. The live path is synchronous inside one Spring transaction so a later failure rolls back the batch rather than leaving committed prefix records.
 
-```text
-┌─────────────────────────┐
-│  Source Application     │
-└──────┬──────────────────┘
-       │ 1. UPDATE users SET name='Jane'
-       v
-┌─────────────────────────┐
-│  PostgreSQL (Source)    │
-│  - Write to WAL         │
-│  - Logical Replication  │
-└──────┬──────────────────┘
-       │ 2. WAL Stream
-       v
-┌─────────────────────────┐
-│  CDC Service            │
-│  ┌──────────────────┐   │
-│  │ Debezium Engine  │   │
-│  │ - Read WAL       │   │
-│  │ - Parse changes  │   │
-│  │ - Create events  │   │
-│  └────────┬─────────┘   │
-│           v             │
-│  ┌──────────────────┐   │
-│  │ KafkaTemplate    │   │
-│  │ - Serialize      │   │
-│  │ - Send to topic  │   │
-│  └────────┬─────────┘   │
-└───────────┼─────────────┘
-            │ 3. Publish event
-            v
-┌─────────────────────────┐
-│  Apache Kafka           │
-│  Topic:                 │
-│  xtrmetl-cdc.public.    │
-│  users                  │
-└──────┬──────────────────┘
-       │ 4. Consume events
-       v
-┌─────────────────────────┐
-│  Consumer Applications  │
-│  - Analytics            │
-│  - Data Warehouse       │
-│  - Cache Updates        │
-│  - Audit Logs           │
-└─────────────────────────┘
+### 3.2 Principal-scoped idempotency Flow
+
+```mermaid
+sequenceDiagram
+    participant C as Authenticated client
+    participant EC as EtlController
+    participant ES as EtlService
+    participant L as PostgreSQL advisory lock
+    participant DB as Target + etl_idempotency_records
+
+    C->>EC: POST /api/etl/process + Idempotency-Key
+    EC->>ES: payload, key, principal
+    ES->>ES: validate key/principal + exact request digest
+    ES->>L: try transaction-scoped lock(hash(principal,key))
+    alt lock unavailable
+        ES-->>C: RFC 9457 in-progress conflict
+    else existing same digest
+        DB-->>ES: committed response_body
+        ES-->>C: replay response + Idempotency-Replayed: true
+    else existing different digest
+        ES-->>C: RFC 9457 key-reused conflict
+    else first request
+        ES->>ES: bounded whole-batch preparation
+        ES->>DB: target writes
+        ES->>DB: insert response ledger
+        DB-->>ES: one transaction commits both
+        ES-->>C: response + Idempotency-Replayed: false
+    end
 ```
 
-### 3.3 Authentication Flow
+Raw principals and raw idempotency keys are not stored in `etl_idempotency_records`.
 
-```text
-┌─────────────┐
-│   Client    │
-└──────┬──────┘
-       │ 1. POST /auth/signin
-       │    {username, password}
-       v
-┌─────────────────────────┐
-│   Zuul Gateway          │
-│   (No auth required     │
-│    for /auth/**)        │
-└──────┬──────────────────┘
-       │ 2. Forward
-       v
-┌─────────────────────────┐
-│   ETL Service           │
-│   AuthController        │
-│   ┌─────────────────┐   │
-│   │ 1. Load user    │───┼──┐
-│   │ 2. Verify pwd   │   │  │ 3. Query DB
-│   │ 3. Generate JWT │◀──┼──┘
-│   └─────────────────┘   │
-└──────┬──────────────────┘
-       │ 4. Return JWT
-       v
-┌─────────────┐
-│   Client    │
-│   Store JWT │
-└──────┬──────┘
-       │ 5. Subsequent requests
-       │    Authorization: Bearer <JWT>
-       v
-┌─────────────────────────┐
-│   Zuul Gateway          │
-│   JwtAuthenticationFilter│
-│   - Extract token       │
-│   - Validate signature  │
-│   - Check expiration    │
-│   - Set SecurityContext │
-└──────┬──────────────────┘
-       │ 6. Forward (if valid)
-       v
-┌─────────────────────────┐
-│   Protected Service     │
-│   (ETL/CDC)             │
-└─────────────────────────┘
+### 3.3 Durable job intake Flow
+
+`EtlJobController` is `implemented_on_develop` but disabled by default. It is deliberately an intake/status boundary, not a claim of background execution.
+
+```mermaid
+sequenceDiagram
+    participant C as Authenticated client
+    participant JC as EtlJobController
+    participant JS as EtlJobService
+    participant DB as etl_job_records
+
+    C->>JC: POST /api/etl/jobs + Idempotency-Key
+    JC->>JS: submit(payload,key,principal)
+    JS->>DB: create or replay owner-scoped durable record
+    DB-->>JS: PENDING snapshot
+    JS-->>JC: submission metadata
+    JC-->>C: 202 + Location + Idempotency-Replayed
+    C->>JC: GET /api/etl/jobs/{job_record_id}
+    JC->>JS: owner-scoped lookup
+    JS->>DB: select by job id + principal scope
+    DB-->>JC: safe status snapshot
+    JC-->>C: 200 + Cache-Control: no-store
 ```
 
-## 4. Service Discovery & Registration
+On protected develop the job status domain is `PENDING`, `RUNNING`, `SUCCEEDED`, `FAILED`. The request payload remains retained for active states because the worker/terminal clearing behavior is not yet integrated.
 
-```text
-┌────────────────────────────────────────────────────────────┐
-│                    Eureka Server (8761)                     │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │              Service Registry                         │  │
-│  │  ┌────────────────┐  ┌────────────────┐             │  │
-│  │  │ etl-service    │  │ cdc-service    │             │  │
-│  │  │ - 8000         │  │ - 8001         │             │  │
-│  │  │ - Status: UP   │  │ - Status: UP   │             │  │
-│  │  └────────────────┘  └────────────────┘             │  │
-│  │  ┌────────────────┐                                  │  │
-│  │  │ zuul-gateway   │                                  │  │
-│  │  │ - 8080         │                                  │  │
-│  │  │ - Status: UP   │                                  │  │
-│  │  └────────────────┘                                  │  │
-│  └──────────────────────────────────────────────────────┘  │
-└────────────────────────────────────────────────────────────┘
-                      ▲         ▲         ▲
-                      │         │         │
-        ┌─────────────┘         │         └────────────┐
-        │ Register              │                      │
-        │ (on startup)          │ Heartbeat           │ Lookup
-        │                       │ (every 30s)         │ (on request)
-        │                       │                     │
-┌───────┴────────┐    ┌─────────┴────────┐   ┌───────┴────────┐
-│  ETL Service   │    │   CDC Service    │   │  Zuul Gateway  │
-└────────────────┘    └──────────────────┘   └────────────────┘
+## 4. Durable Job Active Stack — `active_pr`
+
+```mermaid
+flowchart LR
+    P121[#121 exact-source CI + scheduler]
+    P143[#143 lease-fenced worker]
+    P144[#144 owner pagination]
+    P145[#145 Retry-After]
+    P146[#146 conditional ETag]
+    P147[#147 cancellation]
+    P148[#148 replay replacement]
+
+    P121 --> P143 --> P144 --> P145 --> P146 --> P147 --> P148
 ```
 
-**Registration Process**:
+The arrow is a dependency/ancestry contract, not a release promise. Every predecessor integration can invalidate downstream base/evidence and requires fresh direct-base validation. These capabilities remain `active_pr` until protected merge.
 
-1. Service starts up
-2. Registers with Eureka (via `@EnableDiscoveryClient`)
-3. Sends heartbeat every 30 seconds
-4. Eureka marks service as UP
-5. Other services discover via Eureka lookup
+## 5. CDC Event Capture Flow
 
-## 5. Security Architecture
+### 5.1 `implemented_on_develop`
 
-### 5.1 Authentication & Authorization Layer
+```mermaid
+sequenceDiagram
+    participant PG as PostgreSQL source
+    participant D as Debezium Engine 3.4
+    participant CS as CdcService
+    participant K as KafkaTemplate / Kafka
+    participant DC as Downstream consumer
 
-```text
-┌─────────────────────────────────────────────────────────────┐
-│                      Security Layer                          │
-│                                                              │
-│  ┌────────────────────────────────────────────────────────┐ │
-│  │          JWT Token Structure                            │ │
-│  │  ┌──────────┬──────────────────┬───────────────────┐   │ │
-│  │  │ Header   │    Payload        │   Signature       │   │ │
-│  │  │ HS512    │ {sub: "user",     │   HMACSHA512      │   │ │
-│  │  │          │  iat: 1234567890, │   (JWT_SECRET)    │   │ │
-│  │  │          │  exp: 1234571490} │                   │   │ │
-│  │  └──────────┴──────────────────┴───────────────────┘   │ │
-│  └────────────────────────────────────────────────────────┘ │
-│                                                              │
-│  ┌────────────────────────────────────────────────────────┐ │
-│  │          Security Filter Chain                          │ │
-│  │                                                          │ │
-│  │  1. JwtAuthenticationFilter                             │ │
-│  │     - Extract token from Authorization header           │ │
-│  │     - Validate signature                                │ │
-│  │     - Check expiration                                  │ │
-│  │     - Load user details                                 │ │
-│  │     - Set authentication in SecurityContext             │ │
-│  │                                                          │ │
-│  │  2. Method Security (@PreAuthorize)                     │ │
-│  │     - Check user roles                                  │ │
-│  │     - hasRole('USER'), hasRole('ADMIN')                 │ │
-│  │                                                          │ │
-│  │  3. CSRF Protection (Disabled for REST API)             │ │
-│  │                                                          │ │
-│  │  4. Session Management (Stateless)                      │ │
-│  │     - No server-side sessions                           │ │
-│  │     - JWT contains all necessary info                   │ │
-│  └────────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────┘
+    PG-->>D: logical replication events
+    D->>CS: ChangeEvent(key,value,destination)
+    CS->>CS: optional canonical-map observation
+    CS->>K: send raw Debezium JSON
+    K-->>DC: event stream
 ```
 
-### 5.2 Database Security Schema
+`known_gap`: protected develop does not wait for Kafka broker acknowledgement in `handleChangeEvent`. PR #139 is the `active_pr` acknowledged-delivery path and adds a finite acknowledgement wait/retry boundary before Debezium record progress.
 
-```text
-┌──────────────────────────────────────┐
-│           users                       │
-├──────────────────────────────────────┤
-│ id (PK)                               │
-│ username (UNIQUE)                     │
-│ password (BCrypt hashed)              │
-└───────┬──────────────────────────────┘
-        │
-        │ Many-to-Many
-        │
-        ▼
-┌──────────────────────────────────────┐
-│        user_roles                     │
-├──────────────────────────────────────┤
-│ user_id (FK)                          │
-│ role_id (FK)                          │
-└────┬──────────────────────┬──────────┘
-     │                      │
-     │                      │
-     ▼                      ▼
-┌──────────────────────────────────────┐
-│           roles                       │
-├──────────────────────────────────────┤
-│ id (PK)                               │
-│ name (ENUM)                           │
-│   - ROLE_USER                         │
-│   - ROLE_ADMIN                        │
-└──────────────────────────────────────┘
+### 5.2 CDC lifecycle
+
+```mermaid
+stateDiagram-v2
+    [*] --> STOPPED
+    STOPPED --> RUNNING: start()
+    RUNNING --> STOP_REQUESTED: stop() / engine.close()
+    STOP_REQUESTED --> STOPPED: current develop clears references
+    RUNNING --> SHUTTING_DOWN: application shutdown
+    SHUTTING_DOWN --> STOPPED: executor termination
+
+    note right of STOP_REQUESTED
+      known_gap: current stop() does not prove
+      the asynchronous engine Future has returned.
+      Issue #141 owns the planned repair.
+    end note
 ```
 
-## 6. Monitoring & Observability
+Debezium documents `close()` as a graceful stop request and `run()` as returning only after remaining events and offset flushing complete. Therefore future operator state must distinguish request-to-stop from proven task completion.
 
-### 6.1 Distributed Tracing
+## 6. Connector Architecture
 
-```text
-Request Flow with Trace IDs:
+### 6.1 ETL target connectors
 
-Client Request
-   │ TraceId: a1b2c3d4
-   │ SpanId: span-1
-   ▼
-┌─────────────────────┐
-│  Zuul Gateway       │ TraceId: a1b2c3d4
-│  SpanId: span-2     │ ParentSpan: span-1
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  ETL Service        │ TraceId: a1b2c3d4
-│  SpanId: span-3     │ ParentSpan: span-2
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  PostgreSQL         │ TraceId: a1b2c3d4
-│  SpanId: span-4     │ ParentSpan: span-3
-└─────────────────────┘
-           │
-           │ All spans sent to Zipkin
-           ▼
-┌─────────────────────┐
-│  Zipkin Server      │
-│  - Collect spans    │
-│  - Visualize trace  │
-│  - Analyze latency  │
-└─────────────────────┘
+`TargetConnectorDispatcher` owns target connector lifecycle/catalog behavior. The protected product's primary load path remains PostgreSQL. Warehouse/BI connector surfaces are useful discovery/configuration scaffolds, but support claims must follow runtime capability rather than documentation aspiration.
+
+### 6.2 CDC source/target SPI
+
+`CdcSourceRegistry`, `CdcTargetRegistry`, `CdcSourceFactory`, and the canonical record mapping surface allow future source/target evolution. The live capture path remains PostgreSQL Debezium → Kafka. `getStatus()` explicitly reports `anyToAny=false` on the protected baseline.
+
+## 7. Persistence Architecture
+
+Detailed relationships are in `docs/ERD.md`.
+
+### 7.1 `implemented_on_develop`
+
+- `processed_data` — local compose primary ETL target.
+- `etl_idempotency_records` — principal/key-hash replay ledger.
+- `etl_job_records` — durable asynchronous intake/status state.
+- legacy local compose `users`, `roles`, `user_roles` — persisted bootstrap compatibility objects, not a shipped registration/login service.
+
+### 7.2 `active_pr`
+
+The durable-job stack adds lease, pagination-index, cancellation, and replay-lineage persistence in later PRs. These objects belong in the active-PR overlay of `docs/ERD.md` until integrated.
+
+## 8. Security Architecture
+
+### 8.1 Gateway identity
+
+Protected develop has a class named `JwtAuthenticationFilter`, but its `validateToken` implementation accepts the literal example value `valid_token`. That is a `known_gap`, not production JWT validation.
+
+PR #142 is `active_pr` and replaces this with Spring Security reactive OAuth 2.0 Resource Server JWT configuration. Until protected integration, the architecture makes no issuer/JWK/audience/algorithm claim.
+
+Historical architecture described local auth and password hashing. These identifiers are retained only as superseded traceability:
+
+- superseded interface: `POST /auth/signin`
+- superseded interface: `POST /auth/signup`
+- superseded security claim: `BCrypt` password authentication
+
+The local compose `password` column is legacy data shape and does not turn the superseded HTTP/authentication design into a shipped capability.
+
+### 8.2 ETL owner/idempotency boundary
+
+Authenticated `Principal` values are used to scope keyed requests and durable job lookup. Stored identities are one-way domain-separated hashes; client responses and ordinary telemetry exclude raw principal/key/payload/internal diagnostics.
+
+### 8.3 PII policy
+
+mightyETL must remain usable for legitimate enterprise data movement, so it does not require blanket PII masking. Controls are purpose-bound authorization, encryption, least privilege, minimal retention, auditable privileged access, and non-leaking logs/error/metric metadata.
+
+## 9. Automation Authority Architecture — `active_pr` #121
+
+Protected develop does **not** yet run this scheduler. The intended separation is documented so its security properties are reviewable before integration.
+
+```mermaid
+flowchart TB
+    Timer[Hourly schedule / manual trigger]
+    Model[maintain-repository\nOpenCode + NVIDIA_NIM_API_KEY\nGitHub read authority]
+    Bundle[validated local commit bundle]
+    BranchWriter[publish-agent-branch\ncontents: write only\nno model credential]
+    PRWriter[publish-agent-pull-request\npull-requests: write only]
+    RunAuthorizer[authorize-exact-head-checks\nactions: write only]
+    Review[Independent review authority]
+    Merge[Protected expected-head merge authority]
+
+    Timer --> Model --> Bundle --> BranchWriter --> PRWriter --> RunAuthorizer --> Review --> Merge
 ```
 
-### 6.2 Observability Stack
+Core invariants:
 
-```text
-┌──────────────────────────────────────────────────────────┐
-│                    Observability Layer                    │
-├──────────────────────────────────────────────────────────┤
-│                                                           │
-│  ┌────────────────┐  ┌────────────────┐  ┌───────────┐  │
-│  │   Logging      │  │   Metrics      │  │  Tracing  │  │
-│  │                │  │                │  │           │  │
-│  │ - SLF4J        │  │ - Micrometer   │  │ - Sleuth  │  │
-│  │ - Logback      │  │ - Custom       │  │ - Zipkin  │  │
-│  │ - JSON format  │  │   counters     │  │           │  │
-│  │ - Trace IDs    │  │ - Timers       │  │           │  │
-│  └────────────────┘  └────────────────┘  └───────────┘  │
-│                                                           │
-│  ┌─────────────────────────────────────────────────────┐ │
-│  │            Instrumentation Points                    │ │
-│  │                                                       │ │
-│  │  • Controller methods (@Observed)                    │ │
-│  │  • Service methods (@Retryable)                      │ │
-│  │  • Database operations (JDBC)                        │ │
-│  │  • Kafka publishing                                  │ │
-│  │  • HTTP requests (Gateway)                           │ │
-│  └─────────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────┘
+- the model job does not get repository write, review, or merge authority;
+- deterministic publishers get no model credential;
+- branch publication verifies exact predecessor/base, policy paths, commit/file bounds, ancestry, and post-write SHA;
+- branch-wide expected-parent publication prefers Git Data commit construction plus non-forced `force=false` ref update;
+- a branch-local writer conflict freezes only that branch for the invocation;
+- review and merge remain independent.
+
+## 10. CI / Evidence Architecture
+
+### 10.1 Protected develop today
+
+The current `CI` workflow uses ordinary `actions/checkout` with no explicit pull-request head ref. GitHub documents that `pull_request` workflows use `GITHUB_REF=refs/pull/<n>/merge`, and checkout uses that ref by default. Therefore a green source-executing job on protected develop can describe the generated merge preview rather than the literal PR head.
+
+This is useful compatibility evidence, but it is not accepted as literal-head proof where the repository's exact-source governance requires that identity.
+
+### 10.2 `active_pr` #121
+
+#121 adds explicit head checkout plus exact-SHA verification for source-executing CI/SBOM and carries a separate central-scanner dependency for literal-head hard scanning. `synthetic-merge` evidence remains non-substitutable.
+
+## 11. Monitoring and Observability
+
+- Micrometer observations decorate key ETL/job/CDC control surfaces.
+- CDC status exposes configured/runtime state and replication-slot information without secrets.
+- Zipkin is the currently documented tracing backend when enabled.
+- New cross-service telemetry should use OpenTelemetry semantic conventions where suitable.
+- Metric dimensions must remain finite; resource/job/principal/secret identifiers do not become uncontrolled labels.
+
+## 12. Deployment Architecture
+
+```mermaid
+flowchart LR
+    subgraph Standalone_ETL[Standalone ETL deployment]
+        EC[ETL Service :8000] --> EPG[(PostgreSQL)]
+    end
+
+    subgraph Standalone_CDC[Standalone CDC deployment]
+        CP[(PostgreSQL source)] --> CC[CDC Service :8001] --> CK[(Kafka)]
+    end
+
+    subgraph Composed_MSA[Composed MSA]
+        CG[Gateway :8080]
+        CE[ETL :8000]
+        CD[CDC :8001]
+        ER[Eureka :8761]
+        CF[Config :8888]
+        Z[Zipkin :9412]
+        CG --> CE
+        CG --> CD
+        CE -.-> ER
+        CD -.-> ER
+        CG -.-> ER
+        CE -.-> Z
+        CD -.-> Z
+        CG -.-> CF
+    end
 ```
 
-## 7. Deployment Architecture
+No composed topology may make an independently useful service impossible to run without an unrelated component unless an explicit ADR changes that product principle.
 
-### 7.1 Single-Node Deployment (Development)
+## 13. Architecture Decision Index
 
-```text
-┌─────────────────────────────────────────────────────────┐
-│               Single Host / VM                           │
-│                                                          │
-│  ┌────────────┐  ┌────────────┐  ┌────────────┐        │
-│  │ Eureka     │  │ Zuul       │  │ ETL        │        │
-│  │ :8761      │  │ :8080      │  │ :8000      │        │
-│  └────────────┘  └────────────┘  └────────────┘        │
-│                                                          │
-│  ┌────────────┐  ┌────────────┐  ┌────────────┐        │
-│  │ CDC        │  │ PostgreSQL │  │ Kafka      │        │
-│  │ :8001      │  │ :5432      │  │ :9092      │        │
-│  └────────────┘  └────────────┘  └────────────┘        │
-│                                                          │
-│  ┌────────────┐                                         │
-│  │ Zipkin     │                                         │
-│  │ :9412      │                                         │
-│  └────────────┘                                         │
-└─────────────────────────────────────────────────────────┘
-```
+The canonical decision records are indexed in `docs/adr/README.md`. Architecture changes that alter API, persisted state, trust, lifecycle, deployment, autonomous authority, or evidence semantics require an ADR status update in the same PR.
 
-### 7.2 Multi-Node Deployment (Production)
+## 14. References
 
-```text
-┌──────────────────────┐  ┌──────────────────────┐
-│   Load Balancer      │  │   Service Mesh       │
-│   (nginx/HAProxy)    │  │   (Optional)         │
-└──────────┬───────────┘  └──────────────────────┘
-           │
-    ┌──────┴──────┐
-    │             │
-    ▼             ▼
-┌─────────┐   ┌─────────┐
-│ Zuul-1  │   │ Zuul-2  │
-│ :8080   │   │ :8080   │
-└────┬────┘   └────┬────┘
-     │             │
-     └──────┬──────┘
-            │
-    ┌───────┼───────┐
-    │       │       │
-    ▼       ▼       ▼
-┌────────┐┌────────┐┌────────┐
-│ ETL-1  ││ ETL-2  ││ CDC-1  │
-│ :8000  ││ :8000  ││ :8001  │
-└────────┘└────────┘└────────┘
-    │       │       │
-    └───────┼───────┘
-            │
-            ▼
-┌──────────────────────┐
-│  PostgreSQL Cluster  │
-│  (Primary + Replica) │
-└──────────────────────┘
+Debezium. (2026). *Debezium Engine 3.4*. Debezium Documentation. https://debezium.io/documentation/reference/3.4/development/engine.html
 
-┌──────────────────────┐  ┌──────────────────────┐
-│   Kafka Cluster      │  │   Eureka Cluster     │
-│   (3+ brokers)       │  │   (2+ instances)     │
-└──────────────────────┘  └──────────────────────┘
-```
+GitHub. (2026). *Events that trigger workflows*. GitHub Docs. https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows
 
-## 8. Technology Integration Points
-
-### 8.1 Debezium Architecture
-
-```text
-┌──────────────────────────────────────────────────────────┐
-│                  Debezium Embedded Engine                 │
-│                                                           │
-│  ┌─────────────────────────────────────────────────────┐ │
-│  │  PostgreSQL Connector                                │ │
-│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────┐  │ │
-│  │  │ Snapshot     │  │ Streaming    │  │ Schema   │  │ │
-│  │  │ Reader       │  │ Reader       │  │ History  │  │ │
-│  │  └──────────────┘  └──────────────┘  └──────────┘  │ │
-│  └─────────────────────────────────────────────────────┘ │
-│                                                           │
-│  ┌─────────────────────────────────────────────────────┐ │
-│  │  Change Event Pipeline                               │ │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────────────┐  │ │
-│  │  │ Parse    │→ │ Filter   │→ │ Transform        │  │ │
-│  │  │ WAL      │  │ Tables   │  │ to SourceRecord  │  │ │
-│  │  └──────────┘  └──────────┘  └──────────────────┘  │ │
-│  └─────────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────┘
-```
-
-### 8.2 Spring Retry Mechanism
-
-```text
-ETL Processing with Retry:
-
-┌────────────────────────────────────────┐
-│  @Retryable(                           │
-│    maxAttempts = 3,                    │
-│    backoff = @Backoff(delay = 1000)    │
-│  )                                     │
-│  public String processData(String data)│
-└─────────────────┬──────────────────────┘
-                  │
-        ┌─────────┴─────────┐
-        │  Attempt 1        │
-        │  (immediate)      │
-        └────┬──────────┬───┘
-             │          │
-          Success    Failure
-             │          │
-             ▼          ▼
-         Return    ┌─────────────────┐
-         Result    │  Wait 1 second  │
-                   └────┬────────────┘
-                        │
-                   ┌────┴──────┐
-                   │ Attempt 2 │
-                   └────┬──┬───┘
-                        │  │
-                    Success Failure
-                        │  │
-                        ▼  ▼
-                    Return ┌──────────────────┐
-                    Result │  Wait 1 second   │
-                           └────┬─────────────┘
-                                │
-                           ┌────┴──────┐
-                           │ Attempt 3 │
-                           │ (final)   │
-                           └────┬──┬───┘
-                                │  │
-                            Success Failure
-                                │  │
-                                ▼  ▼
-                            Return Throw
-                            Result Exception
-```
-
-## 9. Network & Port Configuration
-
-| Service | Port | Protocol | Access Level |
-| --------- | ------ | ---------- | -------------- |
-| Zuul Gateway | 8080 | HTTP | Public |
-| ETL Service | 8000 | HTTP | Internal |
-| CDC Service | 8001 | HTTP | Internal |
-| Eureka Server | 8761 | HTTP | Internal |
-| Config Server | 8888 | HTTP | Internal |
-| PostgreSQL | 5432 | TCP | Internal |
-| Kafka | 9092 | TCP | Internal |
-| Zipkin | 9412 | HTTP | Internal |
-
-## 10. Scalability Considerations
-
-### 10.1 Horizontal Scaling
-
-```text
-Load Distribution:
-
-             ┌─────────────┐
-             │ Load        │
-             │ Balancer    │
-             └──────┬──────┘
-                    │
-        ┌───────────┼───────────┐
-        │           │           │
-        ▼           ▼           ▼
-    ┌───────┐   ┌───────┐   ┌───────┐
-    │ ETL-1 │   │ ETL-2 │   │ ETL-3 │
-    │ 8000  │   │ 8000  │   │ 8000  │
-    └───┬───┘   └───┬───┘   └───┬───┘
-        │           │           │
-        └───────────┼───────────┘
-                    │
-                    ▼
-            ┌───────────────┐
-            │  PostgreSQL   │
-            │  Connection   │
-            │  Pool         │
-            └───────────────┘
-```
-
-### 10.2 CDC Service Limitations
-
-**Important**: Only ONE CDC service instance should monitor a given database table to avoid duplicate events.
-
-Options for high availability:
-
-1. Active-Passive: One active, one standby
-2. Table partitioning: Different instances monitor different tables
-3. Leader election: Use ZooKeeper/Consul for leader election
-
-### 10.3 Replica Replication Ordering
-
-When `xtrmetl.replica.enabled=true`, the CDC service can also consume CDC topics and apply them to a replica DB.
-
-**Important**: Kafka ordering is guaranteed only within a single partition of a single topic. Schema-change events
-(`*.schema-changes`) and data events (e.g. `*.public.processed_data`) can arrive and be processed out-of-order.
-
-Mitigations in this codebase:
-
-- Single listener container (default `concurrency=1`) and `AckMode.RECORD` (commit only after replica apply succeeds)
-- Retry + dead-letter routing via `DefaultErrorHandler`/`.DLT` to tolerate transient schema/data race windows
-
-Tuning knobs (replica application, DDL handling, and CDC schema changes):
-
-- `xtrmetl.replica.kafka.retry-backoff-ms` (default: `1000`): backoff (ms) between retry attempts when replica apply fails
-- `xtrmetl.replica.kafka.retry-max-attempts` (default: `30`): maximum retry attempts before routing to the dead-letter topic (≈30s with defaults)
-- `xtrmetl.replica.kafka.concurrency` (default: `1`): number of concurrent listener threads for replica consumption
-- `xtrmetl.replica.ddl-enabled` (default: `false`): enable/disable applying DDL events (`*.schema-changes`) on the replica
-- `xtrmetl.replica.ddl-validation-mode` (default: `none`): DDL validation strategy; `none` (no validation/blocking), `whitelist`, or `blocklist` (alias: `blacklist`)
-- `xtrmetl.replica.ddl-allowed-prefixes`: comma-separated DDL prefixes allowed when `ddl-validation-mode=whitelist`
-- `xtrmetl.replica.ddl-blocked-prefixes` (effective only when `ddl-validation-mode=blocklist`; default blocklist includes `DROP TABLE`, `DROP SCHEMA`, `DROP DATABASE`, `TRUNCATE`): DDL prefixes blocked in blocklist mode
-- `CDC_INCLUDE_SCHEMA_CHANGES` (default: `true`): controls whether Debezium emits schema change events (`*.schema-changes`)
-- **PostgreSQL requirement**: schema-change DDL idempotency rewrites assume PostgreSQL `>= 9.6` (notably `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`)
-
----
-
-**Document Version**: 1.0  
-**Last Updated**: 2026-01-08  
-**Author**: Technical Architecture Team
+OpenTelemetry Authors. (2025). *Semantic conventions*. OpenTelemetry. https://opentelemetry.io/docs/concepts/semantic-conventions/
