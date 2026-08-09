@@ -25,13 +25,11 @@ import java.util.regex.Pattern;
 /**
  * Admits owner-scoped durable-job replay requests on the repaired stack.
  *
- * <p>The service validates replay identity, authenticated principal scope, and JSON shape before
- * database work. The first persistence increments admit an owner's first-generation replay of a
- * {@code FAILED} or {@code CANCELLED} source, serialize creation by principal-scoped replay key,
- * return the already-created job for an identical owner/source/key/payload replay, and reject a
- * committed replay key that identifies a different source or payload. Later test-first increments
- * add source-state classification and generation-depth policies before the HTTP replay resource is
- * exposed.</p>
+ * <p>The service validates replay identity, authenticated principal scope, and the complete
+ * bounded JSON request before database work. Replay creation is serialized by principal-scoped
+ * replay identity, returns a committed identical replay when present, locks the owner-matched
+ * first-generation source before classifying its state and immutable payload digest, and inserts
+ * a fresh {@code PENDING} child without mutating terminal source evidence.</p>
  */
 @Service
 public class EtlJobReplayService {
@@ -52,13 +50,11 @@ public class EtlJobReplayService {
              WHERE principal_scope_hash = ?
                AND submission_key_hash = ?
             """;
-    private static final String SELECT_FIRST_GENERATION_TERMINAL_SOURCE_SQL = """
-            SELECT job_record_id
+    private static final String SELECT_FIRST_GENERATION_SOURCE_SQL = """
+            SELECT job_record_id, request_digest, job_status
               FROM etl_job_records
              WHERE job_record_id = ?
                AND principal_scope_hash = ?
-               AND request_digest = ?
-               AND job_status IN ('FAILED', 'CANCELLED')
                AND replay_source_job_record_id IS NULL
                AND replay_root_job_record_id IS NULL
                AND replay_generation_count IS NULL
@@ -142,16 +138,18 @@ public class EtlJobReplayService {
      * <p>The principal-scoped replay identity is serialized before table access. An identical
      * committed replay is then looked up by owner/key/source/payload identity and returned without
      * a second insert. A committed key bound to another source or payload is rejected with
-     * {@link EtlRequestError#JOB_REPLAY_KEY_REUSED}. A new replay locks the immutable terminal
-     * source before inserting a fresh {@code PENDING} child.</p>
+     * {@link EtlRequestError#JOB_REPLAY_KEY_REUSED}. For a new replay, source selection first
+     * preserves owner-safe not-found behavior and then classifies active, succeeded, eligible
+     * terminal, and immutable-payload-mismatch outcomes with stable errors while holding the row
+     * lock.</p>
      *
-     * @param sourceJobRecordId terminal durable job whose intent is being replayed
+     * @param sourceJobRecordId durable root job whose immutable intent is being replayed
      * @param requestBody bounded JSON-array payload resupplied by the authenticated owner
      * @param rawReplayKey principal-scoped idempotency key for this replay request
      * @param principalName authenticated principal namespace
      * @return newly created or previously committed replay job
      * @throws NullPointerException when the source job identifier is absent
-     * @throws EtlRequestException when validation fails, the key is busy, or intent conflicts
+     * @throws EtlRequestException when validation, ownership, state, payload, key, or lock fails
      */
     @Transactional
     public EtlJobReplay replayOwned(
@@ -205,13 +203,35 @@ public class EtlJobReplayService {
             return existingReplays.getFirst();
         }
 
-        UUID lockedSourceJobRecordId = jdbcTemplate.queryForObject(
-                SELECT_FIRST_GENERATION_TERMINAL_SOURCE_SQL,
-                UUID.class,
+        List<ReplaySource> replaySources = jdbcTemplate.query(
+                SELECT_FIRST_GENERATION_SOURCE_SQL,
+                (resultSet, rowNumber) -> new ReplaySource(
+                        resultSet.getObject("job_record_id", UUID.class),
+                        resultSet.getString("request_digest"),
+                        EtlJobStatus.valueOf(resultSet.getString("job_status"))
+                ),
                 validatedSourceJobRecordId,
-                principalScopeHash,
-                requestDigest
+                principalScopeHash
         );
+        if (replaySources.isEmpty()) {
+            throw new EtlRequestException(EtlRequestError.JOB_NOT_FOUND);
+        }
+        ReplaySource source = replaySources.getFirst();
+        switch (source.jobStatus()) {
+            case PENDING, RUNNING -> throw new EtlRequestException(
+                    EtlRequestError.JOB_REPLAY_SOURCE_ACTIVE
+            );
+            case SUCCEEDED -> throw new EtlRequestException(
+                    EtlRequestError.JOB_REPLAY_SOURCE_SUCCEEDED
+            );
+            case FAILED, CANCELLED -> {
+                // These terminal outcomes are the bounded first-generation replay sources.
+            }
+        }
+        if (!requestDigest.equals(source.requestDigest())) {
+            throw new EtlRequestException(EtlRequestError.JOB_REPLAY_PAYLOAD_MISMATCH);
+        }
+
         UUID replayJobRecordId = UUID.randomUUID();
         jdbcTemplate.update(
                 INSERT_FIRST_GENERATION_REPLAY_SQL,
@@ -220,8 +240,8 @@ public class EtlJobReplayService {
                 replayKeyHash,
                 requestDigest,
                 requestBody,
-                lockedSourceJobRecordId,
-                lockedSourceJobRecordId
+                source.jobRecordId(),
+                source.jobRecordId()
         );
         return new EtlJobReplay(replayJobRecordId, EtlJobStatus.PENDING, false);
     }
@@ -275,5 +295,13 @@ public class EtlJobReplayService {
             EtlJobService.validateRecord(record);
         }
         return root;
+    }
+
+    private record ReplaySource(UUID jobRecordId, String requestDigest, EtlJobStatus jobStatus) {
+        private ReplaySource {
+            Objects.requireNonNull(jobRecordId, "jobRecordId must not be null");
+            Objects.requireNonNull(requestDigest, "requestDigest must not be null");
+            Objects.requireNonNull(jobStatus, "jobStatus must not be null");
+        }
     }
 }

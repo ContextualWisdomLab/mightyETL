@@ -140,6 +140,15 @@ public enum EtlRequestError {
             "Replay requires a supported principal-scoped Idempotency-Key."
     ),
 
+    /** The resupplied payload does not match the immutable terminal source digest. */
+    JOB_REPLAY_PAYLOAD_MISMATCH(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "etl_job_replay_payload_mismatch",
+            "urn:mightyetl:problem:etl-job-replay-payload-mismatch",
+            "ETL job replay payload mismatch",
+            "The replay payload does not match the immutable source job payload digest."
+    ),
+
     /** A replay idempotency key already identifies a different source or payload. */
     JOB_REPLAY_KEY_REUSED(
             HttpStatus.UNPROCESSABLE_ENTITY,
@@ -156,6 +165,24 @@ public enum EtlRequestError {
             "urn:mightyetl:problem:etl-job-replay-in-progress",
             "ETL job replay in progress",
             "A durable job replay with the same principal-scoped Idempotency-Key is being created."
+    ),
+
+    /** A pending or running source is still active and cannot be replayed. */
+    JOB_REPLAY_SOURCE_ACTIVE(
+            HttpStatus.CONFLICT,
+            "etl_job_replay_source_active",
+            "urn:mightyetl:problem:etl-job-replay-source-active",
+            "ETL job replay source active",
+            "Pending or running durable jobs cannot be replayed."
+    ),
+
+    /** A succeeded source is excluded to prevent silent duplicate target effects. */
+    JOB_REPLAY_SOURCE_SUCCEEDED(
+            HttpStatus.CONFLICT,
+            "etl_job_replay_source_succeeded",
+            "urn:mightyetl:problem:etl-job-replay-source-succeeded",
+            "ETL job replay source succeeded",
+            "A succeeded durable job cannot be replayed through this endpoint."
     ),
 
     /** The durable job was already cancelled with a different cancellation key. */
