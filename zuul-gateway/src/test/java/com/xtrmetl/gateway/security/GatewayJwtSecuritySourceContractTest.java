@@ -67,6 +67,8 @@ class GatewayJwtSecuritySourceContractTest {
         assertTrue(contract.contains("spring.security.oauth2.resourceserver.jwt.audiences"));
         assertTrue(contract.contains("MIGHTYETL_GATEWAY_SECURITY_MODE=jwt"));
         assertTrue(contract.contains("Authorization"));
+        assertTrue(contract.contains("non-blank `sub`"));
+        assertTrue(contract.contains("fails authentication before routing"));
         assertTrue(contract.contains("rollback"));
     }
 
