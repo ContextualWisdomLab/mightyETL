@@ -73,12 +73,31 @@ class LiveCommercialTraceabilityTest {
         assertTrue(assessment.contains("PR #169"));
     }
 
+    @Test
+    void testStrategyRejectsVacuousCoverageEvidence() throws IOException {
+        String testStrategy = readTestStrategy();
+
+        assertTrue(
+                testStrategy.contains("selected production class set MUST be non-empty"),
+                "Coverage policy must fail closed before applying percentage or zero-missed thresholds"
+        );
+        assertTrue(testStrategy.contains("Analyzed bundle with 0 classes"));
+        assertTrue(testStrategy.contains("issue #162"));
+        assertTrue(testStrategy.contains("PR #164"));
+        assertTrue(testStrategy.contains("synthetic merge"));
+        assertTrue(testStrategy.contains("literal source"));
+    }
+
     private static String readTraceability() throws IOException {
         return readDocument("docs/TRACEABILITY.md");
     }
 
     private static String readAssessment() throws IOException {
         return readDocument("docs/DOCUMENTATION_ASSESSMENT.md");
+    }
+
+    private static String readTestStrategy() throws IOException {
+        return readDocument("docs/TEST_STRATEGY.md");
     }
 
     private static String readDocument(String relativePath) throws IOException {
