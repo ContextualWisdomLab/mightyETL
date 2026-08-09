@@ -46,6 +46,12 @@ Owned production code maintains exact 100% configured statement/line/method/bran
 - A skipped test/job is not positive evidence.
 - Generated code or truly unreachable platform glue can be excluded only with a documented rationale and review.
 
+### 4.1 Non-vacuous coverage evidence
+
+Before applying percentage or zero-missed thresholds, the selected production class set MUST be non-empty. A JaCoCo report or check that says `Analyzed bundle with 0 classes` is a control failure and cannot substantiate 100% owned-production coverage. Issue #162 tracks the protected-baseline defect; PR #164 is the `active_pr` repair that separates report/check class-file filters and adds a non-empty class-count invariant.
+
+Coverage evidence must also state its source identity. GitHub `pull_request` workflows may exercise a synthetic merge ref, which can prove the generated integration tree but is not literal source-head evidence. When governance requires literal source proof, the workflow must check out and assert the exact contributor head independently. Results from a different head, predecessor, base snapshot, or synthetic merge do not transfer to a literal-source gate.
+
 ## 5. Current domain-validity tests
 
 ### Bounded ETL
