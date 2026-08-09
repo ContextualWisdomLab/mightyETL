@@ -111,7 +111,7 @@ existing xtrmETL platform.
    - Complete data model specifications
    - API specifications with examples
    - Deployment architecture
-   - Use cases
+   - Use cases and scenarios
    - Future enhancements roadmap
    - Success metrics and KPIs
    - Risk assessment and mitigation strategies
@@ -244,7 +244,7 @@ This release addresses the GitHub issue requesting reverse-engineering of the pr
 
 For more information, see:
 
-- [README.md](README.md) - Quick start guide
+- [README.md](README.md) - Quick start guide and project overview
 - [PRD.md](PRD.md) - Product Requirements Document  
 - [ARCHITECTURE.md](ARCHITECTURE.md) - Technical architecture
 - [SUMMARY_KR.md](SUMMARY_KR.md) - Korean summary
