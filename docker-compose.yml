@@ -87,7 +87,8 @@ services:
   zipkin:
     image: openzipkin/zipkin:2
     ports:
-      - "9412:9412"
+      # Keep the historical host port while routing to Zipkin's standard HTTP collector port.
+      - "9412:9411"
 
   eureka-server:
     build:
@@ -121,6 +122,7 @@ services:
       FLYWAY_BASELINE_ON_MIGRATE: "true"
       EUREKA_HOST: eureka-server
       ZIPKIN_HOST: zipkin
+      MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: http://zipkin:9411/api/v2/spans
     ports:
       - "8000:8000"
 
@@ -155,6 +157,7 @@ services:
       REPLICA_PGPASSWORD: ${REPLICA_POSTGRES_PASSWORD:-xtrmetl}
       EUREKA_HOST: eureka-server
       ZIPKIN_HOST: zipkin
+      MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: http://zipkin:9411/api/v2/spans
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     ports:
       - "8001:8001"
@@ -173,6 +176,7 @@ services:
     environment:
       EUREKA_HOST: eureka-server
       ZIPKIN_HOST: zipkin
+      MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: http://zipkin:9411/api/v2/spans
     ports:
       - "8080:8080"
 
