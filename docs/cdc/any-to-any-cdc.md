@@ -83,11 +83,13 @@ xtrmetl:
 
 - **Declared** in `application.yml` / `XtrmetlProperties.Cdc.sources` and reported on `GET /api/cdc/status` as `configuredSources` via `CdcSourceFactory`.
 - **Registered types:**
+
   | Type id | Status |
   |:--------|:-------|
   | `postgres-debezium` | **Live** — SPI `start`/`stop` delegates to `CdcService` |
   | `mysql-debezium` | Scaffold only (no connector JAR) |
   | `sqlserver-debezium` | **Not registered** — reference scaffold only; configured use reports `unknown_source_type` |
+
 - `SqlServerDebeziumCdcSource` remains explicit design/reference code only. It is not a Spring component and is not production-discoverable until a maintained SQL Server Debezium implementation, lifecycle, offset/schema-history handling, recovery behavior, and realistic integration evidence exist.
 - **Live engine:** still a single Debezium Postgres path in `CdcService` (multi-source start not implemented).
 - Targets remain: Kafka (live raw publish) + optional JDBC replica (`replica.enabled`).
