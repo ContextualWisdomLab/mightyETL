@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Active durable-job status responses now emit an RFC 9110 `Retry-After` delay for `PENDING` and `RUNNING` states only when local worker execution is enabled, derived from the bounded worker fixed-delay configuration with upward whole-second rounding; terminal states and intake-only maintenance mode omit the advisory.
 - Durable job operators can now list only their own jobs through bounded newest-first keyset pagination with canonical opaque cursors, deterministic timestamp-plus-UUID ordering, `Cache-Control: no-store`, and RFC 8288 next-page links without offset drift or cross-tenant existence leakage.
 - The durable job pagination index uses PostgreSQL `CREATE INDEX CONCURRENTLY` with migration-local Flyway `executeInTransaction=false`, preserving production writers while documenting invalid-index recovery and concurrent rollback.
 - Scheduled OpenCode maintenance now performs root-cause analysis, tests remediation feasibility against live authority, protection, resource, dependency, path-ownership, and writer-lease constraints, executes and verifies the best safe option available now, and continues exactly one independent bounded mightyETL slice from protected `develop` when only external blockers remain; invalid stacks and separately leased repositories stay untouched.
@@ -36,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Controller-scoped polling advice, deterministic active/terminal lifecycle tests, disabled-worker fail-closed behavior, sub-second rounding coverage, rollback guidance, and APA 7th standards evidence in `docs/etl/durable-job-polling.md`.
 - Owner-scoped durable job list models and HTTP contract, strict cursor and page-limit validation, one-extra-row next-page detection, the descriptive `etl_job_owner_pagination_index`, deterministic tenant-isolation and equal-timestamp tests, migration rollback guidance, and APA 7th standards evidence in `docs/etl/durable-job-intake.md`.
 - Test-first doctoring for external-wait progress, root-cause analysis, realistic remediation feasibility, exact post-action verification, source-actionable pull-request classification, invalid-stack isolation, and read-only dependency leases in `docs/doctoring/hourly-opencode-nonblocking-progress-evidence.md`.
 - Permanent fail-first exact-head workflow contracts and authoritative evidence in `docs/doctoring/exact-head-source-workflow-evidence.md`, including observed synthetic-merge checkout behavior, cross-platform source identity assertions, the rejected ignored Dependency Review ref-override experiment, corrective pull-request event-endpoint semantics, least-privilege boundaries, stack invalidation rules, rollback prohibition, and APA 7th GitHub references.
