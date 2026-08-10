@@ -107,6 +107,20 @@ class CrossCuttingArchitectureAuthorityTest {
         assertTrue(erd.contains("conceptual or external unless a protected migration states otherwise"));
     }
 
+    @Test
+    void fitnessAndTraceabilityRecognizeCurrentCrossCuttingCoverage() throws IOException {
+        String assessment = readDocument("docs/DOCUMENTATION_ASSESSMENT.md");
+        String traceability = readDocument("docs/TRACEABILITY.md");
+
+        assertTrue(assessment.contains("| Architecture | `present_current` on PR #149 |"));
+        assertTrue(assessment.contains("| ADR | `present_current` on PR #149 |"));
+        assertTrue(assessment.contains("| UML | `present_current` on PR #149 |"));
+        assertTrue(assessment.contains("| ERD / logical data model | `present_current` on PR #149 |"));
+        for (String adr : new String[]{"ADR-0009", "ADR-0010", "ADR-0011", "ADR-0012", "ADR-0013", "ADR-0014"}) {
+            assertTrue(traceability.contains(adr), "Traceability must reference " + adr);
+        }
+    }
+
     private static void assertAdr(String fileName, String status, String invariant) throws IOException {
         Path adrPath = PROJECT_ROOT.resolve("docs/adr").resolve(fileName);
         assertTrue(Files.exists(adrPath), () -> "Missing canonical ADR: " + fileName);
