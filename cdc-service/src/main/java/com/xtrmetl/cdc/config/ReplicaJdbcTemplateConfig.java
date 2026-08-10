@@ -12,10 +12,24 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import javax.sql.DataSource;
 
+/**
+ * Creates the optional PostgreSQL replica JDBC infrastructure from deployment-owned configuration.
+ *
+ * <p>The configuration validates bounded connection coordinates before constructing the data source
+ * and reports invalid configuration by stable key rather than republishing rejected raw values or
+ * parser diagnostics into startup logs and support surfaces.</p>
+ */
 @Configuration
 @ConditionalOnProperty(prefix = "xtrmetl.replica", name = "enabled", havingValue = "true")
 public class ReplicaJdbcTemplateConfig {
 
+    /**
+     * Creates the Hikari data source used by CDC replica application.
+     *
+     * @param environment Spring environment containing the deployment-owned replica settings
+     * @return configured replica data source
+     * @throws IllegalStateException when a required replica setting is absent or invalid
+     */
     @Bean(name = "replicaDataSource", destroyMethod = "close")
     public HikariDataSource replicaDataSource(Environment environment) {
         String host = ValidationUtils.requireValidHost(
@@ -42,11 +56,8 @@ public class ReplicaJdbcTemplateConfig {
         long initializationFailTimeout;
         try {
             initializationFailTimeout = Long.parseLong(initializationFailTimeoutValue);
-        } catch (NumberFormatException e) {
-            throw new IllegalStateException(
-                    "Invalid value for REPLICA_HIKARI_INITIALIZATION_FAIL_TIMEOUT_MS: " + initializationFailTimeoutValue,
-                    e
-            );
+        } catch (NumberFormatException exception) {
+            throw new IllegalStateException("Invalid value for REPLICA_HIKARI_INITIALIZATION_FAIL_TIMEOUT_MS");
         }
         config.setInitializationFailTimeout(initializationFailTimeout);
         config.setDriverClassName("org.postgresql.Driver");
@@ -57,6 +68,12 @@ public class ReplicaJdbcTemplateConfig {
         return new HikariDataSource(config);
     }
 
+    /**
+     * Creates the JDBC template that applies validated CDC records to the configured replica.
+     *
+     * @param dataSource validated replica data source
+     * @return JDBC template bound to the replica data source
+     */
     @Bean(name = "replicaJdbcTemplate")
     public JdbcTemplate replicaJdbcTemplate(@Qualifier("replicaDataSource") DataSource dataSource) {
         return new JdbcTemplate(dataSource);
