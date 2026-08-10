@@ -124,7 +124,7 @@ class DocumentationValidationTest {
             assertTrue(architecture.contains("PR #142"));
             assertTrue(architecture.contains("PR #139"));
             assertTrue(architecture.contains("Issue #141"));
-            assertTrue(architecture.contains("synthetic-merge"));
+            assertTrue(architecture.contains("synthetic merge"));
         }
     }
 
