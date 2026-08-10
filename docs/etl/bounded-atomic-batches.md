@@ -43,10 +43,12 @@ Fields are transformed directly from the Jackson JSON tree; values are not split
 - Field names use locale-independent uppercase normalization and must remain unique after normalization.
 - `NAME` values use locale-independent uppercase conversion.
 - `EMAIL` values use locale-independent lowercase conversion.
-- `AMOUNT` values use `BigDecimal`, `HALF_UP`, scale `2`, and `toPlainString()`.
-- Invalid, excessive-precision, or extreme-scale amounts retain the legacy fallback `0.00` without expanding attacker-controlled exponents into huge strings.
+- Valid `AMOUNT` values use `BigDecimal`, `HALF_UP`, scale `2`, and `toPlainString()`; a genuine numeric zero therefore remains the legitimate transformed value `0.00`.
+- Malformed, blank, excessive-precision, or extreme-scale `AMOUNT` values are rejected as invalid records before the first JDBC call. Because the complete batch is transformed before persistence, one invalid amount causes the request to fail with no database writes instead of manufacturing a valid-looking zero.
 - Nested arrays and objects are retained as compact JSON instead of collapsing to empty text.
 - Response lines remain `Processed: <id>` in input order. Identifier whitespace, ISO control, Unicode format-control, Unicode line-separator characters, and length are bounded so one record cannot inject, visually reorder, conceal, or amplify response lines.
+
+The fail-closed amount policy prevents new malformed monetary input from becoming indistinguishable from genuine zero after persistence. Historical `processed_data` rows created under the prior fallback cannot be reliably classified after the fact solely from a stored `0.00`; reconciliation therefore requires upstream/source evidence rather than an automated destructive rewrite.
 
 ## Configuration
 
@@ -72,7 +74,8 @@ Values outside the supported range fail configuration binding instead of silentl
 
 - Keep the payload limit aligned with gateway and ingress body-size limits. The service-level check occurs after the MVC stack has materialized the request string and is not a substitute for edge enforcement.
 - Keep the record limit below the transaction size that the target database can commit within the request timeout and lock budget.
-- Monitor request latency, transaction duration, rollback rate, database pool wait time, and rejected payload/record-limit errors before raising either limit.
+- Monitor request latency, transaction duration, rollback rate, database pool wait time, and deterministic invalid-record rejection rates before raising either limit.
+- Treat an increased invalid-amount rejection rate as upstream data-quality evidence. Do not log the raw amount or payload merely to diagnose the failure; use source-system reconciliation under purpose-bound access.
 - Use descriptive string identifiers. Numeric JSON identifier types are rejected to keep identifier contracts explicit and stable across systems.
 
 ## Remaining boundary
