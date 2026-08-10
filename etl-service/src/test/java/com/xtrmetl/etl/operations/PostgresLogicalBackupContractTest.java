@@ -96,6 +96,26 @@ class PostgresLogicalBackupContractTest {
     }
 
     @Test
+    void recoveryRunbookDescribesTheCurrentVerifiedRestoreBoundaryWithoutInflatingDisasterRecovery() throws IOException {
+        String runbook = Files.readString(projectRoot().resolve("docs/ops/postgres-recovery.md"), StandardCharsets.UTF_8);
+
+        assertTrue(runbook.contains("postgres-logical-restore-rehearsal.sh"),
+                "operators must be able to find the implemented restore rehearsal command");
+        assertTrue(runbook.contains("EXPECTED_MANIFEST_SHA256") && runbook.contains("EXPECTED_BACKUP_SHA256"),
+                "runbook must explain the out-of-band manifest and archive integrity evidence");
+        assertTrue(runbook.contains("--single-transaction"),
+                "runbook must document that the disposable restore is all-or-nothing on PostgreSQL command failure");
+        assertTrue(runbook.contains("processed_data")
+                        && runbook.contains("etl_idempotency_records")
+                        && runbook.contains("etl_job_records"),
+                "runbook must state the current post-restore application relation invariants");
+        assertFalse(runbook.contains("clean-target restore: not yet proven"),
+                "runbook must not describe an implemented and verified branch capability as still absent");
+        assertTrue(runbook.contains("application startup/readiness") && runbook.contains("not yet proven"),
+                "runbook must keep the still-unproven application startup/readiness boundary explicit");
+    }
+
+    @Test
     void changelogRecordsTheNewBackupCapabilityWithoutClaimingRestoreReadiness() throws IOException {
         String changelog = Files.readString(projectRoot().resolve("CHANGELOG.md"), StandardCharsets.UTF_8);
         assertTrue(changelog.contains("verified PostgreSQL logical backup"), "the backup capability must be discoverable");
