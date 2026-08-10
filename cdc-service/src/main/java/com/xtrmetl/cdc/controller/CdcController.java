@@ -122,7 +122,7 @@ public class CdcController {
             cdcService.stop();
             return ResponseEntity.ok("CDC process stopped");
         } catch (IOException e) {
-            return ResponseEntity.internalServerError().body("Error stopping CDC process: " + e.getMessage());
+            return ResponseEntity.internalServerError().body("CDC process could not be stopped");
         }
     }
 }
