@@ -37,7 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CDC target SPI registry (`kafka`, `jdbc-replica`) for any-to-any routing scaffold.
 - `etl-service` `xtrmetl.connectors.*` disabled config keys for Databricks/Snowflake/Qlik.
 - Dual-read config aliases: `mightyetl.*` preferred → `xtrmetl.*` (`MightyEtlConfigAliasEnvironmentPostProcessor`).
-- Configurable replica tables (`xtrmetl.replica.tables`) for `(id, data)`-shaped tables.
+- Configurable replica tables (`xtrmetl.replica.tables`) for `(id,data)`-shaped tables.
 - Optional CDC canonical-map counters (`xtrmetl.cdc.canonical-map-enabled`).
 - ETL connector catalog API `GET /api/etl/connectors` + scaffold enable guard.
 - CDC replication slot lag probe on `GET /api/cdc/status` (`ReplicationSlotProbe`).
