@@ -122,6 +122,51 @@ public enum EtlRequestError {
             "The ETL job page cursor is invalid or uses an unsupported opaque format."
     ),
 
+    /** The cancellation key is absent or outside the bounded safe idempotency profile. */
+    JOB_CANCELLATION_KEY_REQUIRED(
+            HttpStatus.BAD_REQUEST,
+            "etl_job_cancellation_key_required",
+            "urn:mightyetl:problem:etl-job-cancellation-key-required",
+            "ETL job cancellation key required",
+            "Cancellation requires a supported principal-scoped Idempotency-Key."
+    ),
+
+    /** The durable job was already cancelled with a different cancellation key. */
+    JOB_CANCELLATION_KEY_REUSED(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "etl_job_cancellation_key_reused",
+            "urn:mightyetl:problem:etl-job-cancellation-key-reused",
+            "ETL job cancellation key reused",
+            "The durable job was already cancelled with a different Idempotency-Key."
+    ),
+
+    /** An eligible job remained active after the authoritative cancellation update. */
+    JOB_CANCELLATION_IN_PROGRESS(
+            HttpStatus.CONFLICT,
+            "etl_job_cancellation_in_progress",
+            "urn:mightyetl:problem:etl-job-cancellation-in-progress",
+            "ETL job cancellation in progress",
+            "The durable job cancellation could not yet establish a terminal outcome."
+    ),
+
+    /** Durable success committed before the cancellation transition. */
+    JOB_ALREADY_SUCCEEDED(
+            HttpStatus.CONFLICT,
+            "etl_job_already_succeeded",
+            "urn:mightyetl:problem:etl-job-already-succeeded",
+            "ETL job already succeeded",
+            "The durable job succeeded before cancellation could commit."
+    ),
+
+    /** Durable failure committed before the cancellation transition. */
+    JOB_ALREADY_FAILED(
+            HttpStatus.CONFLICT,
+            "etl_job_already_failed",
+            "urn:mightyetl:problem:etl-job-already-failed",
+            "ETL job already failed",
+            "The durable job failed before cancellation could commit."
+    ),
+
     /** The requested job does not exist in the authenticated principal's namespace. */
     JOB_NOT_FOUND(
             HttpStatus.NOT_FOUND,
