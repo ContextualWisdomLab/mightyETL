@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -72,6 +73,10 @@ class ValidationUtilsTest {
                 IllegalStateException.class,
                 () -> ValidationUtils.requireValidPort("5432?" + sensitiveFragment, "REPLICA_PGPORT")
         );
+        IllegalStateException oversizedPortFailure = assertThrows(
+                IllegalStateException.class,
+                () -> ValidationUtils.requireValidPort("999999999999999999999999999999999999", "REPLICA_PGPORT")
+        );
         IllegalStateException identifierFailure = assertThrows(
                 IllegalStateException.class,
                 () -> ValidationUtils.requireValidIdentifier(
@@ -82,6 +87,8 @@ class ValidationUtilsTest {
 
         assertSafeDiagnostic(hostFailure, "REPLICA_PGHOST", sensitiveFragment);
         assertSafeDiagnostic(portFailure, "REPLICA_PGPORT", sensitiveFragment);
+        assertSafeDiagnostic(oversizedPortFailure, "REPLICA_PGPORT", sensitiveFragment);
+        assertNull(oversizedPortFailure.getCause());
         assertSafeDiagnostic(identifierFailure, "REPLICA_PGDATABASE", sensitiveFragment);
     }
 
@@ -93,5 +100,7 @@ class ValidationUtilsTest {
         assertTrue(failure.getMessage().contains(expectedKey));
         assertFalse(failure.getMessage().contains(sensitiveFragment));
         assertFalse(failure.getMessage().contains("forged-log-line"));
+        assertFalse(failure.getMessage().contains("\r"));
+        assertFalse(failure.getMessage().contains("\n"));
     }
 }
