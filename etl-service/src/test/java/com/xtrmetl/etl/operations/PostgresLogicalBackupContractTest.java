@@ -41,6 +41,24 @@ class PostgresLogicalBackupContractTest {
         assertFalse(script.contains("echo \"$PGPASSWORD\""), "database credentials must never be printed");
     }
 
+    @Test
+    void recoveryRunbookSeparatesVerifiedBackupFromUnprovenRestoreAndRecoveryObjectives() throws IOException {
+        Path runbookPath = projectRoot().resolve("docs/ops/postgres-recovery.md");
+        assertTrue(Files.isRegularFile(runbookPath), "the executable backup boundary needs an operator recovery runbook");
+
+        String runbook = Files.readString(runbookPath, StandardCharsets.UTF_8);
+        assertTrue(runbook.contains("APPLICATION_SOURCE_SHA"), "operators need exact application-source provenance");
+        assertTrue(runbook.contains("pg_restore --list"), "runbook must explain archive structural verification");
+        assertTrue(runbook.contains("flyway_schema_history"), "runbook must explain migration-level provenance");
+        assertTrue(runbook.contains("Backup is not restore"), "a produced archive must not be represented as restore proof");
+        assertTrue(runbook.contains("RPO: not measured"), "RPO must remain evidence-based rather than invented");
+        assertTrue(runbook.contains("RTO: not measured"), "RTO must remain evidence-based rather than invented");
+        assertTrue(runbook.contains("Kafka"), "database recovery scope must distinguish Kafka side effects");
+        assertTrue(runbook.contains("Debezium"), "database recovery scope must distinguish Debezium state");
+        assertTrue(runbook.contains("DLT"), "database recovery scope must distinguish dead-letter state");
+        assertTrue(runbook.contains("external target"), "database recovery scope must distinguish external target effects");
+    }
+
     private static Path projectRoot() {
         Path current = Paths.get(System.getProperty("user.dir")).toAbsolutePath();
         Path lastPomParent = null;
