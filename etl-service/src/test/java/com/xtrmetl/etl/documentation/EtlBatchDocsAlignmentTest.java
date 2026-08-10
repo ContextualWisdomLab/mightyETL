@@ -46,6 +46,17 @@ class EtlBatchDocsAlignmentTest {
     }
 
     @Test
+    void runbookRejectsInvalidAmountsInsteadOfManufacturingZero() throws IOException {
+        String runbook = read("docs/etl/bounded-atomic-batches.md");
+
+        assertTrue(runbook.contains(
+                "Malformed, blank, excessive-precision, or extreme-scale `AMOUNT` values are rejected"
+        ));
+        assertTrue(runbook.contains("before the first JDBC call"));
+        assertFalse(runbook.contains("legacy fallback `0.00`"));
+    }
+
+    @Test
     void configurationAndChangelogUseTheSameLimits() throws IOException {
         String application = read("etl-service/src/main/resources/application.yml");
         String changelog = read("CHANGELOG.md");
