@@ -11,6 +11,10 @@ import java.util.Set;
 /**
  * Adapter for the live Debezium PostgreSQL capture path owned by {@link CdcService}.
  *
+ * <p>The live service reads connection and Debezium settings from deployment configuration. Per-call
+ * SPI configuration is therefore intentionally unsupported: callers must pass an empty map so values
+ * such as credentials are never accepted and then silently ignored.</p>
+ *
  * <p>{@link #start(Map)} / {@link #stop()} delegate to the service when available so the SPI
  * is a real control surface for the supported source type.</p>
  */
@@ -67,13 +71,34 @@ public final class PostgresDebeziumCdcSource implements CdcSourceConnector {
         return new SourceCapabilities("debezium-embedded", Set.of("postgresql"), false);
     }
 
+    /**
+     * Validates the per-call configuration accepted by this adapter.
+     *
+     * <p>The live PostgreSQL capture service is configured by the deployment, not by this SPI call.
+     * An empty map is therefore the only valid value.</p>
+     *
+     * @param config per-call settings; must be non-null and empty
+     * @throws IllegalArgumentException when {@code config} is null or contains any entry
+     */
     @Override
     public void validate(Map<String, String> config) {
         if (config == null) {
             throw new IllegalArgumentException("config must not be null");
         }
+        if (!config.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "postgres-debezium uses deployment-owned configuration; per-call config must be empty"
+            );
+        }
     }
 
+    /**
+     * Starts the deployment-configured PostgreSQL CDC service.
+     *
+     * @param config per-call settings; must be non-null and empty
+     * @throws IllegalArgumentException when {@code config} is null or contains any entry
+     * @throws IllegalStateException when the live {@link CdcService} is unavailable
+     */
     @Override
     public void start(Map<String, String> config) {
         validate(config);
