@@ -8,20 +8,17 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Defines the independent archive-digest boundary for PostgreSQL restore rehearsals.
+ * Defines integrity and atomic-write boundaries for PostgreSQL restore rehearsals.
  */
 class PostgresLogicalRestoreAuthenticityTest {
 
     @Test
     void restoreRequiresAnOutOfBandExpectedArchiveDigestBeforeArchiveInspection() throws IOException {
-        String script = Files.readString(
-                projectRoot().resolve("scripts/ops/postgres-logical-restore-rehearsal.sh"),
-                StandardCharsets.UTF_8)
-                .replace("\r\n", "\n")
-                .replace('\r', '\n');
+        String script = restoreScript();
 
         String expectedDigestInput =
                 ": \"${EXPECTED_BACKUP_SHA256:?Set EXPECTED_BACKUP_SHA256 to the independently recorded backup archive digest}\"";
@@ -39,6 +36,30 @@ class PostgresLogicalRestoreAuthenticityTest {
                 "the bundle manifest digest must match independently supplied digest evidence");
         assertTrue(script.indexOf(manifestDigestMatch) < script.indexOf(archiveInspection),
                 "independent digest evidence must be checked before pg_restore parses the archive");
+    }
+
+    @Test
+    void restoreUsesOneTransactionSoACommandFailureCannotLeavePartialApplicationState() throws IOException {
+        String script = restoreScript();
+
+        int restoreWrite = script.lastIndexOf("pg_restore \\\n");
+        assertTrue(restoreWrite >= 0, "restore script must contain a database-writing pg_restore invocation");
+        String restoreCommand = script.substring(restoreWrite, script.indexOf("\n\n", restoreWrite));
+
+        assertTrue(restoreCommand.contains("--single-transaction"),
+                "disposable-target restore must be atomic so any command failure rolls back the complete restore");
+        assertFalse(restoreCommand.contains("--transaction-size"),
+                "single-transaction recovery must not be weakened into a partially committed transaction batch");
+        assertTrue(restoreCommand.contains("--exit-on-error"),
+                "restore must keep explicit fail-fast semantics even though single-transaction also implies it");
+    }
+
+    private static String restoreScript() throws IOException {
+        return Files.readString(
+                        projectRoot().resolve("scripts/ops/postgres-logical-restore-rehearsal.sh"),
+                        StandardCharsets.UTF_8)
+                .replace("\r\n", "\n")
+                .replace('\r', '\n');
     }
 
     private static Path projectRoot() {
