@@ -48,9 +48,13 @@ Owned production code maintains exact 100% configured statement/line/method/bran
 
 ### 4.1 Non-vacuous coverage evidence
 
-Before applying percentage or zero-missed thresholds, the selected production class set MUST be non-empty. A JaCoCo report or check that says `Analyzed bundle with 0 classes` is a control failure and cannot substantiate 100% owned-production coverage. Issue #162 tracks the protected-baseline defect; PR #164 is the `active_pr` repair that separates report/check class-file filters and adds a non-empty class-count invariant.
+Before applying percentage or zero-missed thresholds, the selected production class set MUST be non-empty. A JaCoCo report or check that says `Analyzed bundle with 0 classes` is a control failure and cannot substantiate 100% owned-production coverage. The protected defect is tracked as issue #162 and its selected-class repair is active PR #164; neither an aggregate green result nor another pull request transfers that evidence.
 
-Coverage evidence must also state its source identity. GitHub `pull_request` workflows may exercise a synthetic merge ref, which can prove the generated integration tree but is not literal source-head evidence. When governance requires literal source proof, the workflow must check out and assert the exact contributor head independently. Results from a different head, predecessor, base snapshot, or synthetic merge do not transfer to a literal-source gate.
+Coverage evidence must also state its source identity. A synthetic merge can prove the generated integration tree, but it is not literal source evidence. When governance requires literal source proof, the workflow must check out and assert the exact contributor head independently. Results from a different head, predecessor, base snapshot, or synthetic merge do not transfer to a literal-source gate.
+
+### 4.2 Repository-wide owned-production scope
+
+A non-empty focused bundle is necessary but not sufficient for a repository-wide 100% claim. Release acceptance must inventory every owned production module and package, justify generated or third-party exclusions, prove that each selected set is non-empty, and aggregate the exposed statement/line/method/branch dimensions without silently omitting unmeasured services. Issue #205 tracks that broader scope authority.
 
 ## 5. Current domain-validity tests
 
@@ -112,7 +116,11 @@ Where mightyETL governance requires literal-head proof:
 
 PR #121 carries these repository-local controls but remains `active_pr`.
 
-## 7. Required PR gate inventory
+## 7. Security and dependency-graph evidence
+
+A zero-finding vulnerability result is non-passing when the scanner reports that dependency versions or child dependencies could not be resolved. Issue #196 owns the current Maven dependency-graph completeness gap. Accepted security evidence must bind the exact source identity, complete dependency materialization, scanner/tool version and policy threshold to the same run; Dependency Review, SBOM, filesystem scanning and formal review remain separate evidence authorities.
+
+## 8. Required PR gate inventory
 
 At every merge decision refetch and classify:
 
@@ -122,7 +130,7 @@ At every merge decision refetch and classify:
 - Dependency Review;
 - SBOM;
 - SAST/Semgrep/CodeQL or configured equivalent;
-- hard security scanner source identity;
+- hard security scanner source identity and dependency-graph completeness;
 - commit statuses;
 - formal reviews and requested reviewers/teams;
 - unresolved human/CodeRabbit/GHAS/Dependabot/OpenCode/Noema/Strix feedback;
@@ -132,7 +140,7 @@ At every merge decision refetch and classify:
 
 `queued`, `pending`, `neutral-required`, `skipped-required`, `absent`, `cancelled`, failed, stale-head, predecessor-head, old-base, status-only, and synthetic-merge-only evidence are non-passing for a gate that requires literal exact-head success.
 
-## 8. Documentation contract tests
+## 9. Documentation contract tests
 
 Documentation tests must compare canonical claims to source reality, not preserve historical claims merely because they were once written. They verify:
 
@@ -146,25 +154,25 @@ Documentation tests must compare canonical claims to source reality, not preserv
 - active PRs are not mislabeled as shipped;
 - security authority claims match workflow/source code.
 
-## 9. Performance/reliability acceptance
+## 10. Performance/reliability acceptance
 
 No success claim is based on a microbenchmark detached from production semantics. Relevant tests include realistic bounded JSON batches, PostgreSQL transaction contention, Kafka acknowledgement latency/failure, connector concurrency, large pagination datasets, and migration lock/index behavior.
 
 Performance tests record environment, input shape, warmup, repetitions, distribution statistics, and resource limits. A regression threshold must have measurement error headroom rather than equal one noisy point estimate.
 
-## 10. Release verification
+## 11. Release verification
 
 Before a release:
 
 1. refetch integrated protected head;
 2. execute full supported platform test/coverage matrix;
-3. verify all current security/dependency/SBOM/provenance gates;
+3. verify all current security/dependency/SBOM/provenance gates on one complete exact-source evidence set;
 4. rehearse applicable clean-install and upgrade migrations plus documented recovery;
 5. run representative standalone ETL, standalone CDC, and composed MSA smoke paths;
 6. verify public docs/API/ERD/UML/ADRs match the release head;
 7. verify release artifacts after publication.
 
-## 11. References
+## 12. References
 
 GitHub. (2026). *Events that trigger workflows*. GitHub Docs. https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows
 
