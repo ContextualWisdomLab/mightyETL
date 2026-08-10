@@ -35,6 +35,16 @@ sha256_file() {
     return 1
 }
 
+query_flyway_schema_version() {
+    psql \
+        --host="$PGHOST" \
+        --port="$PGPORT" \
+        --username="$PGUSER" \
+        --dbname="$PGDATABASE" \
+        --no-psqlrc --tuples-only --no-align --set=ON_ERROR_STOP=1 \
+        --command="SELECT COALESCE((SELECT version FROM flyway_schema_history WHERE success = true ORDER BY installed_rank DESC LIMIT 1), 'none')"
+}
+
 mkdir -p -- "$BACKUP_DIRECTORY"
 backup_directory=$(cd -- "$BACKUP_DIRECTORY" && pwd -P)
 created_at_utc=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
@@ -67,6 +77,10 @@ temporary_bundle=$(mktemp -d "${backup_directory}/.mightyetl-postgres-backup.XXX
 archive_path="${temporary_bundle}/database.dump"
 manifest_path="${temporary_bundle}/manifest.txt"
 
+# Bind migration provenance on both sides of the dump window. A concurrent Flyway migration may
+# otherwise make a post-dump manifest claim a schema level newer than the archive snapshot.
+flyway_schema_version_before_dump=$(query_flyway_schema_version)
+
 pg_dump \
     --host="$PGHOST" \
     --port="$PGPORT" \
@@ -78,6 +92,12 @@ pg_dump \
 # A completed custom archive must be structurally readable before it is published.
 pg_restore --list "$archive_path" >/dev/null
 
+flyway_schema_version_after_dump=$(query_flyway_schema_version)
+if [[ "$flyway_schema_version_before_dump" != "$flyway_schema_version_after_dump" ]]; then
+    printf 'Database migration level changed while backup was being captured\n' >&2
+    exit 5
+fi
+
 server_version_num=$(psql \
     --host="$PGHOST" \
     --port="$PGPORT" \
@@ -86,14 +106,6 @@ server_version_num=$(psql \
     --no-psqlrc --tuples-only --no-align --set=ON_ERROR_STOP=1 \
     --command='SHOW server_version_num')
 
-flyway_schema_version=$(psql \
-    --host="$PGHOST" \
-    --port="$PGPORT" \
-    --username="$PGUSER" \
-    --dbname="$PGDATABASE" \
-    --no-psqlrc --tuples-only --no-align --set=ON_ERROR_STOP=1 \
-    --command="SELECT COALESCE((SELECT version FROM flyway_schema_history WHERE success = true ORDER BY installed_rank DESC LIMIT 1), 'none')")
-
 backup_sha256=$(sha256_file "$archive_path")
 
 printf '%s\n' \
@@ -101,7 +113,7 @@ printf '%s\n' \
     "application_source_sha=${APPLICATION_SOURCE_SHA}" \
     "created_at_utc=${created_at_utc}" \
     "server_version_num=${server_version_num}" \
-    "flyway_schema_version=${flyway_schema_version}" \
+    "flyway_schema_version=${flyway_schema_version_before_dump}" \
     "backup_sha256=${backup_sha256}" \
     > "$manifest_path"
 
