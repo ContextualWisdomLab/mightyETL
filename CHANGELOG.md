@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added a private, verified PostgreSQL logical backup bundle with exact application-source, PostgreSQL/Flyway migration, and SHA-256 provenance; this does not prove restore or disaster-recovery readiness, which remains tracked by #188.
 - Principal-scoped durable asynchronous ETL job intake and owner-scoped status resources, Flyway `etl_job_records` migration, deterministic replay/conflict coverage, and the explicit worker boundary in `docs/etl/durable-job-intake.md`.
 - Durable idempotency ledger migration, PostgreSQL transaction advisory-lock adapter, deterministic concurrency/rollback coverage, and the operator/client contract `docs/etl/idempotent-retries.md`.
 - ETL problem-details client and operator contract: `docs/api/problem-details.md`.
