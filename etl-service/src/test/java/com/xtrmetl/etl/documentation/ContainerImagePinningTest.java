@@ -27,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ContainerImagePinningTest {
 
     private static final Pattern FROM_INSTRUCTION = Pattern.compile(
-            "(?im)^FROM\\s+(?:--platform=\\S+\\s+)?(?<image>\\S+)"
+            "(?im)^[\\t ]*FROM\\s+(?:--platform=\\S+\\s+)?(?<image>\\S+)"
                     + "(?:\\s+AS\\s+(?<alias>[A-Za-z0-9._-]+))?\\s*$"
     );
     private static final Pattern SHA256_PIN = Pattern.compile(
