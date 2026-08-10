@@ -59,6 +59,19 @@ class PostgresLogicalBackupContractTest {
         assertTrue(runbook.contains("external target"), "database recovery scope must distinguish external target effects");
     }
 
+    @Test
+    void changelogRecordsTheNewBackupCapabilityWithoutClaimingRestoreReadiness() throws IOException {
+        String changelog = Files.readString(projectRoot().resolve("CHANGELOG.md"), StandardCharsets.UTF_8);
+        assertTrue(
+                changelog.contains("verified PostgreSQL logical backup"),
+                "the operator-visible backup capability must be discoverable in the changelog"
+        );
+        assertTrue(
+                changelog.contains("does not prove restore or disaster-recovery readiness"),
+                "the changelog must not promote a backup artifact into an untested recovery claim"
+        );
+    }
+
     private static Path projectRoot() {
         Path current = Paths.get(System.getProperty("user.dir")).toAbsolutePath();
         Path lastPomParent = null;
