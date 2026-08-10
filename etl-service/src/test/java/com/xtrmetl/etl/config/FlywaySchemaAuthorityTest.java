@@ -31,6 +31,22 @@ class FlywaySchemaAuthorityTest {
         assertFalse(application.contains("ddl-auto: create-drop"));
     }
 
+    @Test
+    void schemaAuthorityHasSourceBackedMigrationDoctoring() throws IOException {
+        String doctoring = read("docs/doctoring/flyway-schema-authority.md");
+
+        assertTrue(doctoring.contains("Spring Boot 3.5.16"));
+        assertTrue(doctoring.contains("spring.jpa.hibernate.ddl-auto"));
+        assertTrue(doctoring.contains("Flyway"));
+        assertTrue(doctoring.contains("schema history"));
+        assertTrue(doctoring.contains("checksum"));
+        assertTrue(doctoring.contains("baseline-on-migrate"));
+        assertTrue(doctoring.contains("forward recovery"));
+        assertTrue(doctoring.contains("https://docs.spring.io/spring-boot/how-to/data-initialization.html"));
+        assertTrue(doctoring.contains("https://documentation.red-gate.com/flyway/reference/commands/validate"));
+        assertTrue(doctoring.contains("APA 7"));
+    }
+
     private static String read(String relativePath) throws IOException {
         return Files.readString(projectRoot().resolve(relativePath), StandardCharsets.UTF_8);
     }
