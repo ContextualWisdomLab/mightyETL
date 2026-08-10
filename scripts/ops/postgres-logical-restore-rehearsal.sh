@@ -4,6 +4,7 @@ umask 077
 
 : "${BACKUP_BUNDLE:?Set BACKUP_BUNDLE to one verified mightyETL PostgreSQL backup bundle}"
 : "${EXPECTED_APPLICATION_SOURCE_SHA:?Set EXPECTED_APPLICATION_SOURCE_SHA to the exact source revision expected in the backup}"
+: "${EXPECTED_BACKUP_SHA256:?Set EXPECTED_BACKUP_SHA256 to the independently recorded backup archive digest}"
 : "${RECOVERY_PGHOST:?Set RECOVERY_PGHOST to the disposable PostgreSQL restore target}"
 : "${RECOVERY_PGPORT:?Set RECOVERY_PGPORT to the disposable PostgreSQL restore target port}"
 : "${RECOVERY_PGDATABASE:?Set RECOVERY_PGDATABASE to the explicitly provisioned empty restore database}"
@@ -11,6 +12,10 @@ umask 077
 
 if [[ ! "$EXPECTED_APPLICATION_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
     printf 'EXPECTED_APPLICATION_SOURCE_SHA must be a 40-character lowercase Git commit SHA\n' >&2
+    exit 2
+fi
+if [[ ! "$EXPECTED_BACKUP_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+    printf 'EXPECTED_BACKUP_SHA256 must be a 64-character lowercase SHA-256 digest\n' >&2
     exit 2
 fi
 
@@ -89,6 +94,10 @@ if [[ ! "$application_source_sha" =~ ^[0-9a-f]{40}$ || "$application_source_sha"
 fi
 if [[ ! "$expected_backup_sha256" =~ ^[0-9a-f]{64}$ ]]; then
     printf 'Backup manifest SHA-256 is invalid\n' >&2
+    exit 4
+fi
+if [[ "$expected_backup_sha256" != "$EXPECTED_BACKUP_SHA256" ]]; then
+    printf 'Backup manifest digest does not match independently recorded archive evidence\n' >&2
     exit 4
 fi
 if [[ ! "$backup_server_version_num" =~ ^[0-9]{6,9}$ ]]; then
