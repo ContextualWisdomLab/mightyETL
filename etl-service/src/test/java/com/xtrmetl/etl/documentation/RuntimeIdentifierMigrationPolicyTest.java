@@ -61,7 +61,10 @@ class RuntimeIdentifierMigrationPolicyTest {
 
     @Test
     void migrationInventoryExplainsCompatibilityAndPrimaryEvidence() throws IOException {
-        String inventory = Files.readString(projectRoot().resolve(INVENTORY_PATH), StandardCharsets.UTF_8);
+        Path inventoryPath = projectRoot().resolve(INVENTORY_PATH);
+        assertTrue(Files.exists(inventoryPath), "Runtime identifier migration requires compatibility evidence");
+
+        String inventory = Files.readString(inventoryPath, StandardCharsets.UTF_8);
         assertTrue(inventory.contains("reference.maven.relocation=https://maven.apache.org/guides/mini/guide-relocation.html"));
         assertTrue(inventory.contains("reference.java.binary_compatibility=https://docs.oracle.com/en/java/javase/26/docs/specs/jls/jls-13.html"));
         assertTrue(inventory.contains("compatibility.note="));
