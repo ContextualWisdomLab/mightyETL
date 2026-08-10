@@ -11,12 +11,17 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.listener.ContainerProperties;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
+import org.springframework.kafka.listener.DeadLetterPublishingRecoverer.HeaderNames.HeadersToAdd;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.lang.NonNull;
 import org.springframework.util.backoff.FixedBackOff;
 
 /**
  * Kafka-related configuration for {@code cdc-service}.
+ *
+ * <p>Dead-letter records retain the failed record and bounded origin/classification metadata needed
+ * for authorized recovery, while raw exception messages and stack traces are excluded because they
+ * can contain database, provider, credential-adjacent, or other deployment-sensitive diagnostics.</p>
  */
 @Configuration
 public class KafkaConfig {
@@ -24,6 +29,14 @@ public class KafkaConfig {
     private static final Logger log = LoggerFactory.getLogger(KafkaConfig.class);
     private static final int MAX_CONCURRENCY = 32;
 
+    /**
+     * Creates the replica-consumer error handler with bounded retries and a dead-letter fallback.
+     *
+     * @param kafkaTemplate Kafka publisher used for dead-letter records
+     * @param retryBackoffMs delay between retry attempts in milliseconds
+     * @param retryMaxAttempts maximum retry attempts before dead-letter recovery
+     * @return configured listener error handler
+     */
     @Bean
     public DefaultErrorHandler kafkaListenerErrorHandler(
             @NonNull KafkaTemplate<String, String> kafkaTemplate,
@@ -34,6 +47,7 @@ public class KafkaConfig {
                 kafkaTemplate,
                 (record, ex) -> new TopicPartition(record.topic() + ".DLT", record.partition())
         );
+        recoverer.excludeHeader(HeadersToAdd.EX_MSG, HeadersToAdd.EX_STACKTRACE);
 
         DefaultErrorHandler errorHandler = new DefaultErrorHandler(
                 recoverer,
@@ -43,6 +57,14 @@ public class KafkaConfig {
         return errorHandler;
     }
 
+    /**
+     * Creates a Kafka listener factory that commits each replica record only after successful handling.
+     *
+     * @param consumerFactory Kafka consumer factory
+     * @param kafkaListenerErrorHandler configured dead-letter/retry handler
+     * @param concurrency requested listener concurrency
+     * @return bounded listener-container factory
+     */
     @Bean
     public ConcurrentKafkaListenerContainerFactory<String, String> kafkaListenerContainerFactory(
             @NonNull ConsumerFactory<String, String> consumerFactory,
