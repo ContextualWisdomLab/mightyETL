@@ -46,6 +46,38 @@ class MightyEtlConfigAliasEnvironmentPostProcessorTest {
     }
 
     @Test
+    void mirrorsEveryModernDurableWorkerSettingToLegacyConsumers() {
+        MockEnvironment env = new MockEnvironment();
+        env.setProperty("mightyetl.etl.jobs.worker.enabled", "true");
+        env.setProperty("mightyetl.etl.jobs.worker.fixed-delay-milliseconds", "2500");
+        env.setProperty("mightyetl.etl.jobs.worker.initial-delay-milliseconds", "1000");
+        env.setProperty("mightyetl.etl.jobs.worker.lease-duration-seconds", "120");
+        env.setProperty("mightyetl.etl.jobs.worker.max-attempts", "5");
+        env.setProperty("mightyetl.etl.jobs.worker.lease-owner-id", "worker-primary");
+
+        Map<String, Object> aliases = MightyEtlConfigAliasEnvironmentPostProcessor.buildAliases(env);
+
+        assertEquals("true", aliases.get("xtrmetl.etl.jobs.worker.enabled"));
+        assertEquals(
+                "2500",
+                aliases.get("xtrmetl.etl.jobs.worker.fixed-delay-milliseconds")
+        );
+        assertEquals(
+                "1000",
+                aliases.get("xtrmetl.etl.jobs.worker.initial-delay-milliseconds")
+        );
+        assertEquals(
+                "120",
+                aliases.get("xtrmetl.etl.jobs.worker.lease-duration-seconds")
+        );
+        assertEquals("5", aliases.get("xtrmetl.etl.jobs.worker.max-attempts"));
+        assertEquals(
+                "worker-primary",
+                aliases.get("xtrmetl.etl.jobs.worker.lease-owner-id")
+        );
+    }
+
+    @Test
     void mirrorsLegacyBatchLimitForModernTooling() {
         MockEnvironment env = new MockEnvironment();
         env.setProperty("xtrmetl.etl.max-batch-records", "100");

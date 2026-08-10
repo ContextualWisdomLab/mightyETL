@@ -51,21 +51,36 @@ class EtlJobMigrationDocumentationTest {
     }
 
     @Test
-    void runbookDocumentsAcceptedSemanticsOwnershipAndTheWorkerBoundary() throws IOException {
+    void runbookDocumentsAcceptedSemanticsOwnershipAndActiveWorkerBoundary() throws IOException {
         String runbook = read("docs/etl/durable-job-intake.md").replaceAll("\\s+", " ");
 
         assertTrue(runbook.contains("202 Accepted"));
         assertTrue(runbook.contains("Location: /api/etl/jobs/{job_record_id}"));
         assertTrue(runbook.contains("same authenticated principal"));
         assertTrue(runbook.contains("byte-for-byte same JSON text"));
-        assertTrue(runbook.contains("does not execute jobs yet"));
+        assertFalse(runbook.contains("does not execute jobs yet"));
+        assertTrue(runbook.contains("executes at most one eligible durable job per worker poll"));
+        assertTrue(runbook.contains("FOR UPDATE SKIP LOCKED"));
+        assertTrue(runbook.contains("lease fencing"));
         assertTrue(runbook.contains("request payload"));
-        assertTrue(runbook.contains("worker and lease-fencing slice"));
         assertTrue(runbook.contains("Cache-Control: no-store"));
         assertTrue(runbook.contains("422 etl_job_submission_key_reused"));
-        assertTrue(runbook.contains("disabled by default"));
+        assertTrue(runbook.contains("intake is disabled by default"));
+        assertTrue(runbook.contains("worker is disabled by default"));
         assertTrue(runbook.contains("mightyetl.etl.jobs.intake-enabled=true"));
         assertTrue(runbook.contains("xtrmetl.etl.jobs.intake-enabled=true"));
+        assertTrue(runbook.contains("xtrmetl.etl.jobs.worker.enabled=true"));
+    }
+
+    @Test
+    void changelogRecordsLeaseFencedDurableWorkerExecution() throws IOException {
+        String changelog = read("CHANGELOG.md").replaceAll("\\s+", " ");
+
+        assertTrue(changelog.contains(
+                "Durable ETL jobs now execute through an opt-in lease-fenced worker"
+        ));
+        assertTrue(changelog.contains("FOR UPDATE SKIP LOCKED"));
+        assertTrue(changelog.contains("stable non-sensitive failure codes"));
     }
 
     private static String read(String relativePath) throws IOException {

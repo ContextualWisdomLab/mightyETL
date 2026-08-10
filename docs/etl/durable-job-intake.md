@@ -2,17 +2,21 @@
 
 ## Scope
 
-`POST /api/etl/jobs` creates a durable, authenticated-principal-scoped ETL job resource. This
-bounded intake slice persists accepted work and exposes its status monitor; it does not execute jobs
-yet. Execution, PostgreSQL `FOR UPDATE SKIP LOCKED` claiming, lease fencing, bounded attempts,
-terminal payload clearing, and crash recovery belong to the following worker and lease-fencing slice.
+`POST /api/etl/jobs` creates a durable, authenticated-principal-scoped ETL job resource. Durable
+execution is now implemented as a separate opt-in worker boundary: mightyETL executes at most one
+eligible durable job per worker poll, while PostgreSQL owns cross-replica claim arbitration through
+`FOR UPDATE SKIP LOCKED`, lease fencing, bounded attempts, and exact conditional lifecycle
+transitions.
 
-The incomplete intake surface is disabled by default. It is absent unless an operator explicitly
-sets the preferred `mightyetl.etl.jobs.intake-enabled=true` property, its supported legacy alias
-`xtrmetl.etl.jobs.intake-enabled=true`, or `ETL_JOB_INTAKE_ENABLED=true`. When both full namespaces
-are supplied, `mightyetl.*` wins. Enabling intake accepts the temporary boundary that submitted
-payloads remain retained in `PENDING` jobs until the worker and terminal payload-clearing slice is
-implemented. Deployments that cannot accept that retention boundary must leave the setting false.
+Both externally reachable intake and background execution remain disabled by default. Durable job
+intake is disabled by default and is absent unless an operator explicitly sets the preferred
+`mightyetl.etl.jobs.intake-enabled=true` property, its supported legacy alias
+`xtrmetl.etl.jobs.intake-enabled=true`, or `ETL_JOB_INTAKE_ENABLED=true`. The worker is disabled by
+default and does not poll until an operator explicitly enables either the preferred
+`mightyetl.etl.jobs.worker.enabled=true` property or its supported legacy alias
+`xtrmetl.etl.jobs.worker.enabled=true`. When both full namespaces are supplied, `mightyetl.*` wins.
+Keeping intake and execution as separate opt-ins allows an operator to stage schema and API rollout
+without silently starting background target writes.
 
 The existing synchronous `POST /api/etl/process` endpoint remains unchanged.
 
@@ -79,8 +83,58 @@ return `404 etl_job_not_found`; callers cannot use this endpoint to probe anothe
 existence.
 
 The response excludes the request payload, raw principal, raw submission key, and all internal
-hashes. Timestamps are explicit ISO-8601 strings. Before worker execution is implemented, newly
-accepted jobs remain `PENDING` with an `attemptCount` of zero.
+hashes. Timestamps are explicit ISO-8601 strings. A newly accepted job begins as `PENDING`. When the
+worker claims it, the database records `RUNNING`, a lease owner, an opaque lease token, lease expiry,
+and the incremented attempt count. Terminal success or failure clears the retained request payload.
+
+## Worker execution and lease fencing
+
+The scheduled worker claims at most one eligible row per poll. The claim repository serializes the
+selection in PostgreSQL with `FOR UPDATE SKIP LOCKED`, so concurrent replicas do not wait on or
+execute the same currently claimable row. Eligibility includes new `PENDING` work and reclaimable
+expired `RUNNING` work while the configured maximum attempt count has not been exhausted.
+
+Every mutable lifecycle transition is fenced by the exact claim identity. Success, retry release,
+and terminal failure must still match the job record, lease owner, opaque lease token, and valid
+lease boundary expected by the caller. A stale or superseded worker therefore cannot overwrite a
+newer owner's state. Stale transitions surface as a finite `stale` worker outcome rather than being
+silently accepted.
+
+`EtlJobExecutionService` is transactional. It validates the retained job and durable response-ledger
+identity, executes or replays the target operation, and then marks the exact live lease `SUCCEEDED`
+in the same transaction. If the success transition is stale, Spring rolls back the target and
+response-ledger effects from that execution attempt.
+
+Transient Spring data-access failures are released for retry only while attempts remain. Exhausted
+transient failures become `etl_target_unavailable`; non-transient data-access failures become
+`etl_target_failure`; deterministic request and integrity failures retain their stable application
+error codes; and unexpected runtime failures become `etl_internal_error`. The worker does not place
+raw payloads, principals, submission keys, job identifiers, lease identifiers, SQL, exception class
+names, or exception messages into metric labels.
+
+Worker telemetry uses the fixed terminal outcome vocabulary `idle`, `succeeded`, `retried`, `failed`,
+and `stale`. Each completed poll records exactly one outcome and one matching duration sample,
+including idle polls and database failures while persisting retry or terminal state.
+
+## Worker configuration
+
+The production worker remains fail-closed until explicitly activated. Supported keys include:
+
+- `mightyetl.etl.jobs.worker.enabled` / `xtrmetl.etl.jobs.worker.enabled`;
+- `mightyetl.etl.jobs.worker.fixed-delay-milliseconds` /
+  `xtrmetl.etl.jobs.worker.fixed-delay-milliseconds`;
+- `mightyetl.etl.jobs.worker.initial-delay-milliseconds` /
+  `xtrmetl.etl.jobs.worker.initial-delay-milliseconds`;
+- `mightyetl.etl.jobs.worker.lease-duration-seconds` /
+  `xtrmetl.etl.jobs.worker.lease-duration-seconds`;
+- `mightyetl.etl.jobs.worker.max-attempts` / `xtrmetl.etl.jobs.worker.max-attempts`; and
+- `mightyetl.etl.jobs.worker.lease-owner-id` / `xtrmetl.etl.jobs.worker.lease-owner-id`.
+
+Defaults are bounded in production configuration, and property validation rejects non-positive delay,
+lease-duration, and attempt settings as well as blank or oversized lease-owner identifiers. Operators
+should assign a stable, non-secret owner identifier per worker instance and size lease duration above
+normal execution latency while retaining enough margin for crash recovery through expired-lease
+reclamation.
 
 ## Validation and persistence
 
@@ -89,43 +143,51 @@ bounds used by synchronous ETL admission. The complete body must be a JSON array
 fields are rejected, every element must be an object with a safe textual `id`, and normalized field
 names must remain unique.
 
-Flyway migration `V2__create_etl_job_records.sql` creates `etl_job_records`. All schema objects use
+Flyway migration `V2__create_etl_job_records.sql` creates `etl_job_records`; later worker migrations
+add lease-fencing columns and a partial eligibility index for claim scans. All schema objects use
 descriptive multi-word `snake_case` names. The database stores:
 
 - an opaque UUID job identifier;
 - SHA-256 hashes of the principal scope, semantic submission key, and exact JSON text;
-- the request payload needed by the future worker while status is `PENDING` or `RUNNING`;
-- status, attempt, failure, and timestamp fields.
+- the request payload only while the job remains nonterminal;
+- status, attempt, failure, lease-owner/token/expiry, and lifecycle timestamp fields.
 
-The schema reserves the stable lifecycle vocabulary `PENDING`, `RUNNING`, `SUCCEEDED`, and `FAILED`.
-A database check requires a non-null request payload only for the two nonterminal states and requires
-that payload to be null for both terminal states. This makes terminal payload clearing an enforced
-persistence invariant rather than a documentation-only convention.
+The stable lifecycle vocabulary is `PENDING`, `RUNNING`, `SUCCEEDED`, and `FAILED`. Database checks
+require a non-null request payload only for nonterminal states and require the payload to be null for
+terminal states. Terminal payload clearing is therefore a persistence invariant, not merely an
+application convention.
 
-Raw authenticated principal names and raw idempotency keys are never persisted. The request payload
-is sensitive operational data and must inherit the classification of its source records. Until the
-worker slice reaches a terminal state and clears it, operators must apply database access control,
-encryption, backup, and retention policy accordingly.
+Raw authenticated principal names and raw idempotency keys are never persisted. The retained request
+payload is sensitive operational data and inherits the classification of its source records. While a
+job is `PENDING` or `RUNNING`, operators must protect it with database access control, encryption,
+backup, and retention policy appropriate to the underlying records.
 
 ## Operational boundary
 
-This slice deliberately does not advertise job completion or background execution. The controller is
-disabled by default; setting an activation property to `true` is an explicit operator opt-in to
-durable intake without execution. Deployments that need completed asynchronous processing must wait
-for the worker and lease-fencing slice. The next slice must claim jobs safely across replicas, fence
-stale lease owners, commit target effects and terminal success atomically, reclaim expired leases,
-bound attempts, publish stable failure codes, and clear the stored request payload at terminal state.
+Enabling intake alone still does not start background processing; enabling the worker alone does not
+create externally submitted jobs. A production deployment that wants asynchronous execution must
+intentionally enable both surfaces and apply the worker migrations first. Rollback is operationally
+safe by disabling the worker property: existing durable rows remain in PostgreSQL and expired
+`RUNNING` leases become reclaimable when a compatible worker is enabled again. Operators must not
+manually rewrite lease tokens or terminal status to manufacture recovery.
+
+This slice establishes durable execution, lease fencing, bounded retries, terminal payload clearing,
+and finite worker telemetry. Higher-level job-list pagination, polling advisories, conditional status
+reads, cancellation, and replay remain separate later stack items and must not be represented as part
+of this boundary until their own exact-head gates pass.
 
 ## Standards basis
 
 - RFC 9110 Section 15.3.3 defines `202 Accepted` as noncommittal and recommends that the response
   describe current status and point to a status monitor.
-- RFC 9457 supplies the problem-details representation used by deterministic submission and lookup
-  failures.
+- RFC 9457 supplies the problem-details representation used by deterministic submission, lookup, and
+  execution failures.
 - RFC 9651 defines the current Structured Fields String syntax accepted for `Idempotency-Key`.
 - The expired IETF HTTPAPI `Idempotency-Key` draft-07 is used only as work-in-progress design
   evidence for unique client keys, request fingerprints, `422` payload conflicts, and tenant-isolation
   security concerns. It expired on April 18, 2026 and is not represented as a published RFC.
+- PostgreSQL row locking and `SKIP LOCKED` semantics are the database authority for concurrent claim
+  behavior; the worker does not attempt to replace that arbitration with process-local locking.
 
 ### References
 
@@ -138,3 +200,5 @@ bound attempts, publish stable failure codes, and clear the stored request paylo
   https://www.rfc-editor.org/rfc/rfc9457
 - Nottingham, M., & Kamp, P. (2024). *Structured field values for HTTP* (RFC 9651). RFC Editor.
   https://www.rfc-editor.org/rfc/rfc9651
+- PostgreSQL Global Development Group. (2026). *SELECT*. PostgreSQL 18 documentation.
+  https://www.postgresql.org/docs/18/sql-select.html
