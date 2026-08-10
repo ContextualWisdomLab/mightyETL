@@ -38,6 +38,30 @@ class CdcRegistryIdentityTest {
     }
 
     @Test
+    void nullSourceConnectorFailsBeforeRegistryMutation() {
+        CdcSourceRegistry registry = new CdcSourceRegistry();
+
+        IllegalArgumentException failure = assertThrows(
+                IllegalArgumentException.class,
+                () -> registry.register(null)
+        );
+
+        assertEquals("CDC source connector must not be null", failure.getMessage());
+    }
+
+    @Test
+    void nullTargetConnectorFailsBeforeRegistryMutation() {
+        CdcTargetRegistry registry = new CdcTargetRegistry();
+
+        IllegalArgumentException failure = assertThrows(
+                IllegalArgumentException.class,
+                () -> registry.register(null)
+        );
+
+        assertEquals("CDC target connector must not be null", failure.getMessage());
+    }
+
+    @Test
     void blankSourceConnectorIdFailsBeforeRegistryMutation() {
         CdcSourceConnector blank = source("   ");
 
