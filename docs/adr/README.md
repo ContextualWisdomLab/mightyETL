@@ -12,6 +12,12 @@ This index contains status-bearing decisions that govern mightyETL beyond one fe
 | [0006](0006-exact-evidence-and-agent-authority.md) | Accepted | Exact-source evidence, separated agent authorities, writer lease/CAS |
 | [0007](0007-standalone-msa-and-connector-truth.md) | Accepted | Standalone + modular MSA operation and honest connector capability |
 | [0008](0008-purpose-bound-pii-controls.md) | Accepted | Purpose-bound PII access instead of blanket masking |
+| [0009](0009-schema-migration-and-recovery-authority.md) | Accepted with known gaps | Flyway-only schema mutation plus provenance-bound backup, restore, and recovery authority |
+| [0010](0010-service-and-configuration-identity-authority.md) | Accepted with known gaps | Explicit gateway, direct-service, registry, Config Server, CDC, and operator identity boundaries |
+| [0011](0011-diagnostic-and-dead-letter-data-governance.md) | Accepted with known gaps | Stable non-sensitive diagnostics, terminal dead-letter quarantine, and governed redrive lifecycle |
+| [0012](0012-quality-security-review-and-release-evidence.md) | Accepted with known gaps | Non-vacuous, complete, exact-subject quality/security/review/release evidence authority |
+| [0013](0013-runtime-identifier-and-stateful-compatibility.md) | Accepted with known gaps | Category-specific runtime identifier and stateful compatibility migration |
+| [0014](0014-tenancy-and-data-lifecycle-authority.md) | Proposed | Explicit single-tenant-per-deployment versus shared-runtime tenant authority decision |
 
 ## Status semantics
 
@@ -25,4 +31,4 @@ An ADR does not make active-PR code shipped. Product implementation status remai
 
 ## ADR update trigger
 
-Write or update an ADR when a change alters a public API/persistence model, security/trust boundary, lifecycle authority, deployment topology, autonomous GitHub authority, compatibility contract, release evidence semantics, or a cross-feature data-governance principle.
+Write or update an ADR when a change alters a public API/persistence model, security/trust boundary, lifecycle authority, deployment topology, autonomous GitHub authority, compatibility contract, release evidence semantics, recovery authority, identity boundary, tenancy/data lifecycle, or a cross-feature data-governance principle.
