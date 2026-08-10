@@ -12,6 +12,7 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -43,7 +44,36 @@ class ContainerImagePinningTest {
         Path dockerfilePath = projectRoot().resolve("Dockerfile");
         assertTrue(Files.isRegularFile(dockerfilePath), "The repository Dockerfile must exist");
 
-        String dockerfile = Files.readString(dockerfilePath, StandardCharsets.UTF_8);
+        assertExternalImagesArePinned(
+                Files.readString(dockerfilePath, StandardCharsets.UTF_8)
+        );
+    }
+
+    /**
+     * Requires Docker-compatible leading indentation to remain inside the immutable-image policy.
+     *
+     * <p>Docker accepts spaces or tabs before an instruction. A mutable external image must
+     * therefore still fail this policy when its {@code FROM} instruction is indented.</p>
+     */
+    @Test
+    void rejectsIndentedMutableExternalBaseImage() {
+        String pinnedDigest = "a".repeat(64);
+        String dockerfile = "FROM example.invalid/build@sha256:" + pinnedDigest + " AS build\n"
+                + "  FROM alpine:latest\n";
+
+        assertThrows(
+                AssertionError.class,
+                () -> assertExternalImagesArePinned(dockerfile),
+                "Indented FROM instructions must not bypass immutable image enforcement"
+        );
+    }
+
+    /**
+     * Applies the immutable-image policy to Dockerfile source text.
+     *
+     * @param dockerfile Dockerfile text to validate
+     */
+    private static void assertExternalImagesArePinned(String dockerfile) {
         Matcher matcher = FROM_INSTRUCTION.matcher(dockerfile);
         Set<String> localStageAliases = new HashSet<>();
         int externalImageCount = 0;
