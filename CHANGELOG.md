@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Durable job operators can now list only their own jobs through bounded newest-first keyset pagination with canonical opaque cursors, deterministic timestamp-plus-UUID ordering, `Cache-Control: no-store`, and RFC 8288 next-page links without offset drift or cross-tenant existence leakage.
+- The durable job pagination index uses PostgreSQL `CREATE INDEX CONCURRENTLY` with migration-local Flyway `executeInTransaction=false`, preserving production writers while documenting invalid-index recovery and concurrent rollback.
 - Scheduled OpenCode maintenance now performs root-cause analysis, tests remediation feasibility against live authority, protection, resource, dependency, path-ownership, and writer-lease constraints, executes and verifies the best safe option available now, and continues exactly one independent bounded mightyETL slice from protected `develop` when only external blockers remain; invalid stacks and separately leased repositories stay untouched.
 - Container builds now pin Maven and Eclipse Temurin base-image tags to reviewed SHA-256 digests, with a fail-first contract test preventing mutable registry tags from re-entering the Dockerfile.
 - The model-executing hourly OpenCode maintenance job now has read-only issue access; fail-first workflow-contract coverage proves `issues: write` is unnecessary while preserving issue and roadmap inspection.
@@ -34,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Owner-scoped durable job list models and HTTP contract, strict cursor and page-limit validation, one-extra-row next-page detection, the descriptive `etl_job_owner_pagination_index`, deterministic tenant-isolation and equal-timestamp tests, migration rollback guidance, and APA 7th standards evidence in `docs/etl/durable-job-intake.md`.
 - Test-first doctoring for external-wait progress, root-cause analysis, realistic remediation feasibility, exact post-action verification, source-actionable pull-request classification, invalid-stack isolation, and read-only dependency leases in `docs/doctoring/hourly-opencode-nonblocking-progress-evidence.md`.
 - Permanent fail-first exact-head workflow contracts and authoritative evidence in `docs/doctoring/exact-head-source-workflow-evidence.md`, including observed synthetic-merge checkout behavior, cross-platform source identity assertions, the rejected ignored Dependency Review ref-override experiment, corrective pull-request event-endpoint semantics, least-privilege boundaries, stack invalidation rules, rollback prohibition, and APA 7th GitHub references.
 - A separate fail-closed hourly OpenCode maintenance workflow pinned to OpenCode 1.18.13 and `nvidia/deepseek-ai/deepseek-v4-pro`, using only the existing `NVIDIA_NIM_API_KEY` through OpenCode's `NVIDIA_API_KEY` provider variable while preserving the independent review agent and deterministic merge-disposition workflow.

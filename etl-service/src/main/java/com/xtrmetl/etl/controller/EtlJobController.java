@@ -1,6 +1,8 @@
 package com.xtrmetl.etl.controller;
 
 import com.xtrmetl.etl.job.EtlJobAcceptedResponse;
+import com.xtrmetl.etl.job.EtlJobPage;
+import com.xtrmetl.etl.job.EtlJobPageResponse;
 import com.xtrmetl.etl.job.EtlJobService;
 import com.xtrmetl.etl.job.EtlJobSnapshot;
 import com.xtrmetl.etl.job.EtlJobStatusResponse;
@@ -11,6 +13,7 @@ import io.micrometer.observation.annotation.Observed;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.CacheControl;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.lang.Nullable;
@@ -20,7 +23,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
 import java.security.Principal;
@@ -28,16 +33,15 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * Exposes durable asynchronous ETL job submission and owner-scoped status resources.
+ * Exposes durable asynchronous ETL job submission, discovery, and status resources.
  *
  * <p>Submission requires authentication and an {@code Idempotency-Key}. The accepted response is
  * intentionally noncommittal under RFC 9110: it reports the durable pending state and supplies a
- * status-monitor resource through both the representation and {@code Location} header. This intake
- * slice does not claim that worker execution has started.</p>
+ * status-monitor resource through both the representation and {@code Location} header.</p>
  *
- * <p>Because this bounded slice retains payloads but does not yet execute jobs or clear terminal
- * payloads, the controller is disabled by default. Operators must explicitly set
- * {@code xtrmetl.etl.jobs.intake-enabled=true} after accepting that temporary lifecycle boundary.</p>
+ * <p>Job discovery is owner-scoped and uses an opaque keyset cursor. A next-page link is emitted
+ * under RFC 8288 only when another page exists. The service independently binds every list query to
+ * the authenticated principal hash, so cursor contents never grant authority.</p>
  *
  * <p>Success and covered failure responses use {@code Cache-Control: no-store}. Malformed, absent,
  * and foreign-owned job identifiers use the same owner-safe not-found classification so the status
@@ -55,6 +59,8 @@ public class EtlJobController {
 
     /** Response header indicating whether a prior durable submission was replayed. */
     public static final String IDEMPOTENCY_REPLAYED_HEADER = "Idempotency-Replayed";
+
+    private static final String DEFAULT_JOB_PAGE_LIMIT_TEXT = "50";
 
     private final EtlJobService etlJobService;
 
@@ -121,6 +127,51 @@ public class EtlJobController {
                 )
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(responseBody);
+    }
+
+    /**
+     * Lists one deterministic page of jobs in the authenticated principal namespace.
+     *
+     * @param cursor opaque next-page cursor, or {@code null} for the newest page
+     * @param limit canonical decimal page size from 1 through 100, or {@code null} for 50
+     * @param principal authenticated principal namespace
+     * @return owner-scoped page with an RFC 8288 next link only when another page exists
+     */
+    @GetMapping
+    @Observed(name = "etl.jobs.list", contextualName = "etl-job-list")
+    public ResponseEntity<EtlJobPageResponse> list(
+            @RequestParam(value = "cursor", required = false) @Nullable String cursor,
+            @RequestParam(value = "limit", required = false) @Nullable String limit,
+            @Nullable Principal principal
+    ) {
+        if (principal == null) {
+            throw new EtlRequestException(EtlRequestError.IDEMPOTENCY_PRINCIPAL_REQUIRED);
+        }
+
+        final EtlJobPage page;
+        try {
+            page = etlJobService.listOwned(principal.getName(), cursor, limit);
+        } catch (EtlRequestException | DataAccessException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            throw new EtlUnexpectedException(exception);
+        }
+
+        ResponseEntity.BodyBuilder responseBuilder = ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore());
+        if (page.nextCursor() != null) {
+            String effectiveLimit = limit == null ? DEFAULT_JOB_PAGE_LIMIT_TEXT : limit;
+            String nextTarget = UriComponentsBuilder.fromPath("/api/etl/jobs")
+                    .queryParam("limit", effectiveLimit)
+                    .queryParam("cursor", page.nextCursor())
+                    .build()
+                    .toUriString();
+            responseBuilder.header(
+                    HttpHeaders.LINK,
+                    "<" + nextTarget + ">; rel=\"next\""
+            );
+        }
+        return responseBuilder.body(EtlJobPageResponse.from(page));
     }
 
     /**
