@@ -1,16 +1,16 @@
 # mightyETL System Architecture
 
 **Canonical protected baseline:** `develop@622e5e6c3d534f230c390f10e3832efadfc01825`  
-**Last reconciled:** 2026-08-09
+**Last reconciled:** 2026-08-10
 
-This document describes the architecture that actually exists on protected `develop`, then overlays open work with an explicit `active_pr` label. A diagram containing an active PR is not a statement that the feature is deployed.
+This document describes protected `develop` first, then overlays open work with explicit maturity labels. An `active_pr`, `planned`, or `known_gap` statement is not deployed product truth.
 
 ## 1. Architecture Status Vocabulary
 
-- `implemented_on_develop` — protected baseline reality.
-- `active_pr` — open PR only.
-- `planned` — issue/design, no protected implementation.
-- `superseded` — historical path, not an integration target.
+- `implemented_on_develop` — exact protected-baseline reality.
+- `active_pr` — open pull request only.
+- `planned` — accepted issue/design without protected implementation.
+- `superseded` — historical path, no longer an integration target.
 - `out_of_scope` — intentionally excluded.
 - `known_gap` — protected behavior with a material limitation.
 
@@ -24,18 +24,19 @@ flowchart TB
     CDC[CDC Service\nport 8001]
     Eureka[Eureka Server\nport 8761]
     Config[Config Server\nport 8888]
-    Zipkin[Zipkin / tracing\nport 9412 when enabled]
+    Zipkin[Zipkin / tracing\nprotected host contract 9412]
     Target[(PostgreSQL target)]
     Source[(PostgreSQL CDC source)]
     Kafka[(Apache Kafka)]
     Consumers[Downstream consumers]
 
     Client --> Gateway
+    Client -. direct deployment .-> ETL
     Gateway --> ETL
     Gateway --> CDC
     ETL --> Target
     Source -->|WAL / pgoutput| CDC
-    CDC -->|raw Debezium JSON| Kafka
+    CDC -->|Debezium JSON| Kafka
     Kafka --> Consumers
     Gateway -. discovery .-> Eureka
     ETL -. discovery .-> Eureka
@@ -45,7 +46,7 @@ flowchart TB
     CDC -. telemetry .-> Zipkin
 ```
 
-The service decomposition is compatible with independent operation: an ETL-only deployment does not need a CDC engine, and a CDC deployment does not require an unused warehouse connector. Composition adds routing/discovery/observability; it does not erase service boundaries.
+The service decomposition preserves standalone operation. Composition adds routing, discovery, configuration, and observability; it does not erase service, identity, data, or failure boundaries.
 
 ## 3. ETL Service Architecture — `implemented_on_develop`
 
@@ -56,25 +57,25 @@ sequenceDiagram
     participant C as Client
     participant EC as EtlController
     participant ES as EtlService
-    participant DB as PostgreSQL target
+    participant DB as PostgreSQL processed_data
 
     C->>EC: POST /api/etl/process + JSON array
     EC->>ES: processData(payload)
-    ES->>ES: enforce byte/record limits
-    ES->>ES: strict parse + validate all records
-    ES->>ES: transform all records
-    Note over ES,DB: No JDBC target write before whole-batch preparation succeeds
-    loop prepared records in input order
-        ES->>DB: parameterized INSERT processed_data
+    ES->>ES: enforce exact byte and record limits
+    ES->>ES: strict parse and validate every record
+    ES->>ES: deterministic transform of whole batch
+    Note over ES,DB: no target write before whole-batch preparation succeeds
+    loop prepared rows in input order
+        ES->>DB: parameterized INSERT
     end
-    DB-->>ES: transaction commit
-    ES-->>EC: deterministic result body
+    DB-->>ES: one Spring transaction commits
+    ES-->>EC: deterministic response
     EC-->>C: 200 text/plain
 ```
 
-The earlier per-record `CompletableFuture`/`Parallel Proc` architecture is retired. The live path is synchronous inside one Spring transaction so a later failure rolls back the batch rather than leaving committed prefix records.
+The earlier per-record `CompletableFuture`/`Parallel Proc` architecture is retired. A later failure rolls back the batch rather than leaving a committed prefix.
 
-### 3.2 Principal-scoped idempotency Flow
+### 3.2 Principal-scoped idempotency
 
 ```mermaid
 sequenceDiagram
@@ -86,29 +87,27 @@ sequenceDiagram
 
     C->>EC: POST /api/etl/process + Idempotency-Key
     EC->>ES: payload, key, principal
-    ES->>ES: validate key/principal + exact request digest
-    ES->>L: try transaction-scoped lock(hash(principal,key))
-    alt lock unavailable
+    ES->>ES: validate and digest exact intent
+    ES->>L: try transaction-scoped lock(scope,key)
+    alt competing request
         ES-->>C: RFC 9457 in-progress conflict
-    else existing same digest
-        DB-->>ES: committed response_body
-        ES-->>C: replay response + Idempotency-Replayed: true
-    else existing different digest
-        ES-->>C: RFC 9457 key-reused conflict
-    else first request
-        ES->>ES: bounded whole-batch preparation
-        ES->>DB: target writes
-        ES->>DB: insert response ledger
+    else same committed digest
+        DB-->>ES: stored response_body
+        ES-->>C: replay + Idempotency-Replayed=true
+    else same key, different digest
+        ES-->>C: key-reuse conflict
+    else new request
+        ES->>DB: target writes + response ledger
         DB-->>ES: one transaction commits both
-        ES-->>C: response + Idempotency-Replayed: false
+        ES-->>C: success + Idempotency-Replayed=false
     end
 ```
 
 Raw principals and raw idempotency keys are not stored in `etl_idempotency_records`.
 
-### 3.3 Durable job intake Flow
+### 3.3 Durable asynchronous intake
 
-`EtlJobController` is `implemented_on_develop` but disabled by default. It is deliberately an intake/status boundary, not a claim of background execution.
+`EtlJobController` is `implemented_on_develop` but disabled by default. It provides intake and owner-scoped status, not a claim that a protected background worker is running.
 
 ```mermaid
 sequenceDiagram
@@ -119,210 +118,197 @@ sequenceDiagram
 
     C->>JC: POST /api/etl/jobs + Idempotency-Key
     JC->>JS: submit(payload,key,principal)
-    JS->>DB: create or replay owner-scoped durable record
+    JS->>DB: create or replay owner-scoped record
     DB-->>JS: PENDING snapshot
-    JS-->>JC: submission metadata
-    JC-->>C: 202 + Location + Idempotency-Replayed
+    JS-->>C: 202 + Location + replay metadata
     C->>JC: GET /api/etl/jobs/{job_record_id}
-    JC->>JS: owner-scoped lookup
-    JS->>DB: select by job id + principal scope
-    DB-->>JC: safe status snapshot
-    JC-->>C: 200 + Cache-Control: no-store
+    JC->>DB: owner-scoped lookup
+    DB-->>C: status + Cache-Control: no-store
 ```
 
-On protected develop the job status domain is `PENDING`, `RUNNING`, `SUCCEEDED`, `FAILED`. V2 enforces that active rows retain `request_payload` and terminal rows cannot retain it, but protected `develop` has no integrated worker that performs a terminal transition. Consequently terminal payload clearing is a schema invariant rather than a shipped runtime capability, and an enabled intake can retain `PENDING` payloads indefinitely. This is a `known_gap`; durable intake remains disabled by default and production use must remain restricted until an integrated worker/lifecycle or explicit retention policy bounds payload lifetime and proves restart/recovery behavior.
+Protected status values are `PENDING`, `RUNNING`, `SUCCEEDED`, and `FAILED`. The schema requires active rows to retain `request_payload` and terminal rows to clear it, but protected `develop` has no integrated worker. Indefinite pending-payload retention is therefore a `known_gap` when intake is enabled.
 
 ## 4. Durable Job Active Stack — `active_pr`
 
 ```mermaid
 flowchart LR
-    P121[#121 exact-source CI + scheduler]
+    P121[#121 exact-source controls and scheduler]
     P143[#143 lease-fenced worker]
     P144[#144 owner pagination]
     P145[#145 Retry-After]
-    P146[#146 conditional ETag]
+    P146[#146 weak ETag]
     P147[#147 cancellation]
-    P148[#148 replay replacement]
+    P148[#148 replay lineage]
 
     P121 --> P143 --> P144 --> P145 --> P146 --> P147 --> P148
 ```
 
-The arrow is a dependency/ancestry contract, not a release promise. Every predecessor integration can invalidate downstream base/evidence and requires fresh direct-base validation. These capabilities remain `active_pr` until protected merge.
+The arrows are exact ancestry/dependency contracts. Checks, reviews, and approvals do not transfer when a predecessor changes.
 
 ## 5. CDC Event Capture Flow
-
-### 5.1 `implemented_on_develop`
 
 ```mermaid
 sequenceDiagram
     participant PG as PostgreSQL source
-    participant D as Debezium Engine 3.4
+    participant DBZ as Debezium Engine 3.4
     participant CS as CdcService
     participant K as KafkaTemplate / Kafka
     participant DC as Downstream consumer
 
-    PG-->>D: logical replication events
-    D->>CS: ChangeEvent(key,value,destination)
-    CS->>CS: optional canonical-map observation
+    PG-->>DBZ: logical replication event
+    DBZ->>CS: ChangeEvent(key,value,destination)
+    CS->>CS: optional canonical record observation
     CS->>K: send raw Debezium JSON
     K-->>DC: event stream
 ```
 
-`known_gap`: protected develop does not wait for Kafka broker acknowledgement in `handleChangeEvent`. PR #139 is the `active_pr` acknowledged-delivery path and adds a bounded acknowledgement wait/retry boundary before Debezium record progress.
-
-### 5.2 CDC lifecycle
+Protected develop does not await Kafka broker acknowledgement before returning from `handleChangeEvent`; this is a `known_gap`. PR #139 is the `active_pr` bounded acknowledgement path. Issue #141 owns graceful stop because protected `stop()` can clear references before the asynchronous Debezium task has returned and flushed progress.
 
 ```mermaid
 stateDiagram-v2
     [*] --> STOPPED
-    STOPPED --> RUNNING: start()
-    RUNNING --> STOP_REQUESTED: stop() / engine.close()
-    STOP_REQUESTED --> STOPPED: current develop clears references
-    RUNNING --> SHUTTING_DOWN: application shutdown
-    SHUTTING_DOWN --> STOPPED: executor termination
-
-    note right of STOP_REQUESTED
-      known_gap: current stop() does not prove
-      the asynchronous engine Future has returned.
-      Issue #141 owns the planned repair.
-    end note
+    STOPPED --> RUNNING: start
+    RUNNING --> STOP_REQUESTED: close requested
+    STOP_REQUESTED --> REFERENCES_CLEARED: protected behavior
+    STOP_REQUESTED --> ENGINE_COMPLETED: required truthful completion
+    ENGINE_COMPLETED --> STOPPED
+    REFERENCES_CLEARED --> STOPPED: not proof of engine completion
 ```
-
-Debezium documents `close()` as a graceful stop request and `run()` as returning only after remaining events and offset flushing complete. Therefore future operator state must distinguish request-to-stop from proven task completion.
 
 ## 6. Connector Architecture
 
-### 6.1 ETL target connectors
+`TargetConnectorDispatcher` owns ETL target lifecycle and catalog behavior. The protected primary load path remains PostgreSQL. `CdcSourceRegistry`, `CdcTargetRegistry`, and canonical record interfaces are extensibility surfaces, but protected capture remains PostgreSQL Debezium → Kafka and reports `anyToAny=false`.
 
-`TargetConnectorDispatcher` owns target connector lifecycle/catalog behavior. The protected product's primary load path remains PostgreSQL. Warehouse/BI connector surfaces are useful discovery/configuration scaffolds, but support claims must follow runtime capability rather than documentation aspiration.
-
-### 6.2 CDC source/target SPI
-
-`CdcSourceRegistry`, `CdcTargetRegistry`, `CdcSourceFactory`, and the canonical record mapping surface allow future source/target evolution. The live capture path remains PostgreSQL Debezium → Kafka. `getStatus()` explicitly reports `anyToAny=false` on the protected baseline.
+A connector is commercially supported only when its configured path is executable, secured, observable, documented, compatibility-tested, and release-accepted. A scaffold is removed from production discovery or productionized; it is not advertised indefinitely.
 
 ## 7. Persistence Architecture
 
-Detailed relationships are in `docs/ERD.md`.
+Physical and conceptual relationships are in `docs/ERD.md`.
 
 ### 7.1 `implemented_on_develop`
 
-- `processed_data` — local compose primary ETL target.
+- `processed_data` — local PostgreSQL ETL target.
 - `etl_idempotency_records` — principal/key-hash replay ledger.
-- `etl_job_records` — durable asynchronous intake/status state; its V2 payload lifecycle check is implemented, while bounded runtime payload retention remains a `known_gap` until execution/retention lifecycle integrates.
-- legacy local compose `users`, `roles`, `user_roles` — persisted bootstrap compatibility objects, not a shipped registration/login service.
+- `etl_job_records` — durable asynchronous intake/status state with a runtime retention `known_gap`.
+- legacy `users`, `roles`, and `user_roles` — bootstrap compatibility objects, not a shipped registration/login system.
 
-### 7.2 `active_pr`
+### 7.2 `active_pr` and planned overlays
 
-The durable-job stack adds lease, pagination-index, cancellation, and replay-lineage persistence in later PRs. These objects belong in the active-PR overlay of `docs/ERD.md` until integrated.
+The #143→#148 stack adds lease, pagination, cancellation, and replay-lineage state. PR #155 removes abandoned local-auth objects from clean installs while preserving explicit upgrade compatibility. No active migration is protected truth until integration.
 
 ## 8. Security Architecture
 
-### 8.1 Gateway identity
+### 8.1 Gateway and direct service identity
 
-Protected develop has a class named `JwtAuthenticationFilter`, but its `validateToken` implementation accepts the literal example value `valid_token`. That is a `known_gap`, not production JWT validation.
+Protected `JwtAuthenticationFilter` accepts the literal example value `valid_token`. This is a `known_gap`, not cryptographic JWT validation. PR #142 is the `active_pr` Spring Security Resource Server replacement.
 
-PR #142 is `active_pr` and replaces this with Spring Security reactive OAuth 2.0 Resource Server JWT configuration. Until protected integration, the architecture makes no issuer/JWK/audience/algorithm claim.
+The default deployment can also reach ETL directly at port 8000. Gateway identity therefore does not establish direct/east-west ETL identity; issue #161 remains a separate product/security gap.
 
-Historical architecture described local auth and password hashing. These identifiers are retained only as superseded traceability:
+Historical local authentication is retained only as superseded traceability:
 
 - superseded interface: `POST /auth/signin`
 - superseded interface: `POST /auth/signup`
 - superseded security claim: `BCrypt` password authentication
 
-The local compose `password` column is legacy data shape and does not turn the superseded HTTP/authentication design into a shipped capability.
+### 8.2 Purpose-bound data protection
 
-### 8.2 ETL owner/idempotency boundary
-
-Authenticated `Principal` values are used to scope keyed requests and durable job lookup. Stored identities are one-way domain-separated hashes; client responses and ordinary telemetry exclude raw principal/key/payload/internal diagnostics.
-
-### 8.3 PII policy
-
-mightyETL must remain usable for legitimate enterprise data movement, so it does not require blanket PII masking. Controls are purpose-bound authorization, encryption, least privilege, minimal retention, auditable privileged access, and non-leaking logs/error/metric metadata.
+Principal hashes, payloads, connector credentials, SQL, DLT records, backup bundles, and privileged diagnostics are protected operational data. mightyETL uses purpose-bound authorization, encryption, least privilege, bounded retention, deletion/export controls, auditable privileged access, and stable non-leaking public errors instead of blanket masking that destroys ETL utility.
 
 ## 9. Automation Authority Architecture — `active_pr` #121
 
-Protected develop does **not** yet run this scheduler. The intended separation is documented so its security properties are reviewable before integration.
-
 ```mermaid
-flowchart TB
-    Timer[Hourly schedule / manual trigger]
-    Model[maintain-repository\nOpenCode + NVIDIA_NIM_API_KEY\nGitHub read authority]
-    Bundle[validated local commit bundle]
-    BranchWriter[publish-agent-branch\ncontents: write only\nno model credential]
-    PRWriter[publish-agent-pull-request\npull-requests: write only]
-    RunAuthorizer[authorize-exact-head-checks\nactions: write only]
-    Review[Independent review authority]
-    Merge[Protected expected-head merge authority]
+flowchart LR
+    Trigger[Hourly/manual trigger]
+    Model[OpenCode model job\nread-only GitHub\nNVIDIA_NIM_API_KEY]
+    Bundle[bounded local commit bundle]
+    Branch[publish-agent-branch\ncontents write only]
+    Pull[publish-agent-pull-request\nPR write only]
+    Runs[exact-head run authorizer\nactions write only]
+    Review[Independent review]
+    Merge[Protected expected-head merge]
 
-    Timer --> Model --> Bundle --> BranchWriter --> PRWriter --> RunAuthorizer --> Review --> Merge
+    Trigger --> Model --> Bundle --> Branch --> Pull --> Runs --> Review --> Merge
 ```
 
-Core invariants:
+The model cannot publish, approve, merge, or release. Deterministic publishers receive no model credential. Branch publication verifies exact predecessor/base, bounded paths/commits, ancestry, and post-write SHA; branch-wide parent binding prefers Git Data commit construction and non-forced ref update. A branch-local conflict freezes only that branch.
 
-- the model job does not get repository write, review, or merge authority;
-- deterministic publishers get no model credential;
-- branch publication verifies exact predecessor/base, policy paths, commit/file bounds, ancestry, and post-write SHA;
-- branch-wide expected-parent publication prefers Git Data commit construction plus non-forced `force=false` ref update;
-- a branch-local writer conflict freezes only that branch for the invocation;
-- review and merge remain independent.
+## 10. CI and Evidence Architecture
 
-## 10. CI / Evidence Architecture
+Protected `pull_request` CI uses GitHub's generated merge ref unless a workflow explicitly checks out and asserts the contributor head. Synthetic integration evidence is useful but does not replace literal source evidence. PR #121 adds literal-head CI/SBOM controls; issue #196 requires a complete resolved Maven dependency graph; issue #162 and PR #164 require non-empty selected-class coverage; issue #205 requires repository-wide owned-production scope.
 
-### 10.1 Protected develop today
-
-The current `CI` workflow uses ordinary `actions/checkout` with no explicit pull-request head ref. GitHub documents that `pull_request` workflows use `GITHUB_REF=refs/pull/<n>/merge`, and checkout uses that ref by default. Therefore a green source-executing job on protected develop can describe the generated merge preview rather than the literal PR head.
-
-This is useful compatibility evidence, but it is not accepted as literal-head proof where the repository's exact-source governance requires that identity.
-
-### 10.2 `active_pr` #121
-
-`#121` adds explicit head checkout plus exact-SHA verification for source-executing CI/SBOM and carries a separate central-scanner dependency for literal-head hard scanning. `synthetic-merge` evidence remains non-substitutable.
+Checks, statuses, scanners, SBOMs, reviews, model judgments, merge decisions, artifacts, and protected-runtime observations remain separate evidence authorities.
 
 ## 11. Monitoring and Observability
 
-- Micrometer observations decorate key ETL/job/CDC control surfaces.
-- CDC status exposes configured/runtime state and replication-slot information without secrets.
-- Zipkin is the currently documented tracing backend when enabled.
-- New cross-service telemetry should use OpenTelemetry semantic conventions where suitable.
-- Metric dimensions must remain finite; resource/job/principal/secret identifiers do not become uncontrolled labels.
+- Micrometer observations decorate ETL/job/CDC control surfaces.
+- CDC status exposes configured/runtime state without secrets.
+- Protected Compose documents Zipkin host port 9412; PR #167 is the active internal-9411 transport repair.
+- OpenTelemetry semantic conventions are preferred for new cross-service telemetry.
+- Metric dimensions remain finite; principals, jobs, payloads, secrets, SQL, and raw diagnostics do not become uncontrolled labels.
 
 ## 12. Deployment Architecture
 
 ```mermaid
-flowchart LR
-    subgraph Standalone_ETL[Standalone ETL deployment]
+flowchart TB
+    subgraph StandaloneETL[Standalone ETL]
         EC[ETL Service :8000] --> EPG[(PostgreSQL)]
     end
 
-    subgraph Standalone_CDC[Standalone CDC deployment]
+    subgraph StandaloneCDC[Standalone CDC]
         CP[(PostgreSQL source)] --> CC[CDC Service :8001] --> CK[(Kafka)]
     end
 
-    subgraph Composed_MSA[Composed MSA]
+    subgraph ComposedMSA[Composed MSA]
         CG[Gateway :8080]
         CE[ETL :8000]
         CD[CDC :8001]
         ER[Eureka :8761]
-        CF[Config :8888]
-        Z[Zipkin :9412]
+        CF[Config Server :8888]
+        Z[Zipkin host :9412]
         CG --> CE
         CG --> CD
-        CE -.-> ER
-        CD -.-> ER
-        CG -.-> ER
-        CE -.-> Z
-        CD -.-> Z
-        CG -.-> CF
+        CE -. discovery .-> ER
+        CD -. discovery .-> ER
+        CG -. discovery .-> ER
+        CG -. configuration .-> CF
+        CE -. telemetry .-> Z
+        CD -. telemetry .-> Z
     end
 ```
 
-No composed topology may make an independently useful service impossible to run without an unrelated component unless an explicit ADR changes that product principle.
+A composed topology cannot make an independently useful service depend on an unrelated component unless an accepted ADR changes that product boundary.
 
-## 13. Architecture Decision Index
+## 13. Runtime and Supply-Chain Architecture
 
-The canonical decision records are indexed in `docs/adr/README.md`. Architecture changes that alter API, persisted state, trust, lifecycle, deployment, autonomous authority, or evidence semantics require an ADR status update in the same PR.
+Tracked binaries, mutable remote scripts, duplicate launch delegates, ambiguous Java versions, container images, Maven dependencies, and runtime identifiers are supply-chain and compatibility authorities. PR #169 removes unsafe repository launch paths; issue #168 owns tracked-binary follow-through; PR #191 inventories product/runtime/state identifiers before migration. SBOM and scanner success require complete materialization and exact artifact/source identity.
 
-## 14. References
+## 14. Data and Recovery Domains
+
+PostgreSQL transactions protect only participating PostgreSQL writes. Kafka, Debezium offsets, DLT, object storage, remote warehouses, and APIs are external effects unless a connector proves atomicity, idempotency, or compensation. PR #208 is the active provenance-bound PostgreSQL backup/restore path; it does not prove application readiness, external-side-effect reconciliation, or measured RPO/RTO.
+
+## 15. Cross-Cutting Authority Model
+
+### 15.1 Service and configuration identity authority
+
+ADR-0010 governs independent gateway, direct ETL, CDC control, Eureka, Config Server, operator, database, broker, and connector boundaries. No boundary inherits another's authentication. Discovery and network placement are not authorization. Protected placeholder/basic/anonymous paths remain `known_gap` or `active_pr` until runtime tests and protected operational evidence pass.
+
+### 15.2 Schema mutation and recovery authority
+
+ADR-0009 makes Flyway the sole production schema-mutation authority. PR #184 and PR #208 remain active implementation evidence. Migration history, backup manifests, restore rehearsal, destructive-loss recovery, application invariants, external effects, and measured RPO/RTO are separate acceptance layers.
+
+### 15.3 Diagnostic, dead-letter, and data-lifecycle authority
+
+ADR-0011 separates stable non-sensitive public diagnostics from privileged evidence. Dead-letter records are terminal quarantine and require explicit access, encryption, retention, deletion, residency, redrive authorization, and lineage. ADR-0014 keeps tenant authority unresolved but explicit; principal scoping must not be documented as tenant isolation.
+
+### 15.4 Evidence, review, and release authority
+
+ADR-0012 separates source head, PR-base snapshot, live base, synthetic merge, workflow checkout, coverage, dependency graph, scanner, SBOM, formal review, merge, artifact provenance, licensing, and protected-runtime evidence. A green aggregate does not authorize merge or release unless every applicable subject-specific gate is complete and non-vacuous.
+
+## 16. Architecture Decision Index
+
+Canonical decisions are indexed in `docs/adr/README.md`. A change to public API, persisted state, trust, lifecycle, deployment, autonomous authority, compatibility, data governance, recovery, or evidence semantics updates the relevant ADR and traceability in the same integration path.
+
+## 17. References
 
 Debezium. (2026). *Debezium Engine 3.4*. Debezium Documentation. https://debezium.io/documentation/reference/3.4/development/engine.html
 
