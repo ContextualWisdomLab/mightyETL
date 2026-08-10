@@ -77,6 +77,7 @@ manifest_version=$(manifest_value manifest_version)
 application_source_sha=$(manifest_value application_source_sha)
 expected_backup_sha256=$(manifest_value backup_sha256)
 expected_flyway_schema_version=$(manifest_value flyway_schema_version)
+backup_server_version_num=$(manifest_value server_version_num)
 
 if [[ "$manifest_version" != "1" ]]; then
     printf 'Unsupported backup manifest version\n' >&2
@@ -88,6 +89,10 @@ if [[ ! "$application_source_sha" =~ ^[0-9a-f]{40}$ || "$application_source_sha"
 fi
 if [[ ! "$expected_backup_sha256" =~ ^[0-9a-f]{64}$ ]]; then
     printf 'Backup manifest SHA-256 is invalid\n' >&2
+    exit 4
+fi
+if [[ ! "$backup_server_version_num" =~ ^[0-9]{6,9}$ ]]; then
+    printf 'Backup PostgreSQL server version provenance is invalid\n' >&2
     exit 4
 fi
 
@@ -111,6 +116,20 @@ psql_recovery=(
     --no-align
     --set=ON_ERROR_STOP=1
 )
+
+target_server_version_num=$("${psql_recovery[@]}" --command='SHOW server_version_num')
+target_server_version_num=${target_server_version_num//[[:space:]]/}
+if [[ ! "$target_server_version_num" =~ ^[0-9]{6,9}$ ]]; then
+    printf 'Recovery target PostgreSQL server version is invalid\n' >&2
+    exit 5
+fi
+
+backup_server_major=$((backup_server_version_num / 10000))
+target_server_major=$((target_server_version_num / 10000))
+if [[ "$backup_server_major" != "$target_server_major" ]]; then
+    printf 'Recovery target PostgreSQL major version does not match backup provenance\n' >&2
+    exit 5
+fi
 
 user_table_count=$("${psql_recovery[@]}" --command="SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') AND n.nspname NOT LIKE 'pg_toast%' AND c.relkind IN ('r', 'p', 'v', 'm', 'S', 'f')")
 user_table_count=${user_table_count//[[:space:]]/}
