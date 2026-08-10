@@ -31,7 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Proves the first database-owned durable-job replay transition on the repaired stack.
+ * Proves durable-job replay persistence, idempotency, and immutable lineage on the repaired stack.
  */
 @SpringJUnitConfig(EtlJobReplayPersistenceIntegrationTest.TestConfiguration.class)
 class EtlJobReplayPersistenceIntegrationTest {
@@ -259,6 +259,48 @@ class EtlJobReplayPersistenceIntegrationTest {
         );
         assertNull(textColumn(sourceJobRecordId, "request_payload"));
         assertEquals(sourceUpdatedAt, instantColumn(sourceJobRecordId, "updated_at"));
+    }
+
+    @Test
+    void replayOfReplayPreservesRootAndIncrementsGeneration() {
+        UUID rootJobRecordId = insertFailedSource("lineage-root-submission-key");
+        EtlJobReplay firstReplay = replayService.replayOwned(
+                rootJobRecordId,
+                PAYLOAD,
+                REPLAY_KEY,
+                PRINCIPAL
+        );
+        jdbcTemplate.update(
+                """
+                UPDATE etl_job_records
+                   SET job_status = 'FAILED',
+                       request_payload = NULL,
+                       failure_code = 'etl_target_failure'
+                 WHERE job_record_id = ?
+                """,
+                firstReplay.jobRecordId()
+        );
+
+        EtlJobReplay secondReplay = replayService.replayOwned(
+                firstReplay.jobRecordId(),
+                PAYLOAD,
+                OTHER_REPLAY_KEY,
+                PRINCIPAL
+        );
+
+        assertFalse(secondReplay.replayed());
+        assertEquals(EtlJobStatus.PENDING, secondReplay.jobStatus());
+        assertEquals(
+                firstReplay.jobRecordId(),
+                uuidColumn(secondReplay.jobRecordId(), "replay_source_job_record_id")
+        );
+        assertEquals(
+                rootJobRecordId,
+                uuidColumn(secondReplay.jobRecordId(), "replay_root_job_record_id")
+        );
+        assertEquals(2, integerColumn(secondReplay.jobRecordId(), "replay_generation_count"));
+        assertEquals("FAILED", textColumn(firstReplay.jobRecordId(), "job_status"));
+        assertNull(textColumn(firstReplay.jobRecordId(), "request_payload"));
     }
 
     private UUID insertFailedSource(String submissionKey) {
