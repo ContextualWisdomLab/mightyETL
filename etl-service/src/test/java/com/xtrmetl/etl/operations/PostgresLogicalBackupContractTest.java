@@ -42,6 +42,25 @@ class PostgresLogicalBackupContractTest {
     }
 
     @Test
+    void backupToolReservesTheFinalIdentityBeforeWritingToPreventSameSecondCollisions() throws IOException {
+        String script = Files.readString(
+                projectRoot().resolve("scripts/ops/postgres-logical-backup.sh"),
+                StandardCharsets.UTF_8
+        );
+        String reservation = "reservation_directory=\"${backup_directory}/.${backup_identity}.reservation\"";
+        String atomicReservation = "if ! mkdir -- \"$reservation_directory\"";
+        String temporaryBundle = "temporary_bundle=$(mktemp -d";
+
+        assertTrue(script.contains(reservation), "a timestamp/source backup identity needs a same-filesystem reservation");
+        assertTrue(script.contains(atomicReservation), "concurrent creation of the same identity must fail closed");
+        assertTrue(script.contains("rm -rf -- \"$reservation_directory\""), "the reservation must be released on exit");
+        assertTrue(
+                script.indexOf(atomicReservation) < script.indexOf(temporaryBundle),
+                "identity reservation must happen before backup work starts"
+        );
+    }
+
+    @Test
     void recoveryRunbookSeparatesVerifiedBackupFromUnprovenRestoreAndRecoveryObjectives() throws IOException {
         Path runbookPath = projectRoot().resolve("docs/ops/postgres-recovery.md");
         assertTrue(Files.isRegularFile(runbookPath), "the executable backup boundary needs an operator recovery runbook");
