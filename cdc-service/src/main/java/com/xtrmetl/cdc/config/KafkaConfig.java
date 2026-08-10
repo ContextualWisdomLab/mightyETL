@@ -23,13 +23,31 @@ public class KafkaConfig {
 
     private static final Logger log = LoggerFactory.getLogger(KafkaConfig.class);
     private static final int MAX_CONCURRENCY = 32;
+    private static final String RETRY_BACKOFF_KEY = "xtrmetl.replica.kafka.retry-backoff-ms";
+    private static final String RETRY_MAX_ATTEMPTS_KEY = "xtrmetl.replica.kafka.retry-max-attempts";
 
+    /**
+     * Builds the replica-listener error handler with terminal dead-letter recovery.
+     *
+     * <p>Retry settings are deployment-owned, so this boundary rejects negative values before
+     * delegating to Spring's {@link FixedBackOff}. Zero is valid: a zero interval retries
+     * immediately, and zero maximum attempts sends a retryable failure directly to recovery.</p>
+     *
+     * @param kafkaTemplate template used to publish exhausted records to the dead-letter topic
+     * @param retryBackoffMs fixed delay between retry attempts in milliseconds; must be non-negative
+     * @param retryMaxAttempts maximum retry attempts after the original delivery; must be non-negative
+     * @return configured listener error handler
+     * @throws IllegalArgumentException when either retry setting is negative
+     */
     @Bean
     public DefaultErrorHandler kafkaListenerErrorHandler(
             @NonNull KafkaTemplate<String, String> kafkaTemplate,
             @Value("${xtrmetl.replica.kafka.retry-backoff-ms:1000}") long retryBackoffMs,
             @Value("${xtrmetl.replica.kafka.retry-max-attempts:30}") long retryMaxAttempts
     ) {
+        requireNonNegative(RETRY_BACKOFF_KEY, retryBackoffMs);
+        requireNonNegative(RETRY_MAX_ATTEMPTS_KEY, retryMaxAttempts);
+
         DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(
                 kafkaTemplate,
                 (record, ex) -> new TopicPartition(record.topic() + ".DLT", record.partition())
@@ -43,6 +61,14 @@ public class KafkaConfig {
         return errorHandler;
     }
 
+    /**
+     * Builds the replica Kafka listener factory with record-level acknowledgement semantics.
+     *
+     * @param consumerFactory Kafka consumer factory for replica records
+     * @param kafkaListenerErrorHandler bounded retry and dead-letter error handler
+     * @param concurrency requested listener concurrency
+     * @return configured listener container factory
+     */
     @Bean
     public ConcurrentKafkaListenerContainerFactory<String, String> kafkaListenerContainerFactory(
             @NonNull ConsumerFactory<String, String> consumerFactory,
@@ -76,5 +102,11 @@ public class KafkaConfig {
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.RECORD);
         factory.setCommonErrorHandler(kafkaListenerErrorHandler);
         return factory;
+    }
+
+    private static void requireNonNegative(String key, long value) {
+        if (value < 0) {
+            throw new IllegalArgumentException(key + " must be greater than or equal to 0");
+        }
     }
 }
