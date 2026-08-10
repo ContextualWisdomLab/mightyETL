@@ -177,4 +177,11 @@ if [[ "$restored_flyway_schema_version" != "$expected_flyway_schema_version" ]];
     exit 6
 fi
 
+required_application_relation_count=$("${psql_recovery[@]}" --command="SELECT count(*) FROM (VALUES (to_regclass('public.processed_data')), (to_regclass('public.etl_idempotency_records')), (to_regclass('public.etl_job_records'))) AS required(relation_oid) WHERE relation_oid IS NOT NULL")
+required_application_relation_count=${required_application_relation_count//[[:space:]]/}
+if [[ ! "$required_application_relation_count" =~ ^[0-9]+$ || "$required_application_relation_count" != "3" ]]; then
+    printf 'Restored database is missing one or more required mightyETL application relations\n' >&2
+    exit 6
+fi
+
 printf '%s\n' 'PostgreSQL restore rehearsal completed on the explicit disposable target'
