@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class RuntimeIdentifierMigrationPolicyTest {
 
     private static final String INVENTORY_PATH = "docs/compatibility/runtime-identifier-inventory.properties";
+    private static final String DOCTORING_PATH = "docs/doctoring/runtime-identifier-migration.md";
 
     @Test
     void legacyRuntimeIdentifiersAreExplicitlyInventoriedAndContainmentIsFailClosed() throws IOException {
@@ -69,6 +70,27 @@ class RuntimeIdentifierMigrationPolicyTest {
         assertTrue(inventory.contains("reference.java.binary_compatibility=https://docs.oracle.com/en/java/javase/26/docs/specs/jls/jls-13.html"));
         assertTrue(inventory.contains("compatibility.note="));
         assertFalse(inventory.contains("migration.status=implemented_on_develop"));
+    }
+
+    @Test
+    void runtimeIdentifierMigrationHasSourceBackedCompatibilityDoctoring() throws IOException {
+        Path doctoringPath = projectRoot().resolve(DOCTORING_PATH);
+        assertTrue(Files.exists(doctoringPath), "Runtime identifier migration requires source-backed doctoring");
+
+        String doctoring = Files.readString(doctoringPath, StandardCharsets.UTF_8);
+        assertTrue(doctoring.contains("com.xtrmetl:xtrmETL"));
+        assertTrue(doctoring.contains("com.xtrmetl"));
+        assertTrue(doctoring.contains("mightyetl."));
+        assertTrue(doctoring.contains("xtrmetl."));
+        assertTrue(doctoring.contains("xtrmetl-cdc"));
+        assertTrue(doctoring.contains("mixed-version"));
+        assertTrue(doctoring.contains("consumer inventory"));
+        assertTrue(doctoring.contains("rollback"));
+        assertTrue(doctoring.contains("forward recovery"));
+        assertTrue(doctoring.contains("major version"));
+        assertTrue(doctoring.contains("https://maven.apache.org/guides/mini/guide-relocation.html"));
+        assertTrue(doctoring.contains("https://docs.oracle.com/en/java/javase/26/docs/specs/jls/jls-13.html"));
+        assertTrue(doctoring.contains("APA 7"));
     }
 
     private static List<String> requiredCsv(Properties inventory, String key) {
