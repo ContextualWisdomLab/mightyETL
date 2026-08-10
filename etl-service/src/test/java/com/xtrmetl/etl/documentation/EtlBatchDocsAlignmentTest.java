@@ -67,6 +67,15 @@ class EtlBatchDocsAlignmentTest {
         assertTrue(changelog.contains("retry only transient Spring data-access failures"));
     }
 
+    @Test
+    void changelogRecordsFailClosedAmountIntegrity() throws IOException {
+        String changelog = read("CHANGELOG.md");
+
+        assertTrue(changelog.contains("invalid `AMOUNT` values fail closed"));
+        assertTrue(changelog.contains("genuine zero"));
+        assertFalse(changelog.contains("invalid `AMOUNT` values to `0.00`"));
+    }
+
     private static String read(String relativePath) throws IOException {
         return Files.readString(projectRoot().resolve(relativePath), StandardCharsets.UTF_8);
     }
