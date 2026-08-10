@@ -45,7 +45,7 @@ class PostgresLogicalBackupContractTest {
                 .replace('\r', '\n');
 
         String before = "flyway_schema_version_before_dump=";
-        String dump = "pg_dump \\\";
+        String dump = "--format=custom";
         String after = "flyway_schema_version_after_dump=";
         String driftGuard = "if [[ \"$flyway_schema_version_before_dump\" != \"$flyway_schema_version_after_dump\" ]]";
         String manifest = "\"flyway_schema_version=${flyway_schema_version_before_dump}\"";
