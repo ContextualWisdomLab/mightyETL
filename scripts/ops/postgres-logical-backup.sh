@@ -40,18 +40,30 @@ backup_directory=$(cd -- "$BACKUP_DIRECTORY" && pwd -P)
 created_at_utc=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 backup_identity="mightyetl-postgres-${created_at_utc//[:]/}-${APPLICATION_SOURCE_SHA}"
 final_bundle="${backup_directory}/${backup_identity}"
+reservation_directory="${backup_directory}/.${backup_identity}.reservation"
 
 if [[ -e "$final_bundle" ]]; then
     printf 'Refusing to replace an existing backup bundle: %s\n' "$final_bundle" >&2
     exit 4
 fi
 
-temporary_bundle=$(mktemp -d "${backup_directory}/.mightyetl-postgres-backup.XXXXXX")
+# mkdir is the same-filesystem compare-and-set for a second-resolution backup identity.
+# A concurrent invocation with the same source and timestamp must fail before dump work begins.
+if ! mkdir -- "$reservation_directory" 2>/dev/null; then
+    printf 'Backup identity is already reserved by another invocation: %s\n' "$backup_identity" >&2
+    exit 4
+fi
+
+temporary_bundle=""
 cleanup() {
-    rm -rf -- "$temporary_bundle"
+    if [[ -n "$temporary_bundle" ]]; then
+        rm -rf -- "$temporary_bundle"
+    fi
+    rm -rf -- "$reservation_directory"
 }
 trap cleanup EXIT
 
+temporary_bundle=$(mktemp -d "${backup_directory}/.mightyetl-postgres-backup.XXXXXX")
 archive_path="${temporary_bundle}/database.dump"
 manifest_path="${temporary_bundle}/manifest.txt"
 
@@ -95,5 +107,7 @@ printf '%s\n' \
 
 # Publish archive and manifest together through one same-filesystem directory rename.
 mv -- "$temporary_bundle" "$final_bundle"
+temporary_bundle=""
+rm -rf -- "$reservation_directory"
 trap - EXIT
 printf '%s\n' "$final_bundle"
