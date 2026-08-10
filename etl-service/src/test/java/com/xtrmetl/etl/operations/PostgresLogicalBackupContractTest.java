@@ -39,6 +39,34 @@ class PostgresLogicalBackupContractTest {
     }
 
     @Test
+    void backupToolRejectsMigrationLevelDriftAcrossTheDumpWindow() throws IOException {
+        String script = Files.readString(projectRoot().resolve("scripts/ops/postgres-logical-backup.sh"), StandardCharsets.UTF_8)
+                .replace("\r\n", "\n")
+                .replace('\r', '\n');
+
+        String before = "flyway_schema_version_before_dump=";
+        String dump = "pg_dump \\\";
+        String after = "flyway_schema_version_after_dump=";
+        String driftGuard = "if [[ \"$flyway_schema_version_before_dump\" != \"$flyway_schema_version_after_dump\" ]]";
+        String manifest = "\"flyway_schema_version=${flyway_schema_version_before_dump}\"";
+
+        assertTrue(script.contains(before),
+                "backup must observe the migration level before taking the archive snapshot");
+        assertTrue(script.contains(after),
+                "backup must observe the migration level again after the archive is complete");
+        assertTrue(script.contains(driftGuard),
+                "backup must fail closed if migration authority changes while the archive is being captured");
+        assertTrue(script.contains("Database migration level changed while backup was being captured"),
+                "migration drift needs a stable operator failure classification");
+        assertTrue(script.indexOf(before) < script.indexOf(dump),
+                "the first migration observation must happen before pg_dump");
+        assertTrue(script.indexOf(dump) < script.indexOf(after),
+                "the second migration observation must happen after pg_dump");
+        assertTrue(script.indexOf(after) < script.indexOf(manifest),
+                "the manifest may record a migration level only after the dump window is proven stable");
+    }
+
+    @Test
     void backupToolReservesTheFinalIdentityBeforeWritingToPreventSameSecondCollisions() throws IOException {
         String script = Files.readString(projectRoot().resolve("scripts/ops/postgres-logical-backup.sh"), StandardCharsets.UTF_8);
         String reservation = "reservation_directory=\"${backup_directory}/.${backup_identity}.reservation\"";
