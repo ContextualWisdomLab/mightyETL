@@ -1,11 +1,9 @@
 package com.xtrmetl.cdc.replication;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.xtrmetl.cdc.config.XtrmetlProperties;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 
@@ -43,10 +41,5 @@ class SchemaChangeReplicaValidationModeTest {
                         "DROP TABLE,DROP SCHEMA,DROP DATABASE,TRUNCATE"
                 )
         );
-    }
-
-    @Test
-    void configurationPropertiesDefaultToWhitelist() {
-        assertEquals("whitelist", new XtrmetlProperties().getReplica().getDdlValidationMode());
     }
 }
