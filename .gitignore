@@ -33,6 +33,11 @@ hs_err_pid*
 node_modules/
 package-lock.json
 
+# Developer-local environment files
+.env
+.env.*
+!.env.example
+
 # Temporary files
 *.tmp
 *.bak
