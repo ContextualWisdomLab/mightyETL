@@ -108,13 +108,27 @@ public class CdcController {
         return entry;
     }
 
+    /**
+     * Requests CDC engine startup and exposes only a stable public failure contract.
+     *
+     * @return {@code 200} when startup is accepted, or {@code 500} without internal startup diagnostics
+     */
     @PostMapping("/start")
     @Observed(name = "cdc.start", contextualName = "cdc-start")
     public ResponseEntity<String> startCdc() {
-        cdcService.start();
-        return ResponseEntity.ok("CDC process started");
+        try {
+            cdcService.start();
+            return ResponseEntity.ok("CDC process started");
+        } catch (RuntimeException e) {
+            return ResponseEntity.internalServerError().body("CDC process could not be started");
+        }
     }
 
+    /**
+     * Requests CDC engine shutdown and exposes only a stable public failure contract.
+     *
+     * @return {@code 200} when shutdown succeeds, or {@code 500} without internal shutdown diagnostics
+     */
     @PostMapping("/stop")
     @Observed(name = "cdc.stop", contextualName = "cdc-stop")
     public ResponseEntity<String> stopCdc() {
