@@ -65,6 +65,7 @@ public final class EtlPayloadAdmissionAdvice extends RequestBodyAdviceAdapter {
      * @param targetType declared request-body target type
      * @param converterType selected HTTP message converter type
      * @return the original headers with a byte-bounded request stream
+     * @throws IOException when the underlying request stream cannot be obtained
      */
     @Override
     public HttpInputMessage beforeBodyRead(
@@ -72,7 +73,7 @@ public final class EtlPayloadAdmissionAdvice extends RequestBodyAdviceAdapter {
             MethodParameter parameter,
             Type targetType,
             Class<? extends HttpMessageConverter<?>> converterType
-    ) {
+    ) throws IOException {
         int maximumBytes = batchProperties.getMaxPayloadBytes();
         long contentLength = inputMessage.getHeaders().getContentLength();
         if (contentLength > maximumBytes) {
@@ -90,7 +91,7 @@ public final class EtlPayloadAdmissionAdvice extends RequestBodyAdviceAdapter {
         private final HttpInputMessage delegate;
         private final InputStream body;
 
-        private BoundedHttpInputMessage(HttpInputMessage delegate, int maximumBytes) {
+        private BoundedHttpInputMessage(HttpInputMessage delegate, int maximumBytes) throws IOException {
             this.delegate = Objects.requireNonNull(delegate, "delegate must not be null");
             this.body = new BoundedInputStream(delegate.getBody(), maximumBytes);
         }
