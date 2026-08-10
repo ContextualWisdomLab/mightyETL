@@ -1,15 +1,20 @@
 package com.xtrmetl.etl.connector;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
 /**
  * Normalized change event for target connectors (canonical CDC/ETL record).
  *
- * <p>Row maps are shallow-snapshotted at construction time so callers cannot mutate a
- * record after it has entered a connector pipeline. Null database values remain supported.</p>
+ * <p>JSON-shaped row maps and nested map/list containers are recursively snapshotted at
+ * construction time so later caller mutations cannot change a record that has entered a
+ * connector pipeline. Null database values remain supported. Scalar and other non-container
+ * values are retained as supplied; this type does not claim to clone arbitrary mutable Java
+ * objects.</p>
  */
 public final class ChangeRecord {
 
@@ -101,6 +106,24 @@ public final class ChangeRecord {
         if (source == null || source.isEmpty()) {
             return Map.of();
         }
-        return Collections.unmodifiableMap(new LinkedHashMap<>(source));
+        Map<String, Object> copy = new LinkedHashMap<>();
+        source.forEach((key, value) -> copy.put(key, snapshotValue(value)));
+        return Collections.unmodifiableMap(copy);
+    }
+
+    private static Object snapshotValue(Object value) {
+        if (value instanceof Map<?, ?> mapValue) {
+            Map<Object, Object> copy = new LinkedHashMap<>();
+            mapValue.forEach((key, nestedValue) -> copy.put(key, snapshotValue(nestedValue)));
+            return Collections.unmodifiableMap(copy);
+        }
+        if (value instanceof List<?> listValue) {
+            List<Object> copy = new ArrayList<>(listValue.size());
+            for (Object element : listValue) {
+                copy.add(snapshotValue(element));
+            }
+            return Collections.unmodifiableList(copy);
+        }
+        return value;
     }
 }
