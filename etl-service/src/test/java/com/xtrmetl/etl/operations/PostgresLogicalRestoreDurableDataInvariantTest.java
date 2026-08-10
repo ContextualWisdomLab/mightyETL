@@ -47,6 +47,8 @@ class PostgresLogicalRestoreDurableDataInvariantTest {
                 "restore must reject active durable jobs whose recoverable payload is missing");
         assertTrue(script.contains("job_status IN ('SUCCEEDED', 'FAILED') AND request_payload IS NOT NULL"),
                 "restore must reject terminal durable jobs that still retain request payloads");
+        assertTrue(script.contains("failure_code !~ '^[a-z][a-z0-9_]{2,127}$'"),
+                "restore must enforce the exact protected durable-job failure-code grammar");
         assertTrue(script.contains("Restored durable-job ledger violates mightyETL lifecycle invariants"),
                 "restore must provide a stable operator classification for durable-job integrity failure");
 
