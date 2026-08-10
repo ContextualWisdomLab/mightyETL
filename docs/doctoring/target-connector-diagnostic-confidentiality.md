@@ -4,7 +4,7 @@
 
 This doctoring note records the security boundary implemented by the active target-connector lifecycle logging change. It does not make an active pull request shipped product truth. The production rule is narrow: ordinary logs may retain a bounded connector lifecycle outcome and connector ID, but they must not serialize third-party exception objects or provider diagnostics that can carry a connection string, token, request fragment, account identifier, storage path, or other deployment-sensitive data.
 
-The rule maps directly to **CWE-532, Insertion of Sensitive Information into Log File**. MITRE describes sensitive values written to logs as a confidentiality weakness because log storage is commonly a less-protected secondary disclosure path. OWASP's **Logging Cheat Sheet** likewise requires deliberate exclusion or sanitization of sensitive event data and protection of collected logs against unauthorized access or misuse.
+The rule maps directly to **CWE-532, Insertion of Sensitive Information into Log File**. MITRE describes sensitive values written to logs as a confidentiality weakness because log storage is commonly a less-protected secondary disclosure path. The OWASP Logging Cheat Sheet likewise requires deliberate exclusion or sanitization of sensitive event data and protection of collected logs against unauthorized access or misuse.
 
 ## Causal error retention without diagnostic publication
 
