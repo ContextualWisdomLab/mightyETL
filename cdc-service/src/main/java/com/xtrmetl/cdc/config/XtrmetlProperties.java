@@ -105,7 +105,11 @@ public class XtrmetlProperties {
          */
         private String tables = "processed_data";
         private boolean ddlEnabled = false;
-        private String ddlValidationMode = "none";
+        /**
+         * Uses the positive allow-list policy unless an operator explicitly selects another
+         * supported mode. DDL application itself remains disabled by default.
+         */
+        private String ddlValidationMode = "whitelist";
         private String ddlAllowedPrefixes = "CREATE TABLE,ALTER TABLE,CREATE INDEX";
         private String ddlBlockedPrefixes = "DROP TABLE,DROP SCHEMA,DROP DATABASE,TRUNCATE";
         private final Kafka kafka = new Kafka();
