@@ -5,6 +5,12 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
+/**
+ * Routes live CDC replica records to the matching replica applier.
+ *
+ * <p>Dead-letter topics are terminal quarantine inputs for operator recovery and are deliberately
+ * ignored by this live replica path, even when a configured topic pattern also matches them.</p>
+ */
 @Component
 @ConditionalOnProperty(prefix = "xtrmetl.replica", name = "enabled", havingValue = "true")
 public class CdcReplicaConsumer {
@@ -13,10 +19,10 @@ public class CdcReplicaConsumer {
     private final SchemaChangeReplicaApplier schemaChangeReplicaApplier;
 
     /**
-     * CDC 복제를 처리하는 소비자 컴포넌트를 생성하고 필요한 복제 적용기(applier)를 주입한다.
+     * Creates the CDC replica consumer with the appliers used for live data and schema events.
      *
-     * @param processedDataReplicaApplier 처리된 데이터 복제 이벤트를 적용하는 객체
-     * @param schemaChangeReplicaApplier 스키마 변경 복제 이벤트를 적용하는 객체
+     * @param processedDataReplicaApplier applies supported data-row events to the replica
+     * @param schemaChangeReplicaApplier applies permitted schema-change events to the replica
      */
     public CdcReplicaConsumer(
             ProcessedDataReplicaApplier processedDataReplicaApplier,
@@ -27,11 +33,13 @@ public class CdcReplicaConsumer {
     }
 
     /**
-     * 토픽 접미사에 따라 CDC 복제 메시지를 적절한 레플리카 applier로 라우팅하여 처리한다.
+     * Routes one live CDC record without feeding terminal dead-letter records back into appliers.
      *
-     * <p>레코드의 토픽이 ".schema-changes"로 끝나면 스키마 변경 처리기로 전달하고, 그렇지 않으면 처리된 데이터 복제기로 전달한다.</p>
+     * <p>A topic ending in {@code .DLT} is a terminal dead-letter record and is acknowledged by the
+     * listener without invoking either replica applier. Schema-change topics are routed to the
+     * schema applier; every other live topic keeps the existing data-applier behavior.</p>
      *
-     * @param record Kafka로부터 수신된 레코드(토픽, 키, 값)
+     * @param record Kafka record containing the source topic, key, and Debezium-compatible value
      */
     @KafkaListener(
             topicPattern = "${xtrmetl.replica.topic-pattern}",
@@ -39,6 +47,9 @@ public class CdcReplicaConsumer {
     )
     public void onMessage(ConsumerRecord<String, String> record) {
         String topic = record.topic();
+        if (topic != null && topic.endsWith(ReplicaTopics.DEAD_LETTER_SUFFIX)) {
+            return;
+        }
         if (topic != null && topic.endsWith(ReplicaTopics.SCHEMA_CHANGES_SUFFIX)) {
             schemaChangeReplicaApplier.apply(topic, record.key(), record.value());
             return;
