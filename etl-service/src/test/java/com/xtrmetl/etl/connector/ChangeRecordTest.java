@@ -104,6 +104,28 @@ class ChangeRecordTest {
     }
 
     @Test
+    void rejectsCyclicNestedContainersDeterministically() {
+        Map<String, Object> cyclic = new LinkedHashMap<>();
+        cyclic.put("self", cyclic);
+
+        IllegalArgumentException failure = assertThrows(
+                IllegalArgumentException.class,
+                () -> new ChangeRecord(
+                        "source",
+                        "c",
+                        "public",
+                        "orders",
+                        123L,
+                        Map.of(),
+                        Map.of("cycle", cyclic),
+                        Map.of("id", 7L)
+                )
+        );
+
+        assertEquals("ChangeRecord JSON containers must not contain cycles", failure.getMessage());
+    }
+
+    @Test
     void exposesUnmodifiableMaps() {
         ChangeRecord record = new ChangeRecord(
                 "source",
