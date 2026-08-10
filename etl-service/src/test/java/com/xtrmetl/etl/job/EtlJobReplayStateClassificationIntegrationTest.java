@@ -106,6 +106,18 @@ class EtlJobReplayStateClassificationIntegrationTest {
     }
 
     @Test
+    void unrecognizedStoredSourceStatusFailsClosedWithStableUnsupportedConflict() {
+        UUID unsupportedSource = insertRootSource("PAUSED", PRINCIPAL, PAYLOAD);
+
+        assertReplayError(
+                "etl_job_replay_source_unsupported",
+                unsupportedSource,
+                PAYLOAD,
+                PRINCIPAL
+        );
+    }
+
+    @Test
     void failedSourceWithDifferentResuppliedPayloadUsesStableMismatch() {
         UUID failedSource = insertRootSource("FAILED", PRINCIPAL, PAYLOAD);
 
