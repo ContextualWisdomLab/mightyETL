@@ -118,4 +118,65 @@ class CdcEngineHealthIndicatorTest {
                 health.getDetails().get("replicationSlot")
         );
     }
+
+    @Test
+    void engineRunningWithInactiveSlotRetainsWarning() {
+        CdcService service = mock(CdcService.class);
+        when(service.isRunning()).thenReturn(true);
+        when(service.isAutoStart()).thenReturn(true);
+        ReplicationSlotProbe probe = mock(ReplicationSlotProbe.class);
+        when(probe.probeConfiguredSlot()).thenReturn(Map.of(
+                "available", true,
+                "found", true,
+                "active", false
+        ));
+
+        Health health = new CdcEngineHealthIndicator(service, probe).health();
+
+        assertEquals("engine_running_but_slot_inactive", health.getDetails().get("slotWarning"));
+        assertEquals(
+                Map.of("available", true, "found", true, "active", false),
+                health.getDetails().get("replicationSlot")
+        );
+    }
+
+    @Test
+    void engineRunningBeforeConfiguredSlotAppearsRetainsWarning() {
+        CdcService service = mock(CdcService.class);
+        when(service.isRunning()).thenReturn(true);
+        when(service.isAutoStart()).thenReturn(true);
+        ReplicationSlotProbe probe = mock(ReplicationSlotProbe.class);
+        when(probe.probeConfiguredSlot()).thenReturn(Map.of(
+                "available", true,
+                "found", false
+        ));
+
+        Health health = new CdcEngineHealthIndicator(service, probe).health();
+
+        assertEquals("slot_not_found_yet", health.getDetails().get("slotWarning"));
+        assertEquals(
+                Map.of("available", true, "found", false),
+                health.getDetails().get("replicationSlot")
+        );
+    }
+
+    @Test
+    void healthProjectionDropsUnexpectedTypesAndUnknownErrors() {
+        CdcService service = mock(CdcService.class);
+        when(service.isRunning()).thenReturn(false);
+        when(service.isAutoStart()).thenReturn(false);
+        ReplicationSlotProbe probe = mock(ReplicationSlotProbe.class);
+        when(probe.probeConfiguredSlot()).thenReturn(Map.of(
+                "available", "true",
+                "found", 1,
+                "active", "false",
+                "restartLagBytes", 12,
+                "flushLagBytes", "4",
+                "error", "connection_refused"
+        ));
+
+        Health health = new CdcEngineHealthIndicator(service, probe).health();
+
+        assertEquals(Map.of(), health.getDetails().get("replicationSlot"));
+    }
 }
