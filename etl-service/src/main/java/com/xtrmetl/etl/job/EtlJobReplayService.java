@@ -208,7 +208,7 @@ public class EtlJobReplayService {
                 (resultSet, rowNumber) -> new ReplaySource(
                         resultSet.getObject("job_record_id", UUID.class),
                         resultSet.getString("request_digest"),
-                        parseReplaySourceStatus(resultSet.getString("job_status"))
+                        resultSet.getString("job_status")
                 ),
                 validatedSourceJobRecordId,
                 principalScopeHash
@@ -218,13 +218,13 @@ public class EtlJobReplayService {
         }
         ReplaySource source = replaySources.getFirst();
         switch (source.jobStatus()) {
-            case PENDING, RUNNING -> throw new EtlRequestException(
+            case "PENDING", "RUNNING" -> throw new EtlRequestException(
                     EtlRequestError.JOB_REPLAY_SOURCE_ACTIVE
             );
-            case SUCCEEDED -> throw new EtlRequestException(
+            case "SUCCEEDED" -> throw new EtlRequestException(
                     EtlRequestError.JOB_REPLAY_SOURCE_SUCCEEDED
             );
-            case FAILED, CANCELLED -> {
+            case "FAILED", "CANCELLED" -> {
                 // These terminal outcomes are the bounded first-generation replay sources.
             }
             default -> throw new EtlRequestException(
@@ -247,17 +247,6 @@ public class EtlJobReplayService {
                 source.jobRecordId()
         );
         return new EtlJobReplay(replayJobRecordId, EtlJobStatus.PENDING, false);
-    }
-
-    private static EtlJobStatus parseReplaySourceStatus(String storedJobStatus) {
-        try {
-            return EtlJobStatus.valueOf(storedJobStatus);
-        } catch (IllegalArgumentException exception) {
-            throw new EtlRequestException(
-                    EtlRequestError.JOB_REPLAY_SOURCE_UNSUPPORTED,
-                    exception
-            );
-        }
     }
 
     private static String validateReplayKey(@Nullable String rawReplayKey) {
@@ -311,7 +300,7 @@ public class EtlJobReplayService {
         return root;
     }
 
-    private record ReplaySource(UUID jobRecordId, String requestDigest, EtlJobStatus jobStatus) {
+    private record ReplaySource(UUID jobRecordId, String requestDigest, String jobStatus) {
         private ReplaySource {
             Objects.requireNonNull(jobRecordId, "jobRecordId must not be null");
             Objects.requireNonNull(requestDigest, "requestDigest must not be null");
