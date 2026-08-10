@@ -6,7 +6,9 @@ import org.springframework.core.io.ClassPathResource;
 
 import java.util.Properties;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Guards the deployable CDC configuration against silently enabling local-debug observability.
@@ -23,6 +25,19 @@ class CdcObservabilityProfileContractTest {
                 "base CDC configuration must not force application DEBUG logging");
         assertNull(properties.getProperty("logging.level.org.springframework.web"),
                 "base CDC configuration must not force Spring Web DEBUG logging");
+    }
+
+    @Test
+    void localProfileExplicitlyOwnsVerboseDiagnostics() {
+        ClassPathResource localProfile = new ClassPathResource("application-local.yml");
+        assertTrue(localProfile.exists(),
+                "developer-verbose observability must live in an explicit local profile, not the base configuration");
+
+        Properties properties = load("application-local.yml");
+        assertEquals("local", properties.getProperty("spring.config.activate.on-profile"));
+        assertEquals("1.0", properties.getProperty("management.tracing.sampling.probability"));
+        assertEquals("DEBUG", properties.getProperty("logging.level.com.xtrmetl"));
+        assertEquals("DEBUG", properties.getProperty("logging.level.org.springframework.web"));
     }
 
     private static Properties load(String resourceName) {
