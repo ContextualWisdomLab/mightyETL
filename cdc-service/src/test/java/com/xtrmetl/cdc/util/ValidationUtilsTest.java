@@ -3,7 +3,9 @@ package com.xtrmetl.cdc.util;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ValidationUtilsTest {
 
@@ -53,5 +55,43 @@ class ValidationUtilsTest {
         assertThrows(IllegalStateException.class, () -> ValidationUtils.requireValidIdentifier(" ", "REPLICA_PGDATABASE"));
         assertThrows(IllegalStateException.class, () -> ValidationUtils.requireValidIdentifier("xtrmetl?evil", "REPLICA_PGDATABASE"));
         assertThrows(IllegalStateException.class, () -> ValidationUtils.requireValidIdentifier("xtrmetl/db", "REPLICA_PGDATABASE"));
+    }
+
+    @Test
+    void invalidConfigurationDiagnosticsDoNotRepublishRejectedValues() {
+        String sensitiveFragment = "password=secret-8472";
+
+        IllegalStateException hostFailure = assertThrows(
+                IllegalStateException.class,
+                () -> ValidationUtils.requireValidHost(
+                        "replica-host?" + sensitiveFragment + "\r\nforged-log-line",
+                        "REPLICA_PGHOST"
+                )
+        );
+        IllegalStateException portFailure = assertThrows(
+                IllegalStateException.class,
+                () -> ValidationUtils.requireValidPort("5432?" + sensitiveFragment, "REPLICA_PGPORT")
+        );
+        IllegalStateException identifierFailure = assertThrows(
+                IllegalStateException.class,
+                () -> ValidationUtils.requireValidIdentifier(
+                        "customer_db?" + sensitiveFragment,
+                        "REPLICA_PGDATABASE"
+                )
+        );
+
+        assertSafeDiagnostic(hostFailure, "REPLICA_PGHOST", sensitiveFragment);
+        assertSafeDiagnostic(portFailure, "REPLICA_PGPORT", sensitiveFragment);
+        assertSafeDiagnostic(identifierFailure, "REPLICA_PGDATABASE", sensitiveFragment);
+    }
+
+    private static void assertSafeDiagnostic(
+            IllegalStateException failure,
+            String expectedKey,
+            String sensitiveFragment
+    ) {
+        assertTrue(failure.getMessage().contains(expectedKey));
+        assertFalse(failure.getMessage().contains(sensitiveFragment));
+        assertFalse(failure.getMessage().contains("forged-log-line"));
     }
 }
