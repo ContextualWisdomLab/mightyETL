@@ -164,6 +164,7 @@ pg_restore \
     --username="$RECOVERY_PGUSER" \
     --dbname="$RECOVERY_PGDATABASE" \
     --exit-on-error \
+    --single-transaction \
     --no-owner \
     --no-privileges \
     "$archive_path"
