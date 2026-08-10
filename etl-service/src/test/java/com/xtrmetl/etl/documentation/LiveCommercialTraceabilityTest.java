@@ -58,6 +58,24 @@ class LiveCommercialTraceabilityTest {
     }
 
     @Test
+    void post169CommercialWorkIsBoundIntoTraceability() throws IOException {
+        String traceability = readTraceability();
+
+        assertTrue(traceability.contains("| diagnostic confidentiality hardening | `active_pr` #170/#171/#172/#174/#176/#211 |"));
+        assertTrue(traceability.contains("| Flyway-only schema mutation authority | `active_pr` #184 |"));
+        assertTrue(traceability.contains("| explicit Config Server repository authority | `active_pr` #189 |"));
+        assertTrue(traceability.contains("| runtime identifier compatibility inventory | `active_pr` #191 |"));
+        assertTrue(traceability.contains("| dead-letter privacy and terminal routing | `active_pr` #192/#197 |"));
+        assertTrue(traceability.contains("| invalid amount fail-closed integrity | `active_pr` #199 |"));
+        assertTrue(traceability.contains("| CDC connector registry identity | `active_pr` #201 |"));
+        assertTrue(traceability.contains("| PostgreSQL backup and restore provenance | `active_pr` #208 |"));
+        assertTrue(traceability.contains("| repository-wide owned-production coverage | `known_gap` issue #205 |"));
+        assertTrue(traceability.contains("| Maven scanner dependency-graph completeness | `known_gap` issue #196 |"));
+        assertTrue(traceability.contains("| structured record snapshot integrity | `active_pr` #222/#228 |"));
+        assertTrue(traceability.contains("| public bootstrap and environment API documentation | `active_pr` #224/#226/#230 |"));
+    }
+
+    @Test
     void documentationFitnessAssessmentIncludesCurrentCrossCuttingWork() throws IOException {
         String assessment = readAssessment();
 
@@ -71,6 +89,25 @@ class LiveCommercialTraceabilityTest {
         assertTrue(assessment.contains("PR #167"));
         assertTrue(assessment.contains("issue #168"));
         assertTrue(assessment.contains("PR #169"));
+    }
+
+    @Test
+    void post169WorkIsVisibleInDocumentationFitnessAssessment() throws IOException {
+        String assessment = readAssessment();
+
+        assertTrue(assessment.contains("PR #184"));
+        assertTrue(assessment.contains("PR #189"));
+        assertTrue(assessment.contains("PR #191"));
+        assertTrue(assessment.contains("PR #192"));
+        assertTrue(assessment.contains("PR #197"));
+        assertTrue(assessment.contains("PR #199"));
+        assertTrue(assessment.contains("PR #201"));
+        assertTrue(assessment.contains("PR #208"));
+        assertTrue(assessment.contains("issue #196"));
+        assertTrue(assessment.contains("issue #205"));
+        assertTrue(assessment.contains("PR #222"));
+        assertTrue(assessment.contains("PR #228"));
+        assertTrue(assessment.contains("PR #230"));
     }
 
     @Test
