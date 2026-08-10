@@ -19,7 +19,9 @@ class PostgresLogicalRestoreVersionCompatibilityTest {
     void restoreRehearsalRejectsMajorVersionMismatchBeforeDatabaseWrites() throws IOException {
         String script = Files.readString(
                 projectRoot().resolve("scripts/ops/postgres-logical-restore-rehearsal.sh"),
-                StandardCharsets.UTF_8);
+                StandardCharsets.UTF_8)
+                .replace("\r\n", "\n")
+                .replace('\r', '\n');
 
         String backupVersionRead = "backup_server_version_num=$(manifest_value server_version_num)";
         String targetVersionRead = "target_server_version_num=$(\"${psql_recovery[@]}\" --command='SHOW server_version_num')";
