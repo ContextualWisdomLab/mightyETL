@@ -9,6 +9,7 @@ import javax.sql.DataSource;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -82,7 +83,9 @@ class ReplicaJdbcTemplateConfigTest {
     }
 
     @Test
-    void failsWithHelpfulMessageWhenInitializationFailTimeoutIsNotANumber() {
+    void invalidInitializationFailTimeoutDoesNotRepublishRejectedValueOrParserDiagnostics() {
+        String sensitiveFragment = "password=timeout-secret-9431";
+
         contextRunner
                 .withPropertyValues(
                         "xtrmetl.replica.enabled=true",
@@ -90,12 +93,26 @@ class ReplicaJdbcTemplateConfigTest {
                         "REPLICA_PGDATABASE=xtrmetl",
                         "REPLICA_PGUSER=xtrmetl_user",
                         "REPLICA_PGPASSWORD=xtrmetl_password",
-                        "REPLICA_HIKARI_INITIALIZATION_FAIL_TIMEOUT_MS=not-a-number"
+                        "REPLICA_HIKARI_INITIALIZATION_FAIL_TIMEOUT_MS=not-a-number?" + sensitiveFragment
                 )
                 .run(context -> {
                     Throwable failure = context.getStartupFailure();
                     assertNotNull(failure);
-                    assertTrue(failure.getMessage().contains("REPLICA_HIKARI_INITIALIZATION_FAIL_TIMEOUT_MS"));
+
+                    String diagnosticChain = diagnosticChain(failure);
+                    assertTrue(diagnosticChain.contains("REPLICA_HIKARI_INITIALIZATION_FAIL_TIMEOUT_MS"));
+                    assertFalse(diagnosticChain.contains(sensitiveFragment));
+                    assertFalse(diagnosticChain.contains("NumberFormatException"));
                 });
+    }
+
+    private static String diagnosticChain(Throwable failure) {
+        StringBuilder diagnostics = new StringBuilder();
+        Throwable current = failure;
+        while (current != null) {
+            diagnostics.append(current.getClass().getName()).append(':').append(current.getMessage()).append('\n');
+            current = current.getCause();
+        }
+        return diagnostics.toString();
     }
 }
