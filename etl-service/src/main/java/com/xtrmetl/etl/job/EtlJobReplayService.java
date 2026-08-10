@@ -208,7 +208,7 @@ public class EtlJobReplayService {
                 (resultSet, rowNumber) -> new ReplaySource(
                         resultSet.getObject("job_record_id", UUID.class),
                         resultSet.getString("request_digest"),
-                        EtlJobStatus.valueOf(resultSet.getString("job_status"))
+                        parseReplaySourceStatus(resultSet.getString("job_status"))
                 ),
                 validatedSourceJobRecordId,
                 principalScopeHash
@@ -227,6 +227,9 @@ public class EtlJobReplayService {
             case FAILED, CANCELLED -> {
                 // These terminal outcomes are the bounded first-generation replay sources.
             }
+            default -> throw new EtlRequestException(
+                    EtlRequestError.JOB_REPLAY_SOURCE_UNSUPPORTED
+            );
         }
         if (!requestDigest.equals(source.requestDigest())) {
             throw new EtlRequestException(EtlRequestError.JOB_REPLAY_PAYLOAD_MISMATCH);
@@ -244,6 +247,17 @@ public class EtlJobReplayService {
                 source.jobRecordId()
         );
         return new EtlJobReplay(replayJobRecordId, EtlJobStatus.PENDING, false);
+    }
+
+    private static EtlJobStatus parseReplaySourceStatus(String storedJobStatus) {
+        try {
+            return EtlJobStatus.valueOf(storedJobStatus);
+        } catch (IllegalArgumentException exception) {
+            throw new EtlRequestException(
+                    EtlRequestError.JOB_REPLAY_SOURCE_UNSUPPORTED,
+                    exception
+            );
+        }
     }
 
     private static String validateReplayKey(@Nullable String rawReplayKey) {

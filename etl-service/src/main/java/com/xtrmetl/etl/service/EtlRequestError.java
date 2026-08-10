@@ -185,6 +185,15 @@ public enum EtlRequestError {
             "A succeeded durable job cannot be replayed through this endpoint."
     ),
 
+    /** An unrecognized or future source state is rejected until replay semantics are defined. */
+    JOB_REPLAY_SOURCE_UNSUPPORTED(
+            HttpStatus.CONFLICT,
+            "etl_job_replay_source_unsupported",
+            "urn:mightyetl:problem:etl-job-replay-source-unsupported",
+            "ETL job replay source state unsupported",
+            "The durable job source state is not recognized as replay-eligible."
+    ),
+
     /** The durable job was already cancelled with a different cancellation key. */
     JOB_CANCELLATION_KEY_REUSED(
             HttpStatus.UNPROCESSABLE_ENTITY,
