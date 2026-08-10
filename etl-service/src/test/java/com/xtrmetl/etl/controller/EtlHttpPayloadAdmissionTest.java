@@ -24,6 +24,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
@@ -92,10 +93,51 @@ class EtlHttpPayloadAdmissionTest {
         verifyNoInteractions(etlService);
     }
 
+    @Test
+    @WithMockUser
+    void acceptsKnownLengthBodyAtExactByteLimit() throws Exception {
+        String request = sizedJsonRequest(EtlBatchProperties.DEFAULT_MAX_PAYLOAD_BYTES);
+        when(etlService.processData(request)).thenReturn("processed");
+
+        mockMvc.perform(post(PROCESS_PATH)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(request))
+                .andExpect(status().isOk())
+                .andExpect(content().string("processed"));
+
+        verify(etlService).processData(request);
+    }
+
+    @Test
+    @WithMockUser
+    void acceptsUnknownLengthBodyImmediatelyBelowByteLimit() throws Exception {
+        String request = sizedJsonRequest(EtlBatchProperties.DEFAULT_MAX_PAYLOAD_BYTES - 1);
+        when(etlService.processData(request)).thenReturn("processed");
+
+        mockMvc.perform(post(PROCESS_PATH)
+                        .with(csrf())
+                        .header(UNKNOWN_LENGTH_HEADER, "true")
+                        .header(HttpHeaders.TRANSFER_ENCODING, "chunked")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(request))
+                .andExpect(status().isOk())
+                .andExpect(content().string("processed"));
+
+        verify(etlService).processData(request);
+    }
+
     private static String oversizedJsonRequest() {
         return "[{\"id\":\"" + OVERSIZED_MARKER + ""
                 + "x".repeat(EtlBatchProperties.DEFAULT_MAX_PAYLOAD_BYTES)
                 + "\"}]";
+    }
+
+    private static String sizedJsonRequest(int totalBytes) {
+        String prefix = "[{\"id\":\"";
+        String suffix = "\"}]";
+        int fillerLength = totalBytes - prefix.length() - suffix.length();
+        return prefix + "x".repeat(fillerLength) + suffix;
     }
 
     /**
