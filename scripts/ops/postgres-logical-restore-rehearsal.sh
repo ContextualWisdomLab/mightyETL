@@ -185,4 +185,18 @@ if [[ ! "$required_application_relation_count" =~ ^[0-9]+$ || "$required_applica
     exit 6
 fi
 
+idempotency_integrity_violation_count=$("${psql_recovery[@]}" --command="SELECT count(*) FROM etl_idempotency_records WHERE idempotency_key_hash !~ '^[0-9a-f]{64}$' OR request_digest !~ '^[0-9a-f]{64}$'")
+idempotency_integrity_violation_count=${idempotency_integrity_violation_count//[[:space:]]/}
+if [[ ! "$idempotency_integrity_violation_count" =~ ^[0-9]+$ || "$idempotency_integrity_violation_count" != "0" ]]; then
+    printf 'Restored idempotency ledger violates mightyETL integrity invariants\n' >&2
+    exit 6
+fi
+
+durable_job_integrity_violation_count=$("${psql_recovery[@]}" --command="SELECT count(*) FROM etl_job_records WHERE principal_scope_hash !~ '^[0-9a-f]{64}$' OR submission_key_hash !~ '^[0-9a-f]{64}$' OR request_digest !~ '^[0-9a-f]{64}$' OR job_status NOT IN ('PENDING', 'RUNNING', 'SUCCEEDED', 'FAILED') OR attempt_count < 0 OR (job_status IN ('PENDING', 'RUNNING') AND request_payload IS NULL) OR (job_status IN ('SUCCEEDED', 'FAILED') AND request_payload IS NOT NULL) OR (failure_code IS NOT NULL AND failure_code !~ '^[a-z0-9_]{1,64}$')")
+durable_job_integrity_violation_count=${durable_job_integrity_violation_count//[[:space:]]/}
+if [[ ! "$durable_job_integrity_violation_count" =~ ^[0-9]+$ || "$durable_job_integrity_violation_count" != "0" ]]; then
+    printf 'Restored durable-job ledger violates mightyETL lifecycle invariants\n' >&2
+    exit 6
+fi
+
 printf '%s\n' 'PostgreSQL restore rehearsal completed on the explicit disposable target'
