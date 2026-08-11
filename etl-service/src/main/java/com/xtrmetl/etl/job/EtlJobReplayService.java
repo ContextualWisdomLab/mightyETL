@@ -16,6 +16,7 @@ import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -24,10 +25,12 @@ import java.util.regex.Pattern;
  * Admits owner-scoped durable-job replay requests on the repaired stack.
  *
  * <p>The service validates replay identity, authenticated principal scope, and JSON shape before
- * database work. The first persistence increment admits only an owner's first-generation replay of
- * a {@code FAILED} or {@code CANCELLED} source whose resupplied payload has the exact source request
- * digest. Later test-first increments add idempotent replay lookup, concurrency, and
- * generation-depth policies before the HTTP replay resource is exposed.</p>
+ * database work. The current persistence increment admits only an owner's first-generation replay
+ * of a {@code FAILED} or {@code CANCELLED} source whose resupplied payload has the exact source
+ * request digest. It classifies owner-safe absence, active and successful sources, unsupported
+ * persisted states, and payload mismatch before insertion. Later test-first increments add
+ * idempotent replay lookup, concurrency, and generation-depth policies before the HTTP replay
+ * resource is exposed.</p>
  */
 @Service
 public class EtlJobReplayService {
@@ -41,13 +44,11 @@ public class EtlJobReplayService {
             "\"(" + IDEMPOTENCY_KEY_VALUE_EXPRESSION + ")\""
     );
     private static final String REPLAY_KEY_HASH_DOMAIN = "mightyetl:durable-job-replay-key:v1:";
-    private static final String SELECT_FIRST_GENERATION_TERMINAL_SOURCE_SQL = """
-            SELECT job_record_id
+    private static final String SELECT_FIRST_GENERATION_SOURCE_SQL = """
+            SELECT job_record_id, request_digest, job_status
               FROM etl_job_records
              WHERE job_record_id = ?
                AND principal_scope_hash = ?
-               AND request_digest = ?
-               AND job_status IN ('FAILED', 'CANCELLED')
                AND replay_source_job_record_id IS NULL
                AND replay_root_job_record_id IS NULL
                AND replay_generation_count IS NULL
@@ -128,18 +129,19 @@ public class EtlJobReplayService {
     /**
      * Creates one first-generation replay of an owner-scoped failed or cancelled durable job.
      *
-     * <p>Authentication scope and byte-exact payload digest are part of the source-row predicate,
-     * and the source row is locked before the child is inserted. The source row is never mutated.
-     * Replay-key normalization is domain-separated before reuse of the existing durable submission
-     * key column so replay and ordinary submission key material cannot collide accidentally.</p>
+     * <p>Authentication scope identifies the source row before its persisted state is classified,
+     * preserving the same not-found result for missing and foreign-owned jobs. Only failed or
+     * cancelled root jobs whose immutable request digest matches the resupplied payload proceed to
+     * insertion. The source row is locked and never mutated. Replay-key normalization remains
+     * domain-separated before reuse of the existing durable submission-key column.</p>
      *
-     * @param sourceJobRecordId terminal durable job whose intent is being replayed
+     * @param sourceJobRecordId durable root job whose immutable intent is being replayed
      * @param requestBody bounded JSON-array payload resupplied by the authenticated owner
      * @param rawReplayKey principal-scoped idempotency key for this replay request
      * @param principalName authenticated principal namespace
      * @return newly created pending replay job
      * @throws NullPointerException when the source job identifier is absent
-     * @throws EtlRequestException when key, principal, or JSON validation fails
+     * @throws EtlRequestException when key, principal, JSON, ownership, state, or payload validation fails
      */
     @Transactional
     public EtlJobReplay replayOwned(
@@ -158,13 +160,39 @@ public class EtlJobReplayService {
 
         String principalScopeHash = Sha256Digest.digest(validatedPrincipalName);
         String requestDigest = Sha256Digest.digest(requestBody);
-        UUID lockedSourceJobRecordId = jdbcTemplate.queryForObject(
-                SELECT_FIRST_GENERATION_TERMINAL_SOURCE_SQL,
-                UUID.class,
+        List<ReplaySource> replaySources = jdbcTemplate.query(
+                SELECT_FIRST_GENERATION_SOURCE_SQL,
+                (resultSet, rowNumber) -> new ReplaySource(
+                        resultSet.getObject("job_record_id", UUID.class),
+                        resultSet.getString("request_digest"),
+                        resultSet.getString("job_status")
+                ),
                 validatedSourceJobRecordId,
-                principalScopeHash,
-                requestDigest
+                principalScopeHash
         );
+        if (replaySources.isEmpty()) {
+            throw new EtlRequestException(EtlRequestError.JOB_NOT_FOUND);
+        }
+
+        ReplaySource source = replaySources.getFirst();
+        switch (source.jobStatus()) {
+            case "PENDING", "RUNNING" -> throw new EtlRequestException(
+                    EtlRequestError.JOB_REPLAY_SOURCE_ACTIVE
+            );
+            case "SUCCEEDED" -> throw new EtlRequestException(
+                    EtlRequestError.JOB_REPLAY_SOURCE_SUCCEEDED
+            );
+            case "FAILED", "CANCELLED" -> {
+                // These terminal outcomes are the bounded first-generation replay sources.
+            }
+            default -> throw new EtlRequestException(
+                    EtlRequestError.JOB_REPLAY_SOURCE_UNSUPPORTED
+            );
+        }
+        if (!requestDigest.equals(source.requestDigest())) {
+            throw new EtlRequestException(EtlRequestError.JOB_REPLAY_PAYLOAD_MISMATCH);
+        }
+
         UUID replayJobRecordId = UUID.randomUUID();
         String replayKeyHash = Sha256Digest.digest(
                 REPLAY_KEY_HASH_DOMAIN + principalScopeHash + ":" + validatedReplayKey
@@ -176,8 +204,8 @@ public class EtlJobReplayService {
                 replayKeyHash,
                 requestDigest,
                 requestBody,
-                lockedSourceJobRecordId,
-                lockedSourceJobRecordId
+                source.jobRecordId(),
+                source.jobRecordId()
         );
         return new EtlJobReplay(replayJobRecordId, EtlJobStatus.PENDING, false);
     }
@@ -219,5 +247,8 @@ public class EtlJobReplayService {
         } catch (JsonProcessingException exception) {
             throw new EtlRequestException(EtlRequestError.INVALID_JSON, exception);
         }
+    }
+
+    private record ReplaySource(UUID jobRecordId, String requestDigest, String jobStatus) {
     }
 }
