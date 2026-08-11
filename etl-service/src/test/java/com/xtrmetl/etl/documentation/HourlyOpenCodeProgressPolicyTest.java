@@ -120,6 +120,51 @@ class HourlyOpenCodeProgressPolicyTest {
         ));
     }
 
+    /** Requires every completed or deferred action to return to a live work-conserving queue. */
+    @Test
+    void treatsEveryActionAsIntermediateAndReturnsToTheExecutableQueue() {
+        assertTrue(workflow.contains(
+                "Completing an action is intermediate state, not an invocation endpoint."
+        ));
+        assertTrue(workflow.contains(
+                "After every remediation, commit, documentation update, test result, deferred "
+                        + "blocker, or completed slice, return to the highest-value safe executable "
+                        + "queue."
+        ));
+        assertTrue(workflow.contains(
+                "The one remote publication candidate limit constrains mutation output, not further "
+                        + "read-only diagnosis, testing, or documentation analysis after a candidate "
+                        + "is prepared."
+        ));
+        assertTrue(workflow.contains(
+                "Queued checks, reviews, and provider waits are local deferred items, not reasons to "
+                        + "idle."
+        ));
+        assertTrue(workflow.contains(
+                "Same-branch writer movement freezes only that branch; continue safe work on other "
+                        + "non-overlapping branches or read-only lanes."
+        ));
+    }
+
+    /** Requires two clean fresh exit sweeps before finite-run termination. */
+    @Test
+    void requiresDoubleFreshExitSweepBeforeTermination() {
+        assertTrue(workflow.contains(
+                "Before terminating, perform a fresh whole-repository sweep of pull requests, "
+                        + "issues, checks, reviews, security, stack ancestry, documentation, release "
+                        + "readiness, and product gaps."
+        ));
+        assertTrue(workflow.contains(
+                "If that sweep finds any safe executable item, execute the highest-value item and "
+                        + "restart the exit sweep count."
+        ));
+        assertTrue(workflow.contains(
+                "Terminate only on genuine finite run-budget exhaustion or after a second "
+                        + "consecutive fresh sweep proves no safe executable action remains."
+        ));
+        assertTrue(workflow.contains("Routine status narration is not work."));
+    }
+
     /** Keeps every separately leased repository outside this scheduler's write authority. */
     @Test
     void preservesReadOnlyDependencyLeasesWhileContinuingLocalWork() {
