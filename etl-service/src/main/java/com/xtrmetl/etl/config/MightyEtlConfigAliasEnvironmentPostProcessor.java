@@ -1,8 +1,8 @@
 package com.xtrmetl.etl.config;
 
 import org.springframework.boot.SpringApplication;
+import org.springframework.boot.context.config.ConfigDataEnvironmentPostProcessor;
 import org.springframework.boot.env.EnvironmentPostProcessor;
-import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.MapPropertySource;
@@ -18,7 +18,7 @@ import java.util.Map;
  * <p>Only explicitly supported product keys are mirrored. See
  * {@code docs/rebrand-name-matrix.md} for compatibility boundaries.</p>
  */
-@Order(Ordered.HIGHEST_PRECEDENCE + 10)
+@Order(ConfigDataEnvironmentPostProcessor.ORDER + 1)
 public class MightyEtlConfigAliasEnvironmentPostProcessor implements EnvironmentPostProcessor {
 
     /** Name of the highest-precedence synthetic alias property source. */
