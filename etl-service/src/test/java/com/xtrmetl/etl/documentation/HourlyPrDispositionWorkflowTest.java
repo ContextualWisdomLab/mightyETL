@@ -44,6 +44,19 @@ class HourlyPrDispositionWorkflowTest {
         assertTrue(workflow.contains("latest decisive review state includes requested changes"));
     }
 
+    /**
+     * Prevents unattended merge when nobody other than the pull-request author has approved the
+     * exact current head. An approval anchored to an older commit is stale evidence and must not
+     * authorize a newer head.
+     */
+    @Test
+    void requiresIndependentApprovalForTheExactCurrentHead() {
+        assertTrue(workflow.contains("independent_exact_head_approvals"));
+        assertTrue(workflow.contains(".user.login != $author"));
+        assertTrue(workflow.contains(".commit_id == $head_sha"));
+        assertTrue(workflow.contains("independent exact-head approval is absent"));
+    }
+
     @Test
     void requiresResolvedCurrentReviewThreads() {
         assertTrue(workflow.contains("reviewThreads(first: 100, after: $endCursor)"));

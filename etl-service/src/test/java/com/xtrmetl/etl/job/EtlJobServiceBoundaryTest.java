@@ -112,6 +112,10 @@ class EtlJobServiceBoundaryTest {
         );
         assertError(
                 EtlRequestError.INVALID_JSON,
+                () -> service.submit("", IDEMPOTENCY_KEY, "tenant_alpha")
+        );
+        assertError(
+                EtlRequestError.INVALID_JSON,
                 () -> service.submit("null", IDEMPOTENCY_KEY, "tenant_alpha")
         );
         assertError(
@@ -136,6 +140,10 @@ class EtlJobServiceBoundaryTest {
         );
         assertError(
                 EtlRequestError.INVALID_RECORD,
+                () -> EtlJobService.validateRecord(null)
+        );
+        assertError(
+                EtlRequestError.INVALID_RECORD,
                 () -> service.submit("[null]", IDEMPOTENCY_KEY, "tenant_alpha")
         );
         assertError(
@@ -156,7 +164,35 @@ class EtlJobServiceBoundaryTest {
         );
         assertError(
                 EtlRequestError.INVALID_RECORD,
+                () -> service.submit(
+                        "[{\"id\":\"\u00a0record_alpha\"}]",
+                        IDEMPOTENCY_KEY,
+                        "tenant_alpha"
+                )
+        );
+        assertError(
+                EtlRequestError.INVALID_RECORD,
+                () -> service.submit(
+                        "[{\"id\":\"" + "x".repeat(257) + "\"}]",
+                        IDEMPOTENCY_KEY,
+                        "tenant_alpha"
+                )
+        );
+        assertError(
+                EtlRequestError.INVALID_RECORD,
                 () -> service.submit("[{\"id\":\"record\\u0000alpha\"}]", IDEMPOTENCY_KEY, "tenant_alpha")
+        );
+        assertError(
+                EtlRequestError.INVALID_RECORD,
+                () -> service.submit("[{\"id\":\"record\\u200dalpha\"}]", IDEMPOTENCY_KEY, "tenant_alpha")
+        );
+        assertError(
+                EtlRequestError.INVALID_RECORD,
+                () -> service.submit("[{\"id\":\"record\\u2028alpha\"}]", IDEMPOTENCY_KEY, "tenant_alpha")
+        );
+        assertError(
+                EtlRequestError.INVALID_RECORD,
+                () -> service.submit("[{\"id\":\"record\\u2029alpha\"}]", IDEMPOTENCY_KEY, "tenant_alpha")
         );
         assertError(
                 EtlRequestError.INVALID_RECORD,

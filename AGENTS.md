@@ -41,6 +41,45 @@ workflows, and service-level maintenance.
 - Keep automation explicit and auditable (clear triggers, least-privilege permissions).
 - When unsure, prefer conservative defaults that reduce security and release risk.
 
+## Scheduled maintenance progress contract
+
+External review, approval, check, or read-only dependency latency is not a reason to stop all
+productive mightyETL work. Those unavailable gates remain not passing and must never be reused as
+merge or release evidence.
+
+For every failing or blocked outcome, identify the root cause before selecting a remediation. Trace
+the observed evidence to a source, configuration, permission, quota, runner, provider, dependency,
+or policy boundary. A symptom, queued state, repeated retry, or aggregate-green result is not a
+root cause. Generate bounded options that address the identified cause, then test each option
+against current permissions, branch protection, tool capability, runtime and compute budgets,
+dependency state, path ownership, and repository-writer leases.
+
+Classify each option as executable now, requiring an external actor, or unsafe or infeasible.
+Execute the highest-impact safe option that is executable during the current run and rerun the exact
+failing test or gate. If the preferred option is external or infeasible, keep its gate fail-closed
+and immediately continue with the next safe feasible non-overlapping remediation or independent
+bounded product slice. Do not stop merely because the preferred option cannot be executed here.
+
+A pull request is source-actionable only when its exact current head has a valid repository-local
+finding or failing source gate that mightyETL can repair. Queued checks, missing independent
+approval, synthetic-merge-only scanner evidence, and a separately leased dependency that has not
+yet integrated are external-only blockers rather than source-actionable findings.
+
+When no open pull request is source-actionable, select exactly one non-conflicting bounded
+mightyETL slice from the protected `develop` head. Prefer documentation, tests, security,
+reliability, packaging, release evidence, or a buyer-visible vertical slice that can be developed
+and reviewed independently of the blocked stack. Keep the one-candidate-per-run publication
+boundary and all exact-head validation requirements.
+
+Do not deepen an invalid stack or modify a blocked stack branch merely to appear productive. The
+independent slice must not depend on, retarget, rewrite, or overlap files changed by the invalid
+stack. If no such independent slice exists, perform read-only analysis and return without a
+candidate rather than weakening ancestry, tests, or branch protection.
+
+ContextualWisdomLab/.github, naruon, contextual-orchestrator, and every separately leased repository
+remain read-only. Inspect their exact integration state, but never mutate, dispatch a write-capable
+agent, or post a mutation-trigger comment there. Their dedicated loops own those writes.
+
 ## Code-owner review gates — disabled (on hold)
 
 As of 2026-08-04, code-owner review requirements (`require_code_owner_reviews` in branch

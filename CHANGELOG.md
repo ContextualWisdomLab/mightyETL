@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Scheduled OpenCode maintenance now performs root-cause analysis, tests remediation feasibility against live authority, protection, resource, dependency, path-ownership, and writer-lease constraints, executes and verifies the best safe option available now, and continues exactly one independent bounded mightyETL slice from protected `develop` when only external blockers remain; invalid stacks and separately leased repositories stay untouched.
+- Container builds now pin Maven and Eclipse Temurin base-image tags to reviewed SHA-256 digests, with a fail-first contract test preventing mutable registry tags from re-entering the Dockerfile.
+- The model-executing hourly OpenCode maintenance job now has read-only issue access; fail-first workflow-contract coverage proves `issues: write` is unnecessary while preserving issue and roadmap inspection.
+- Pull-request CI and CycloneDX SBOM jobs now check out the literal current source head, immediately assert `git rev-parse HEAD` against `github.event.pull_request.head.sha`, and disable checkout credential persistence; generated merge revisions remain useful compatibility previews but no longer masquerade as direct exact-head source evidence.
+- Dependency Review now relies on the immutably pinned GitHub Dependency Review Action's documented `pull_request` event endpoints; ignored `base-ref`/`head-ref` overrides are prohibited on pull-request runs, and dependency-delta evidence is invalidated whenever either endpoint moves.
+- The hourly pull-request disposition loop now requires at least one non-author approval anchored to the exact current head SHA; stale approvals, comment-only reviews, and the mere absence of requested changes cannot authorize unattended merge.
+- The hourly OpenCode workflow now scopes repository write permissions to its sole maintenance job, replaces the npm installation command with the immutable OpenCode 1.18.13 Linux release archive plus pinned SHA-256 validation, requires exactly one regular-file archive member before private-directory extraction, rejects non-regular or symbolic-link output, and uses a removable repository-local GitHub CLI credential helper instead of storing an encoded authorization header while retaining `persist-credentials: false`.
+- The hourly OpenCode workflow now snapshots same-repository `develop` pull-request heads before the agent runs and uses job-scoped Actions write authority only to authorize approval-required workflow runs for an unchanged exact head; `.github/**` and `CODEOWNERS` changes remain human-authorized, and no review or merge authority is added.
+- Updated existing pull-request candidates now carry their captured pre-agent head into the deterministic publisher, which rejects destructive ancestry, more than 50 agent-introduced files, and any agent-introduced `.github/**` or `CODEOWNERS` change before exposing the updated pull request or authorizing checks.
+- The hourly OpenCode workflow now uses the current free NVIDIA `deepseek-ai/deepseek-v4-pro` endpoint for long-context coding and agentic tool use instead of the deprecated Qwen3 Coder free endpoint; model or endpoint rejection fails visibly without a non-NVIDIA, partner-only, or automatic fallback.
+- The managed Jackson component set now uses the patched 2.21.5 BOM, closing CVE-2026-54515, CVE-2026-59889, and GHSA-mhm7-754m-9p8w while keeping core, annotations, datatype, and module artifacts aligned.
 - Durable `POST /api/etl/jobs` submissions now return RFC 9110 `202 Accepted`, a stable pending-job representation, `Location` status-monitor metadata, and explicit replay metadata without changing the synchronous `/api/etl/process` contract. The incomplete intake controller is fail-closed and requires explicit `xtrmetl.etl.jobs.intake-enabled=true` operator opt-in until worker execution and terminal payload clearing are implemented.
 - Concurrent requests using the same authenticated-principal-scoped semantic idempotency key now return immediate RFC 9457 `409 etl_idempotency_request_in_progress` responses through PostgreSQL `pg_try_advisory_xact_lock`; retries after completion still replay the committed response.
 - `POST /api/etl/process` now supports optional authenticated-principal-scoped `Idempotency-Key` retries with atomic target writes, durable response replay, payload-conflict rejection, and explicit replay response metadata.
@@ -22,6 +33,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Test-first doctoring for external-wait progress, root-cause analysis, realistic remediation feasibility, exact post-action verification, source-actionable pull-request classification, invalid-stack isolation, and read-only dependency leases in `docs/doctoring/hourly-opencode-nonblocking-progress-evidence.md`.
+- Permanent fail-first exact-head workflow contracts and authoritative evidence in `docs/doctoring/exact-head-source-workflow-evidence.md`, including observed synthetic-merge checkout behavior, cross-platform source identity assertions, the rejected ignored Dependency Review ref-override experiment, corrective pull-request event-endpoint semantics, least-privilege boundaries, stack invalidation rules, rollback prohibition, and APA 7th GitHub references.
+- A separate fail-closed hourly OpenCode maintenance workflow pinned to OpenCode 1.18.13 and `nvidia/deepseek-ai/deepseek-v4-pro`, using only the existing `NVIDIA_NIM_API_KEY` through OpenCode's `NVIDIA_API_KEY` provider variable while preserving the independent review agent and deterministic merge-disposition workflow.
+- Exact-head workflow-run authorization doctoring evidence for the repository-token recursion boundary, before/after SHA snapshots, policy-path exclusion, time-of-check/time-of-use validation, least privilege, test-first regression evidence, and rollback in `docs/doctoring/github-token-exact-head-check-authorization-evidence.md`.
+- Supply-chain doctoring evidence for checksum binding, exact archive-member and entry-type validation, private extraction, post-extraction file checks, test-first regression evidence, and rollback in `docs/doctoring/opencode-archive-extraction-evidence.md`.
+- NVIDIA model-selection doctoring evidence for endpoint availability, deprecated-endpoint rejection, capability and context evidence, no-fallback semantics, test-first regression evidence, and replacement procedure in `docs/doctoring/nvidia-opencode-model-selection-evidence.md`.
 - Principal-scoped durable asynchronous ETL job intake and owner-scoped status resources, Flyway `etl_job_records` migration, deterministic replay/conflict coverage, and the explicit worker boundary in `docs/etl/durable-job-intake.md`.
 - Durable idempotency ledger migration, PostgreSQL transaction advisory-lock adapter, deterministic concurrency/rollback coverage, and the operator/client contract `docs/etl/idempotent-retries.md`.
 - ETL problem-details client and operator contract: `docs/api/problem-details.md`.
@@ -127,8 +144,6 @@ Through code analysis, identified the platform as:
 - **Enterprise ETL and CDC Platform**
 - Microservices-based architecture using Spring Cloud
 - Real-time Change Data Capture using Debezium
-- Data transformation pipelines with parallel processing
-- JWT-based security with role-based access control
 - Event streaming via Apache Kafka
 - Service discovery with Netflix Eureka
 - Distributed tracing with Zipkin
@@ -247,7 +262,3 @@ This changelog will be updated:
 - For each release or milestone
 
 ---
-
-**Changelog Version**: 1.0  
-**Last Updated**: 2026-08-04  
-**Maintained By**: Development Team
