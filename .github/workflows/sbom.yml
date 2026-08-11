@@ -34,6 +34,9 @@ jobs:
           java-version: "25"
           cache: maven
 
+      - name: Verify Maven Wrapper integrity
+        run: java .github/scripts/VerifyMavenWrapperIntegrity.java
+
       - name: Generate CycloneDX SBOM (aggregate)
         run: ./mvnw -B -DskipTests org.cyclonedx:cyclonedx-maven-plugin:2.9.1:makeAggregateBom -DoutputFormat=all -Dcyclonedx.skipAttach=true
 
@@ -59,13 +62,21 @@ jobs:
           java-version: "25"
           cache: maven
 
+      - name: Verify Maven Wrapper integrity (Unix)
+        if: runner.os != 'Windows'
+        run: java .github/scripts/VerifyMavenWrapperIntegrity.java
+
       - name: Generate CycloneDX SBOM (aggregate)
         if: runner.os != 'Windows'
         run: ./mvnw -B -DskipTests org.cyclonedx:cyclonedx-maven-plugin:2.9.1:makeAggregateBom -DoutputFormat=all -Dcyclonedx.skipAttach=true
 
+      - name: Verify Maven Wrapper integrity (Windows)
+        if: runner.os == 'Windows'
+        run: java .github/scripts/VerifyMavenWrapperIntegrity.java
+
       - name: Generate CycloneDX SBOM (aggregate, Windows)
         if: runner.os == 'Windows'
-        run: .\\mvnw.cmd -B -DskipTests org.cyclonedx:cyclonedx-maven-plugin:2.9.1:makeAggregateBom -DoutputFormat=all -Dcyclonedx.skipAttach=true
+        run: .\mvnw.cmd -B -DskipTests org.cyclonedx:cyclonedx-maven-plugin:2.9.1:makeAggregateBom -DoutputFormat=all -Dcyclonedx.skipAttach=true
 
       - name: Upload SBOM artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
