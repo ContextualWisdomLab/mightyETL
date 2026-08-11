@@ -18,6 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 
@@ -51,6 +52,32 @@ class KafkaConfigTest {
         assertNotNull(classifier);
         assertFalse(classifier.classify(new IllegalArgumentException("test")));
         assertFalse(classifier.classify(new IllegalStateException("test")));
+    }
+
+    @Test
+    void rejectsNegativeRetryBackoffBeforeBuildingErrorHandler() {
+        KafkaConfig config = new KafkaConfig();
+        KafkaTemplate<String, String> kafkaTemplate = mock(KafkaTemplate.class);
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> config.kafkaListenerErrorHandler(kafkaTemplate, -1L, 30L)
+        );
+
+        assertTrue(exception.getMessage().contains("xtrmetl.replica.kafka.retry-backoff-ms"));
+    }
+
+    @Test
+    void rejectsNegativeRetryAttemptsBeforeBuildingErrorHandler() {
+        KafkaConfig config = new KafkaConfig();
+        KafkaTemplate<String, String> kafkaTemplate = mock(KafkaTemplate.class);
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> config.kafkaListenerErrorHandler(kafkaTemplate, 1000L, -1L)
+        );
+
+        assertTrue(exception.getMessage().contains("xtrmetl.replica.kafka.retry-max-attempts"));
     }
 
     @Test

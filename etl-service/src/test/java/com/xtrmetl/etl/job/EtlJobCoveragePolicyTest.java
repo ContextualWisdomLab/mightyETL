@@ -14,13 +14,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Keeps the durable-job production slice bound to an executable 100% coverage policy.
  *
  * <p>The policy is intentionally scoped to the production classes introduced by the durable-job
- * intake slice. It requires current Java-compatible JaCoCo instrumentation and zero missed
- * instructions, lines, methods, or branches while the ordinary {@code mvn test} lifecycle runs.</p>
+ * intake slice. It requires current Java-compatible JaCoCo instrumentation, a non-empty selected
+ * production bundle, and zero missed instructions, lines, methods, or branches while the ordinary
+ * {@code mvn test} lifecycle runs.</p>
  */
 class EtlJobCoveragePolicyTest {
 
     /**
-     * Requires the ETL module build to fail when any durable-job production path is untested.
+     * Requires the ETL module build to fail when the durable-job production slice is empty or any
+     * selected production path is untested.
      *
      * @throws IOException when the module build descriptor cannot be read
      */
@@ -36,10 +38,14 @@ class EtlJobCoveragePolicyTest {
         assertTrue(modulePom.contains("<phase>test</phase>"));
         assertTrue(modulePom.contains("<goal>report</goal>"));
         assertTrue(modulePom.contains("<goal>check</goal>"));
-        assertTrue(modulePom.contains("<include>com.xtrmetl.etl.job.*</include>"));
+        assertTrue(modulePom.contains("<include>com/xtrmetl/etl/job/*.class</include>"));
         assertTrue(modulePom.contains(
-                "<include>com.xtrmetl.etl.controller.EtlJobController*</include>"
+                "<include>com/xtrmetl/etl/controller/EtlJobController*.class</include>"
         ));
+        assertTrue(modulePom.contains("<element>BUNDLE</element>"));
+        assertTrue(modulePom.contains("<counter>CLASS</counter>"));
+        assertTrue(modulePom.contains("<value>TOTALCOUNT</value>"));
+        assertTrue(modulePom.contains("<minimum>1</minimum>"));
         assertTrue(modulePom.contains("<counter>INSTRUCTION</counter>"));
         assertTrue(modulePom.contains("<counter>LINE</counter>"));
         assertTrue(modulePom.contains("<counter>METHOD</counter>"));
