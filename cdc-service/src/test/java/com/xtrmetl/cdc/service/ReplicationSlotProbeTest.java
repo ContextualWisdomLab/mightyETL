@@ -51,14 +51,17 @@ class ReplicationSlotProbeTest {
     }
 
     @Test
-    void failOpenOnDataAccessError() {
+    void failOpenOnDataAccessErrorWithoutExposingDiagnostic() {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        String sensitiveDiagnostic = "jdbc:postgresql://private-db:5432/app?user=etl&password=secret-value";
         when(jdbc.queryForList(anyString(), eq("xtrmetl_slot")))
-                .thenThrow(new DataAccessResourceFailureException("down"));
+                .thenThrow(new DataAccessResourceFailureException(sensitiveDiagnostic));
 
         Map<String, Object> result = new ReplicationSlotProbe(jdbc).probeSlot("xtrmetl_slot");
 
         assertFalse((Boolean) result.get("available"));
         assertEquals("query_failed", result.get("error"));
+        assertEquals("Replication slot query failed", result.get("message"));
+        assertFalse(result.values().stream().map(String::valueOf).anyMatch(value -> value.contains(sensitiveDiagnostic)));
     }
 }
