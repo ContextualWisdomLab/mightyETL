@@ -63,6 +63,22 @@ class EtlJobModelTest {
     }
 
     @Test
+    void retainsValidFailedSnapshotsAndStatusResponses() {
+        EtlJobSnapshot snapshot = new EtlJobSnapshot(
+                JOB_RECORD_ID,
+                EtlJobStatus.FAILED,
+                1,
+                "target_write_failed",
+                CREATED_AT,
+                UPDATED_AT
+        );
+        EtlJobStatusResponse response = EtlJobStatusResponse.from(snapshot);
+
+        assertEquals(EtlJobStatus.FAILED, response.jobStatus());
+        assertEquals("target_write_failed", response.failureCode());
+    }
+
+    @Test
     void rejectsNullRequiredModelValues() {
         assertThrows(
                 NullPointerException.class,
