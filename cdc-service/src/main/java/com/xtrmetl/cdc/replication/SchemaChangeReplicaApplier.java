@@ -46,6 +46,16 @@ public class SchemaChangeReplicaApplier {
     private final Set<String> ddlAllowedPrefixes;
     private final Set<String> ddlBlockedPrefixes;
 
+    /**
+     * Creates the schema-change applier from replica JDBC and DDL-policy configuration.
+     *
+     * @param jdbcTemplate replica-database JDBC access
+     * @param objectMapper JSON parser used for Debezium event envelopes
+     * @param ddlEnabled whether schema-changing SQL may be executed at all
+     * @param ddlValidationMode configured validation mode: {@code whitelist}, {@code blocklist}, or {@code none}
+     * @param ddlAllowedPrefixes comma-separated positive prefixes used by whitelist mode
+     * @param ddlBlockedPrefixes comma-separated prohibited prefixes used by blocklist mode
+     */
     public SchemaChangeReplicaApplier(
             @Qualifier("replicaJdbcTemplate") JdbcTemplate jdbcTemplate,
             ObjectMapper objectMapper,
@@ -70,6 +80,18 @@ public class SchemaChangeReplicaApplier {
         }
     }
 
+    /**
+     * Applies one schema-change event when DDL replication is enabled and the event passes policy.
+     *
+     * <p>Events outside the schema-change topic family, blank payloads, and envelopes without DDL
+     * are ignored. Malformed JSON is classified as an unavailable event and skipped without
+     * publishing parser diagnostics. Policy violations fail closed with an exception before JDBC
+     * execution. Non-duplicate JDBC failures are rethrown after a bounded diagnostic event.</p>
+     *
+     * @param topic source Kafka topic; only the schema-change suffix is accepted
+     * @param keyJson optional Debezium key, currently unused by schema application
+     * @param valueJson Debezium value envelope containing a {@code ddl} field
+     */
     public void apply(@Nullable String topic, @Nullable String keyJson, @Nullable String valueJson) {
         if (!ddlEnabled
                 || topic == null
@@ -130,6 +152,7 @@ public class SchemaChangeReplicaApplier {
         return ddl;
     }
 
+    @Nullable
     private String extractDdl(String valueJson) {
         try {
             JsonNode root = objectMapper.readTree(valueJson);
