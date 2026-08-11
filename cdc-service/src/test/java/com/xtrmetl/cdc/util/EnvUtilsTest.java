@@ -2,14 +2,29 @@ package com.xtrmetl.cdc.util;
 
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class EnvUtilsTest {
+
+    @Test
+    void publicEnvironmentUtilityHasBeginnerReadableJavadocs() throws IOException {
+        String source = Files.readString(Path.of(
+                "src/main/java/com/xtrmetl/cdc/util/EnvUtils.java"
+        ));
+
+        assertTrue(source.contains("Environment-variable access helpers for CDC deployment configuration."));
+        assertTrue(source.contains("Returns the configured environment value, or the supplied default when it is missing or blank."));
+        assertTrue(source.contains("Returns the required environment value and fails when it is missing or blank."));
+    }
 
     @Test
     void getEnvReturnsDefaultWhenMissingOrBlank() {
