@@ -1,8 +1,17 @@
 package com.xtrmetl.etl.config;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.springframework.boot.Banner;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.WebApplicationType;
+import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.mock.env.MockEnvironment;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -67,7 +76,40 @@ class MightyEtlConfigAliasEnvironmentPostProcessorTest {
     }
 
     @Test
+    void modernConfigDataWinsOverLegacyConfigData(@TempDir Path tempDir) throws IOException {
+        Path configFile = tempDir.resolve("application.properties");
+        Files.writeString(configFile, """
+                mightyetl.etl.max-payload-bytes=4096
+                xtrmetl.etl.max-payload-bytes=1024
+                """);
+
+        SpringApplication application = new SpringApplication(AliasOrderProbeConfiguration.class);
+        application.setBannerMode(Banner.Mode.OFF);
+        application.setWebApplicationType(WebApplicationType.NONE);
+
+        try (ConfigurableApplicationContext context = application.run(
+                "--spring.config.location=" + configFile.toUri()
+        )) {
+            assertTrue(context.getEnvironment().getPropertySources().contains(
+                    MightyEtlConfigAliasEnvironmentPostProcessor.PROPERTY_SOURCE_NAME
+            ));
+            assertEquals(
+                    "4096",
+                    context.getEnvironment().getProperty("mightyetl.etl.max-payload-bytes")
+            );
+            assertEquals(
+                    "4096",
+                    context.getEnvironment().getProperty("xtrmetl.etl.max-payload-bytes")
+            );
+        }
+    }
+
+    @Test
     void emptyWhenUnset() {
         assertTrue(MightyEtlConfigAliasEnvironmentPostProcessor.buildAliases(new MockEnvironment()).isEmpty());
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class AliasOrderProbeConfiguration {
     }
 }
