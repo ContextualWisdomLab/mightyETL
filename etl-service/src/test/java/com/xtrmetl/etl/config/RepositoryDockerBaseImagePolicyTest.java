@@ -53,6 +53,28 @@ class RepositoryDockerBaseImagePolicyTest {
         }
     }
 
+    @Test
+    void digestPinningHasSourceBackedSupplyChainDoctoringAndChangelog() throws IOException {
+        Path repositoryRoot = findRepositoryRoot(Path.of("").toAbsolutePath().normalize());
+        assertNotNull(repositoryRoot, "repository root containing Dockerfile and pom.xml must be discoverable");
+
+        Path doctoringPath = repositoryRoot.resolve("docs/doctoring/docker-base-image-digest-pinning.md");
+        assertTrue(Files.isRegularFile(doctoringPath), "Docker base-image digest policy must have source-backed doctoring");
+
+        String doctoring = Files.readString(doctoringPath);
+        assertTrue(doctoring.contains("mutable tag"), "doctoring must explain mutable tag risk");
+        assertTrue(doctoring.contains("multi-platform index digest"), "doctoring must distinguish the index digest boundary");
+        assertTrue(doctoring.contains("Dockerfile"), "doctoring must bind the decision to the production Dockerfile");
+        assertTrue(doctoring.contains("rollback"), "doctoring must document rollback/update recovery");
+        assertTrue(doctoring.contains("APA 7"), "doctoring must identify its reference format");
+
+        String changelog = Files.readString(repositoryRoot.resolve("CHANGELOG.md"));
+        assertTrue(
+                changelog.contains("digest-pinned Docker base images"),
+                "CHANGELOG must expose the supply-chain input-integrity change"
+        );
+    }
+
     private static List<String> externalBaseImageReferences(String dockerfile) {
         List<String> imageReferences = new ArrayList<>();
         Matcher matcher = FROM_INSTRUCTION.matcher(dockerfile);
