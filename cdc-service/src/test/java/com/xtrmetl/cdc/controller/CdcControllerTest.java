@@ -79,13 +79,15 @@ class CdcControllerTest {
     }
 
     @Test
-    void testStopCdcWithException() throws IOException {
-        doThrow(new IOException("Error stopping CDC")).when(cdcService).stop();
+    void testStopCdcWithExceptionDoesNotExposeDiagnostic() throws IOException {
+        String sensitiveDiagnostic = "broker-password=secret-value at /srv/private/cdc.offsets";
+        doThrow(new IOException(sensitiveDiagnostic)).when(cdcService).stop();
 
         ResponseEntity<String> response = cdcController.stopCdc();
 
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
-        assertEquals("Error stopping CDC process: Error stopping CDC", response.getBody());
+        assertEquals("Error stopping CDC process", response.getBody());
+        assertFalse(response.getBody().contains(sensitiveDiagnostic));
         verify(cdcService, times(1)).stop();
     }
 
