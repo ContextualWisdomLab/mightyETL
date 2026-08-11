@@ -22,6 +22,55 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class MightyEtlConfigAliasEnvironmentPostProcessorTest {
 
+    private static final Map<String, String> CONNECTOR_SETTINGS = Map.ofEntries(
+            Map.entry("connectors.databricks.enabled", "true"),
+            Map.entry("connectors.databricks.host", "workspace.example"),
+            Map.entry("connectors.databricks.http-path", "/sql/1.0/warehouses/demo"),
+            Map.entry("connectors.databricks.token", "test-databricks-token"),
+            Map.entry("connectors.databricks.catalog", "main"),
+            Map.entry("connectors.databricks.schema", "analytics"),
+            Map.entry("connectors.databricks.table", "events"),
+            Map.entry("connectors.databricks.write-mode", "append"),
+            Map.entry("connectors.snowflake.enabled", "true"),
+            Map.entry("connectors.snowflake.account", "test-account"),
+            Map.entry("connectors.snowflake.warehouse", "COMPUTE_WH"),
+            Map.entry("connectors.snowflake.database", "ANALYTICS"),
+            Map.entry("connectors.snowflake.schema", "PUBLIC"),
+            Map.entry("connectors.snowflake.user", "etl_user"),
+            Map.entry("connectors.snowflake.password", "test-snowflake-password"),
+            Map.entry("connectors.snowflake.private-key", "test-private-key"),
+            Map.entry("connectors.snowflake.role", "ETL_ROLE"),
+            Map.entry("connectors.snowflake.table", "EVENTS"),
+            Map.entry("connectors.snowflake.merge-keys", "id"),
+            Map.entry("connectors.qlik-sense.enabled", "true"),
+            Map.entry("connectors.qlik-sense.tenant-url", "https://tenant.example"),
+            Map.entry("connectors.qlik-sense.api-key", "test-qlik-api-key"),
+            Map.entry("connectors.qlik-sense.app-id", "test-app-id"),
+            Map.entry("connectors.qlik-sense.mode", "reload-only")
+    );
+
+    @Test
+    void mirrorsEveryModernConnectorSettingToLegacyConsumers() {
+        MockEnvironment env = new MockEnvironment();
+        CONNECTOR_SETTINGS.forEach((relative, value) -> env.setProperty("mightyetl." + relative, value));
+
+        Map<String, Object> aliases = MightyEtlConfigAliasEnvironmentPostProcessor.buildAliases(env);
+
+        CONNECTOR_SETTINGS.forEach((relative, value) ->
+                assertEquals(value, aliases.get("xtrmetl." + relative), relative));
+    }
+
+    @Test
+    void mirrorsEveryLegacyConnectorSettingForModernTooling() {
+        MockEnvironment env = new MockEnvironment();
+        CONNECTOR_SETTINGS.forEach((relative, value) -> env.setProperty("xtrmetl." + relative, value));
+
+        Map<String, Object> aliases = MightyEtlConfigAliasEnvironmentPostProcessor.buildAliases(env);
+
+        CONNECTOR_SETTINGS.forEach((relative, value) ->
+                assertEquals(value, aliases.get("mightyetl." + relative), relative));
+    }
+
     @Test
     void mirrorsModernConnectorFlagsToLegacyKeys() {
         MockEnvironment env = new MockEnvironment();
