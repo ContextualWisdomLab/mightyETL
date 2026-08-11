@@ -77,7 +77,9 @@ class ChangeRecordTest {
         List<Object> snapshottedTags = (List<Object>) record.getAfter().get("tags");
 
         assertEquals("Seoul", snapshottedAddress.get("city"));
-        assertEquals(List.of("priority", null), snapshottedTags);
+        assertEquals(2, snapshottedTags.size());
+        assertEquals("priority", snapshottedTags.get(0));
+        assertNull(snapshottedTags.get(1));
     }
 
     @Test
