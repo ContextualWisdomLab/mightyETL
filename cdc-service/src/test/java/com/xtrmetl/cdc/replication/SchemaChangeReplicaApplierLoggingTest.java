@@ -98,7 +98,7 @@ class SchemaChangeReplicaApplierLoggingTest {
         JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
         SchemaChangeReplicaApplier applier = applier(jdbcTemplate, "none", "", "");
         String secretLiteral = "buyer-contract-secret-8472";
-        String ddl = "CREATE TABLE confidential_record(id int) " + secretLiteral + (char) 0;
+        String ddl = "CREATE TABLE confidential_record(id int) " + (char) 0 + secretLiteral;
         String envelope = new ObjectMapper().writeValueAsString(Map.of("payload", Map.of("ddl", ddl)));
 
         assertThrows(IllegalArgumentException.class, () -> applier.apply(schemaTopic(), null, envelope));
