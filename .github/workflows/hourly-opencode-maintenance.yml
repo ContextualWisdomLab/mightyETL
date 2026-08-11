@@ -135,6 +135,10 @@ jobs:
 
             Execute the highest-impact safe option that is executable in this run, then rerun the exact failing test or gate and verify whether the condition changed. If the preferred option requires an external actor or is infeasible, keep that gate fail-closed and immediately choose the next safe feasible non-overlapping remediation or independent bounded product slice instead of stopping. Never claim resolution from a proposal, retry, aggregate-green result, or predecessor evidence; require exact-head or literal-source evidence that the failing condition is gone. A pull request with only external blockers is not source-actionable.
 
+            Completing an action is intermediate state, not an invocation endpoint. After every remediation, commit, documentation update, test result, deferred blocker, or completed slice, return to the highest-value safe executable queue. The one remote publication candidate limit constrains mutation output, not further read-only diagnosis, testing, or documentation analysis after a candidate is prepared. Queued checks, reviews, and provider waits are local deferred items, not reasons to idle. Same-branch writer movement freezes only that branch; continue safe work on other non-overlapping branches or read-only lanes.
+
+            Before terminating, perform a fresh whole-repository sweep of pull requests, issues, checks, reviews, security, stack ancestry, documentation, release readiness, and product gaps. If that sweep finds any safe executable item, execute the highest-value item and restart the exit sweep count. Terminate only on genuine finite run-budget exhaustion or after a second consecutive fresh sweep proves no safe executable action remains. Routine status narration is not work.
+
             When one source-actionable dependency-eligible development pull request exists, fetch and check out that same-repository head branch, implement valid fixes test-first, rerun relevant tests, update authoritative documentation and CHANGELOG.md, and commit only to that local branch. Do not publish the branch remotely; the isolated deterministic branch publisher owns that authority. Do not create another branch for the same work.
 
             When no open pull request is source-actionable, whether or not blocked pull requests remain open, inspect open issues, roadmap, architecture, security, privacy, reliability, observability, accessibility, packaging, interoperability, deployment, data governance, operational workflows, release evidence, and buyer-visible gaps. Select exactly one highest-impact bounded vertical slice that is independent of every blocked or invalid stack. Start from the unchanged protected develop head, use exactly one automation/opencode-YYYYMMDDTHHMMSSZ-short-slug local branch, and commit the bounded slice there. Do not publish the branch remotely or create a second branch or pull request. Prefer durable ETL execution, idempotency, replay, dead-letter handling, schema contracts, connector reliability, target warehouse support, tenancy, auditability, SLO evidence, and operator controls.
@@ -848,6 +852,8 @@ jobs:
           required_workflow_names='["CI","Dependency Review","SBOM (CycloneDX)","SAST Semgrep","Security Scan"]'
           all_runs_file="${RUNNER_TEMP}/pr-${number}-all-exact-head-runs.json"
           runs_file="${RUNNER_TEMP}/pr-${number}-associated-exact-head-runs.json"
+          approved_run_ids_file="${RUNNER_TEMP}/pr-${number}-approved-run-ids.txt"
+          : > "${approved_run_ids_file}"
 
           live="$(gh api "/repos/${repository}/pulls/${number}")"
           jq -e \
@@ -901,7 +907,11 @@ jobs:
 
             while IFS= read -r run_id; do
               [[ -n "${run_id}" ]] || continue
+              if grep -Fxq "${run_id}" "${approved_run_ids_file}"; then
+                continue
+              fi
               gh api --method POST "/repos/${repository}/actions/runs/${run_id}/approve"
+              printf '%s\n' "${run_id}" >> "${approved_run_ids_file}"
             done < <(
               jq -r '
                 .[]
