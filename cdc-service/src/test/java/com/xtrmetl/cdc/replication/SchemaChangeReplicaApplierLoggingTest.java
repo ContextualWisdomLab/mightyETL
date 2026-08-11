@@ -9,6 +9,7 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.sql.SQLException;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -58,6 +59,58 @@ class SchemaChangeReplicaApplierLoggingTest {
 
         verifyNoInteractions(jdbcTemplate);
         assertSafeLogs(output, "Blocked DDL by validation policy", secretPath, "TABLESPACE", "ddl=");
+    }
+
+    @Test
+    void multiStatementBlockLogsClassificationWithoutRawStatement(CapturedOutput output) {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        SchemaChangeReplicaApplier applier = applier(jdbcTemplate, "none", "", "");
+        String secretLiteral = "buyer-contract-secret-8472";
+        String ddl = "CREATE TABLE confidential_record(id int); DROP TABLE " + secretLiteral;
+
+        assertThrows(IllegalArgumentException.class, () -> applier.apply(schemaTopic(), null, ddlEnvelope(ddl)));
+
+        verifyNoInteractions(jdbcTemplate);
+        assertSafeLogs(output, "Blocked multi-statement DDL", secretLiteral, "DROP TABLE", "ddl=");
+    }
+
+    @Test
+    void sqlCommentBlockLogsClassificationWithoutRawStatement(CapturedOutput output) {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        SchemaChangeReplicaApplier applier = applier(jdbcTemplate, "none", "", "");
+        String secretLiteral = "buyer-contract-secret-8472";
+        String ddl = "CREATE TABLE confidential_record(id int) -- " + secretLiteral;
+
+        assertThrows(IllegalArgumentException.class, () -> applier.apply(schemaTopic(), null, ddlEnvelope(ddl)));
+
+        verifyNoInteractions(jdbcTemplate);
+        assertSafeLogs(
+                output,
+                "Blocked DDL containing SQL comments or NUL",
+                secretLiteral,
+                "confidential_record",
+                "ddl="
+        );
+    }
+
+    @Test
+    void nulBlockLogsClassificationWithoutRawStatement(CapturedOutput output) throws Exception {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        SchemaChangeReplicaApplier applier = applier(jdbcTemplate, "none", "", "");
+        String secretLiteral = "buyer-contract-secret-8472";
+        String ddl = "CREATE TABLE confidential_record(id int) " + secretLiteral + (char) 0;
+        String envelope = new ObjectMapper().writeValueAsString(Map.of("payload", Map.of("ddl", ddl)));
+
+        assertThrows(IllegalArgumentException.class, () -> applier.apply(schemaTopic(), null, envelope));
+
+        verifyNoInteractions(jdbcTemplate);
+        assertSafeLogs(
+                output,
+                "Blocked DDL containing SQL comments or NUL",
+                secretLiteral,
+                "confidential_record",
+                "ddl="
+        );
     }
 
     @Test
