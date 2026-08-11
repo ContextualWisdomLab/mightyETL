@@ -8,6 +8,7 @@ import io.debezium.config.Configuration;
 import io.debezium.engine.ChangeEvent;
 import io.debezium.engine.DebeziumEngine;
 import io.debezium.engine.format.Json;
+import org.apache.kafka.common.KafkaException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.DisposableBean;
@@ -15,6 +16,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.support.SendResult;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 
@@ -22,17 +24,23 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Service
 public class CdcService implements DisposableBean {
 
     private static final Logger log = LoggerFactory.getLogger(CdcService.class);
+    private static final int KAFKA_PUBLISH_ATTEMPTS = 2;
+    private static final long KAFKA_ACKNOWLEDGEMENT_WAIT_MS = 65_000L;
 
     private ExecutorService executor;
     private final KafkaTemplate<String, String> kafkaTemplate;
@@ -42,10 +50,25 @@ public class CdcService implements DisposableBean {
     private final DebeziumChangeRecordMapper changeRecordMapper;
     private final AtomicLong canonicalMapSuccess = new AtomicLong();
     private final AtomicLong canonicalMapFailure = new AtomicLong();
+    private final AtomicLong kafkaPublishSuccess = new AtomicLong();
+    private final AtomicLong kafkaPublishFailure = new AtomicLong();
 
     private DebeziumEngine<ChangeEvent<String, String>> debeziumEngine;
     private Future<?> engineTask;
 
+    /**
+     * Constructs the CDC service with explicit startup, canonical-mapping, and change-mapping dependencies.
+     *
+     * <p>The Kafka template is the publication boundary used by both the compatibility send path and the
+     * acknowledgement-aware Debezium batch path. Automatic startup controls whether the engine starts after
+     * Spring reports application readiness. Canonical mapping is optional observation logic and never grants
+     * permission to advance a Debezium offset.</p>
+     *
+     * @param kafkaTemplate Kafka producer facade used to publish raw Debezium change events
+     * @param autoStart whether the Debezium engine should start after application readiness
+     * @param canonicalMapEnabled whether optional canonical-record mapping should run before publication
+     * @param changeRecordMapper optional canonical mapper; may be {@code null} when mapping is disabled
+     */
     public CdcService(
             KafkaTemplate<String, String> kafkaTemplate,
             @Value("${xtrmetl.cdc.autostart:true}") boolean autoStart,
@@ -59,7 +82,10 @@ public class CdcService implements DisposableBean {
     }
 
     /**
-     * Test helper / backward-compatible constructor.
+     * Constructs a CDC service with canonical mapping disabled for compatibility callers and focused tests.
+     *
+     * @param kafkaTemplate Kafka producer facade used to publish raw Debezium change events
+     * @param autoStart whether the Debezium engine should start after application readiness
      */
     public CdcService(KafkaTemplate<String, String> kafkaTemplate, boolean autoStart) {
         this(kafkaTemplate, autoStart, false, null);
@@ -78,6 +104,12 @@ public class CdcService implements DisposableBean {
         }
     }
 
+    /**
+     * Handles Spring Boot application readiness by applying the configured CDC auto-start policy.
+     *
+     * <p>This lifecycle callback delegates to {@link #maybeAutoStart()}; it does not bypass the configured
+     * auto-start flag and is safe when startup is intentionally disabled for operator-controlled deployments.</p>
+     */
     @EventListener(ApplicationReadyEvent.class)
     public void onApplicationReady() {
         maybeAutoStart();
@@ -152,6 +184,11 @@ public class CdcService implements DisposableBean {
         return engineTask != null && !engineTask.isDone();
     }
 
+    /**
+     * Returns whether automatic CDC startup is enabled.
+     *
+     * @return {@code true} when the application-readiness callback should start the Debezium engine
+     */
     public boolean isAutoStart() {
         return autoStart;
     }
@@ -177,6 +214,8 @@ public class CdcService implements DisposableBean {
         status.put("canonicalMapEnabled", canonicalMapEnabled);
         status.put("canonicalMapSuccess", canonicalMapSuccess.get());
         status.put("canonicalMapFailure", canonicalMapFailure.get());
+        status.put("kafkaPublishSuccess", kafkaPublishSuccess.get());
+        status.put("kafkaPublishFailure", kafkaPublishFailure.get());
         status.put("configPrefixes", "mightyetl.* (preferred) or xtrmetl.* (legacy); dual-read via EnvironmentPostProcessor");
         status.put("notes", "Capture is PostgreSQL→Kafka only; see docs/cdc/any-to-any-cdc.md");
         return status;
@@ -221,25 +260,29 @@ public class CdcService implements DisposableBean {
     private void initializeDebeziumEngine() {
         this.debeziumEngine = DebeziumEngine.create(Json.class)
                 .using(getCdcConfiguration().asProperties())
-                .notifying(this::handleChangeEvent)
+                .notifying(this::handleChangeBatch)
                 .build();
     }
 
+    /**
+     * Releases CDC engine and executor resources when the Spring bean is destroyed.
+     *
+     * <p>This framework lifecycle hook delegates to {@link #shutdown()} so explicit shutdown and container-driven
+     * destruction share the same bounded termination and interrupt handling.</p>
+     */
     @Override
     public void destroy() {
         shutdown();
     }
 
     /**
-     * Publishes Debezium key/value JSON to the destination Kafka topic.
+     * Publishes one Debezium change event without waiting for acknowledgement.
      *
-     * Debezium에서 받은 CDC 변경 이벤트의 JSON key/value를 해당 topic으로 전송한다.
+     * <p>This method is retained for direct callers and compatibility tests. The live Debezium engine uses
+     * {@link #handleChangeBatch(List, DebeziumEngine.RecordCommitter)} so source offsets are advanced only after
+     * Kafka acknowledges publication.</p>
      *
-     * Uses a key-less send overload when the key is absent, following Spring Kafka conventions.
-     *
-     * key가 없으면 Spring Kafka 계약에 맞게 key-less send 오버로드를 사용한다.
-     *
-     * @param changeEvent Debezium의 변경 이벤트로부터 key/value와 destination을 포함하는 이벤트 객체
+     * @param changeEvent Debezium change event containing destination, key, and JSON value
      */
     protected void handleChangeEvent(ChangeEvent<String, String> changeEvent) {
         String topic = changeEvent.destination();
@@ -247,17 +290,90 @@ public class CdcService implements DisposableBean {
             return;
         }
 
+        maybeMapCanonical(topic, changeEvent.key(), changeEvent.value());
+        sendChangeEvent(changeEvent);
+    }
+
+    /**
+     * Publishes a Debezium batch to Kafka and advances source offsets only after broker acknowledgement.
+     *
+     * <p>Each event with a destination is sent as raw Debezium JSON, awaited for at most 65 seconds per
+     * application attempt, and retried once after a terminal publication failure or acknowledgement timeout.
+     * A record is marked processed only after an acknowledged send. The batch is marked finished only after every
+     * record has been processed. An interrupt propagates immediately without advancing the current record or batch.</p>
+     *
+     * <p>An event without a destination is treated as non-publishable engine metadata and is marked processed
+     * without touching Kafka or the publication counters.</p>
+     *
+     * @param records ordered Debezium change events for the current engine batch
+     * @param committer Debezium offset committer controlling record and batch progress
+     * @throws InterruptedException when the worker is interrupted while awaiting Kafka acknowledgement
+     * @throws KafkaException when Kafka does not acknowledge an event within two application-level attempts
+     */
+    protected void handleChangeBatch(
+            List<ChangeEvent<String, String>> records,
+            DebeziumEngine.RecordCommitter<ChangeEvent<String, String>> committer
+    ) throws InterruptedException {
+        for (ChangeEvent<String, String> changeEvent : records) {
+            String topic = changeEvent.destination();
+            if (topic != null) {
+                maybeMapCanonical(topic, changeEvent.key(), changeEvent.value());
+                publishWithAcknowledgement(changeEvent);
+            }
+            committer.markProcessed(changeEvent);
+        }
+        committer.markBatchFinished();
+    }
+
+    /**
+     * Sends an event and waits for Kafka acknowledgement, retrying once after a terminal failure.
+     */
+    private void publishWithAcknowledgement(ChangeEvent<String, String> changeEvent) throws InterruptedException {
+        try {
+            awaitAcknowledgement(changeEvent);
+            kafkaPublishSuccess.incrementAndGet();
+            return;
+        } catch (ExecutionException firstFailure) {
+            kafkaPublishFailure.incrementAndGet();
+        }
+
+        try {
+            awaitAcknowledgement(changeEvent);
+            kafkaPublishSuccess.incrementAndGet();
+        } catch (ExecutionException secondFailure) {
+            kafkaPublishFailure.incrementAndGet();
+            throw new KafkaException(
+                    "Kafka publication failed after " + KAFKA_PUBLISH_ATTEMPTS + " attempts",
+                    secondFailure.getCause()
+            );
+        }
+    }
+
+    /**
+     * Performs one Kafka send attempt and waits interruptibly for at most 65 seconds for acknowledgement.
+     */
+    private void awaitAcknowledgement(ChangeEvent<String, String> changeEvent)
+            throws InterruptedException, ExecutionException {
+        try {
+            sendChangeEvent(changeEvent).get(KAFKA_ACKNOWLEDGEMENT_WAIT_MS, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException timeoutException) {
+            throw new ExecutionException(timeoutException);
+        } catch (RuntimeException runtimeException) {
+            throw new ExecutionException(runtimeException);
+        }
+    }
+
+    /**
+     * Selects the keyed or keyless Spring Kafka send overload for one raw Debezium JSON event.
+     */
+    private CompletableFuture<SendResult<String, String>> sendChangeEvent(ChangeEvent<String, String> changeEvent) {
+        String topic = changeEvent.destination();
         String key = changeEvent.key();
         String value = changeEvent.value();
-
-        maybeMapCanonical(topic, key, value);
-
-        // Live path: raw Debezium JSON (not canonical) for consumer compatibility.
         if (key != null) {
-            kafkaTemplate.send(topic, key, value);
-        } else {
-            kafkaTemplate.send(topic, value);
+            return kafkaTemplate.send(topic, key, value);
         }
+        return kafkaTemplate.send(topic, value);
     }
 
     /**
