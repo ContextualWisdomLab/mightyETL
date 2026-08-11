@@ -1,5 +1,6 @@
 package com.xtrmetl.etl.config;
 
+import com.xtrmetl.etl.connector.ConnectorProperties;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.boot.Banner;
@@ -10,9 +11,13 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.mock.env.MockEnvironment;
 
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -50,6 +55,25 @@ class MightyEtlConfigAliasEnvironmentPostProcessorTest {
     );
 
     @Test
+    void aliasAllowListMatchesCompleteConnectorBindingSurface() {
+        Set<String> expected = new TreeSet<>();
+        expected.addAll(writableConnectorKeys("databricks", ConnectorProperties.DatabricksProps.class));
+        expected.addAll(writableConnectorKeys("snowflake", ConnectorProperties.SnowflakeProps.class));
+        expected.addAll(writableConnectorKeys("qlik-sense", ConnectorProperties.QlikSenseProps.class));
+
+        Set<String> actual = new TreeSet<>();
+        MightyEtlConfigAliasEnvironmentPostProcessor.RELATIVE_KEYS.stream()
+                .filter(key -> key.startsWith("connectors."))
+                .forEach(actual::add);
+
+        assertEquals(
+                expected,
+                actual,
+                "Connector aliases must stay machine-bound to every writable ConnectorProperties setting"
+        );
+    }
+
+    @Test
     void mirrorsEveryModernConnectorSettingToLegacyConsumers() {
         MockEnvironment env = new MockEnvironment();
         CONNECTOR_SETTINGS.forEach((relative, value) -> env.setProperty("mightyetl." + relative, value));
@@ -79,6 +103,17 @@ class MightyEtlConfigAliasEnvironmentPostProcessorTest {
         Map<String, Object> aliases = MightyEtlConfigAliasEnvironmentPostProcessor.buildAliases(env);
 
         assertEquals("true", aliases.get("xtrmetl.connectors.databricks.enabled"));
+    }
+
+    @Test
+    void modernConnectorValueWinsWhenBothNamespacesAreSet() {
+        MockEnvironment env = new MockEnvironment();
+        env.setProperty("mightyetl.connectors.snowflake.password", "modern-test-secret");
+        env.setProperty("xtrmetl.connectors.snowflake.password", "legacy-test-secret");
+
+        Map<String, Object> aliases = MightyEtlConfigAliasEnvironmentPostProcessor.buildAliases(env);
+
+        assertEquals("modern-test-secret", aliases.get("xtrmetl.connectors.snowflake.password"));
     }
 
     @Test
@@ -156,6 +191,23 @@ class MightyEtlConfigAliasEnvironmentPostProcessorTest {
     @Test
     void emptyWhenUnset() {
         assertTrue(MightyEtlConfigAliasEnvironmentPostProcessor.buildAliases(new MockEnvironment()).isEmpty());
+    }
+
+    /** Returns the environment-property keys represented by writable JavaBean-style setters. */
+    private static Set<String> writableConnectorKeys(String connectorId, Class<?> propertiesType) {
+        Set<String> keys = new TreeSet<>();
+        for (Method method : propertiesType.getMethods()) {
+            if (!method.getName().startsWith("set") || method.getName().length() <= 3
+                    || method.getParameterCount() != 1 || method.getReturnType() != void.class) {
+                continue;
+            }
+            String property = method.getName().substring(3);
+            property = Character.toLowerCase(property.charAt(0)) + property.substring(1);
+            String kebab = property.replaceAll("([a-z0-9])([A-Z])", "$1-$2")
+                    .toLowerCase(Locale.ROOT);
+            keys.add("connectors." + connectorId + "." + kebab);
+        }
+        return keys;
     }
 
     @Configuration(proxyBeanMethods = false)
