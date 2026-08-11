@@ -51,6 +51,36 @@ class EtlJobMigrationDocumentationTest {
     }
 
     @Test
+    void cancellationMigrationAddsOneTerminalOwnerSafeLifecycle() throws IOException {
+        String migration = read(
+                "etl-service/src/main/resources/db/migration/V6__add_etl_job_cancellation.sql"
+        ).replaceAll("\\s+", " ");
+
+        assertTrue(migration.contains("ADD COLUMN cancellation_key_hash CHAR(64)"));
+        assertTrue(migration.contains("ADD COLUMN cancellation_code VARCHAR(128)"));
+        assertTrue(migration.contains("ADD COLUMN job_cancelled_at TIMESTAMPTZ"));
+        assertTrue(migration.contains(
+                "job_status IN ('PENDING', 'RUNNING', 'SUCCEEDED', 'FAILED', 'CANCELLED')"
+        ));
+        assertTrue(migration.contains(
+                "job_status IN ('SUCCEEDED', 'FAILED', 'CANCELLED') AND request_payload IS NULL"
+        ));
+        assertTrue(migration.contains("job_status = 'CANCELLED'"));
+        assertTrue(migration.contains("cancellation_key_hash IS NOT NULL"));
+        assertTrue(migration.contains("cancellation_code IS NOT NULL"));
+        assertTrue(migration.contains("job_cancelled_at IS NOT NULL"));
+        assertTrue(migration.contains("job_status <> 'CANCELLED'"));
+        assertTrue(migration.contains("cancellation_key_hash IS NULL"));
+        assertTrue(migration.contains("lease_claim_id IS NULL"));
+        assertTrue(migration.contains("CONSTRAINT etl_job_cancellation_key_hash_format"));
+        assertTrue(migration.contains("CONSTRAINT etl_job_cancellation_code_format"));
+        assertTrue(migration.contains("CONSTRAINT etl_job_cancellation_lifecycle_check"));
+        assertFalse(migration.contains("principal_name"));
+        assertFalse(migration.contains("cancellation_key TEXT"));
+        assertFalse(migration.contains("cancellation_reason"));
+    }
+
+    @Test
     void paginationMigrationUsesTheOwnerAndCompleteStableOrderingKey() throws IOException {
         String migration = read(
                 "etl-service/src/main/resources/db/migration/"

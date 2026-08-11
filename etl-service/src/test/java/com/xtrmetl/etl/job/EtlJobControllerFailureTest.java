@@ -26,13 +26,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Covers typed data-access, malformed resource identifiers, and unexpected failures at both
- * durable job controller boundaries.
+ * Covers typed data-access, malformed resource identifiers, and unexpected failures at durable job
+ * submission, status, and cancellation boundaries.
  */
 class EtlJobControllerFailureTest {
 
     private static final String JOBS_PATH = "/api/etl/jobs";
     private static final String IDEMPOTENCY_KEY = "\"550e8400-e29b-41d4-a716-446655440000\"";
+    private static final String CANCELLATION_KEY =
+            "\"70dc8b50-e8b2-4e1a-8c5f-d84814708a77\"";
     private static final Principal PRINCIPAL = () -> "tenant_alpha";
 
     private EtlJobService etlJobService;
@@ -127,6 +129,61 @@ class EtlJobControllerFailureTest {
                 .andExpect(jsonPath("$.errorCode").value("etl_internal_error"));
     }
 
+    @Test
+    void preservesTypedCancellationConflicts() throws Exception {
+        when(etlJobService.cancelOwned(any(UUID.class), anyString(), anyString()))
+                .thenThrow(new EtlRequestException(EtlRequestError.JOB_ALREADY_SUCCEEDED));
+
+        performCancellation()
+                .andExpect(status().isConflict())
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.errorCode").value("etl_job_already_succeeded"))
+                .andExpect(jsonPath("$.detail").value(
+                        "The durable job succeeded before cancellation could commit."
+                ));
+    }
+
+    @Test
+    void treatsMalformedCancellationIdentifiersAsOwnerSafeNotFound() throws Exception {
+        mockMvc.perform(post(JOBS_PATH + "/not-a-uuid/cancellation")
+                        .principal(PRINCIPAL)
+                        .header("Idempotency-Key", CANCELLATION_KEY))
+                .andExpect(status().isNotFound())
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.errorCode").value("etl_job_not_found"));
+
+        verifyNoInteractions(etlJobService);
+    }
+
+    @Test
+    void mapsCancellationDatabaseFailuresWithoutLeakingMessages() throws Exception {
+        DataAccessException databaseFailure = new DataAccessException("secret database detail") { };
+        when(etlJobService.cancelOwned(any(UUID.class), anyString(), anyString()))
+                .thenThrow(databaseFailure);
+
+        performCancellation()
+                .andExpect(status().isInternalServerError())
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.errorCode").value("etl_target_failure"))
+                .andExpect(jsonPath("$.detail").value(
+                        "The ETL target could not process the request."
+                ));
+    }
+
+    @Test
+    void mapsCancellationUnexpectedFailuresWithoutLeakingMessages() throws Exception {
+        when(etlJobService.cancelOwned(any(UUID.class), anyString(), anyString()))
+                .thenThrow(new IllegalStateException("secret cancellation detail"));
+
+        performCancellation()
+                .andExpect(status().isInternalServerError())
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.errorCode").value("etl_internal_error"))
+                .andExpect(jsonPath("$.detail").value(
+                        "The ETL request could not be processed."
+                ));
+    }
+
     private org.springframework.test.web.servlet.ResultActions performSubmission() throws Exception {
         return mockMvc.perform(post(JOBS_PATH)
                 .principal(PRINCIPAL)
@@ -137,5 +194,11 @@ class EtlJobControllerFailureTest {
 
     private org.springframework.test.web.servlet.ResultActions performStatus() throws Exception {
         return mockMvc.perform(get(JOBS_PATH + "/" + UUID.randomUUID()).principal(PRINCIPAL));
+    }
+
+    private org.springframework.test.web.servlet.ResultActions performCancellation() throws Exception {
+        return mockMvc.perform(post(JOBS_PATH + "/" + UUID.randomUUID() + "/cancellation")
+                .principal(PRINCIPAL)
+                .header("Idempotency-Key", CANCELLATION_KEY));
     }
 }

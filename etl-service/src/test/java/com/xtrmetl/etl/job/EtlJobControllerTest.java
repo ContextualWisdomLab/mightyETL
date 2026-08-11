@@ -4,6 +4,7 @@ import com.xtrmetl.etl.controller.EtlApiProblemHandler;
 import com.xtrmetl.etl.controller.EtlJobController;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -30,6 +31,8 @@ class EtlJobControllerTest {
 
     private static final String JOBS_PATH = "/api/etl/jobs";
     private static final String IDEMPOTENCY_KEY = "\"550e8400-e29b-41d4-a716-446655440000\"";
+    private static final String CANCELLATION_KEY =
+            "\"70dc8b50-e8b2-4e1a-8c5f-d84814708a77\"";
     private static final Principal PRINCIPAL = () -> "tenant_alpha";
 
     private EtlJobService etlJobService;
@@ -153,5 +156,83 @@ class EtlJobControllerTest {
                 .andExpect(jsonPath("$.errorCode").value("etl_idempotency_principal_required"));
 
         verifyNoInteractions(etlJobService);
+    }
+
+    @Test
+    void cancelsAnOwnedJobAndReturnsTheTerminalStatus() throws Exception {
+        UUID jobRecordId = UUID.fromString("cf4f083f-8c90-4f34-a8b6-b53761de44ef");
+        EtlJobSnapshot snapshot = new EtlJobSnapshot(
+                jobRecordId,
+                EtlJobStatus.CANCELLED,
+                1,
+                null,
+                Instant.parse("2026-08-04T10:00:00Z"),
+                Instant.parse("2026-08-06T03:00:00Z")
+        );
+        when(etlJobService.cancelOwned(jobRecordId, CANCELLATION_KEY, "tenant_alpha"))
+                .thenReturn(new EtlJobCancellation(snapshot, false));
+
+        mockMvc.perform(post(cancellationPath(jobRecordId))
+                        .principal(PRINCIPAL)
+                        .header("Idempotency-Key", CANCELLATION_KEY))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(header().string("Idempotency-Replayed", "false"))
+                .andExpect(header().exists(HttpHeaders.ETAG))
+                .andExpect(jsonPath("$.jobRecordId").value(jobRecordId.toString()))
+                .andExpect(jsonPath("$.jobStatus").value("CANCELLED"))
+                .andExpect(jsonPath("$.attemptCount").value(1))
+                .andExpect(jsonPath("$.failureCode").doesNotExist())
+                .andExpect(jsonPath("$.requestPayload").doesNotExist())
+                .andExpect(jsonPath("$.cancellationKeyHash").doesNotExist())
+                .andExpect(jsonPath("$.cancellationCode").doesNotExist());
+
+        verify(etlJobService).cancelOwned(jobRecordId, CANCELLATION_KEY, "tenant_alpha");
+    }
+
+    @Test
+    void marksAnIdenticalCancellationAsReplayed() throws Exception {
+        UUID jobRecordId = UUID.fromString("cf4f083f-8c90-4f34-a8b6-b53761de44ef");
+        EtlJobSnapshot snapshot = new EtlJobSnapshot(
+                jobRecordId,
+                EtlJobStatus.CANCELLED,
+                0,
+                null,
+                Instant.parse("2026-08-04T10:00:00Z"),
+                Instant.parse("2026-08-06T03:00:00Z")
+        );
+        when(etlJobService.cancelOwned(jobRecordId, CANCELLATION_KEY, "tenant_alpha"))
+                .thenReturn(new EtlJobCancellation(snapshot, true));
+
+        mockMvc.perform(post(cancellationPath(jobRecordId))
+                        .principal(PRINCIPAL)
+                        .header("Idempotency-Key", CANCELLATION_KEY))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(header().string("Idempotency-Replayed", "true"))
+                .andExpect(jsonPath("$.jobStatus").value("CANCELLED"));
+    }
+
+    @Test
+    void requiresAuthenticationAndAKeyBeforeCancellationServiceAccess() throws Exception {
+        UUID jobRecordId = UUID.fromString("cf4f083f-8c90-4f34-a8b6-b53761de44ef");
+
+        mockMvc.perform(post(cancellationPath(jobRecordId))
+                        .header("Idempotency-Key", CANCELLATION_KEY))
+                .andExpect(status().isUnauthorized())
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.errorCode").value("etl_idempotency_principal_required"));
+
+        mockMvc.perform(post(cancellationPath(jobRecordId)).principal(PRINCIPAL))
+                .andExpect(status().isBadRequest())
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.errorCode").value("etl_job_cancellation_key_required"));
+
+        verifyNoInteractions(etlJobService);
+    }
+
+    private static String cancellationPath(UUID jobRecordId) {
+        return JOBS_PATH + "/" + jobRecordId + "/cancellation";
     }
 }

@@ -3,10 +3,9 @@ package com.xtrmetl.etl.job;
 /**
  * Stable lifecycle states exposed by the asynchronous ETL job resource.
  *
- * <p>This intake slice creates jobs only in {@link #PENDING}. The remaining values reserve the
- * compatibility-safe state names required by the following worker and lease-fencing slice, so a
- * deployed status reader can deserialize later transitions without a schema or API vocabulary
- * change.</p>
+ * <p>Pending and running jobs retain a bounded request payload. Succeeded, failed, and cancelled
+ * jobs are terminal and clear the payload. Exact database predicates, rather than scheduler or HTTP
+ * request timing, determine which terminal outcome wins.</p>
  */
 public enum EtlJobStatus {
 
@@ -20,5 +19,8 @@ public enum EtlJobStatus {
     SUCCEEDED,
 
     /** The job reached a terminal failure and the retained payload was cleared. */
-    FAILED
+    FAILED,
+
+    /** The authenticated owner cancelled the job and invalidated any active lease. */
+    CANCELLED
 }

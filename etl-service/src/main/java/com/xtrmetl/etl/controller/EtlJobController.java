@@ -1,6 +1,7 @@
 package com.xtrmetl.etl.controller;
 
 import com.xtrmetl.etl.job.EtlJobAcceptedResponse;
+import com.xtrmetl.etl.job.EtlJobCancellation;
 import com.xtrmetl.etl.job.EtlJobPage;
 import com.xtrmetl.etl.job.EtlJobPageResponse;
 import com.xtrmetl.etl.job.EtlJobService;
@@ -35,7 +36,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * Exposes durable asynchronous ETL job submission, discovery, and status resources.
+ * Exposes durable asynchronous ETL job submission, discovery, status, and cancellation resources.
  *
  * <p>Submission requires authentication and an {@code Idempotency-Key}. The accepted response is
  * intentionally noncommittal under RFC 9110: it reports the durable pending state and supplies a
@@ -45,11 +46,16 @@ import java.util.UUID;
  * under RFC 8288 only when another page exists. The service independently binds every list query to
  * the authenticated principal hash, so cursor contents never grant authority.</p>
  *
+ * <p>Owner cancellation uses a separate principal-scoped {@code Idempotency-Key}. A successful
+ * response proves that the database cancellation transition committed or that the same semantic
+ * cancellation had already committed. It does not expose cancellation identity, lease data, or a
+ * retained request payload.</p>
+ *
  * <p>Success and covered failure responses use {@code Cache-Control: no-store}. Malformed, absent,
  * and foreign-owned job identifiers use the same owner-safe not-found classification so the status
- * endpoint does not become a cross-principal existence oracle. Successful status responses also
- * carry a weak entity tag so an authenticated client can explicitly validate an unchanged
- * representation without authorizing shared-cache persistence.</p>
+ * and cancellation endpoints do not become cross-principal existence oracles. Successful status
+ * representations carry weak entity tags so an authenticated client can explicitly validate an
+ * unchanged representation without authorizing shared-cache persistence.</p>
  */
 @ConditionalOnBooleanProperty(
         prefix = "xtrmetl.etl.jobs",
@@ -61,7 +67,7 @@ import java.util.UUID;
 @RequestMapping("/api/etl/jobs")
 public class EtlJobController {
 
-    /** Response header indicating whether a prior durable submission was replayed. */
+    /** Response header indicating whether a prior durable operation was replayed. */
     public static final String IDEMPOTENCY_REPLAYED_HEADER = "Idempotency-Replayed";
 
     private static final String DEFAULT_JOB_PAGE_LIMIT_TEXT = "50";
@@ -226,6 +232,60 @@ public class EtlJobController {
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
                 .eTag(entityTag)
+                .body(responseBody);
+    }
+
+    /**
+     * Cancels an owner-scoped pending or running durable job.
+     *
+     * <p>The response is successful only after the authoritative database transition committed or
+     * an identical principal-scoped cancellation replay was proven. A committed cancellation
+     * clears the payload and any active lease, so a worker cannot later commit through the former
+     * exact-lease predicate. Completed success or failure instead returns a stable conflict.</p>
+     *
+     * @param jobRecordIdText opaque durable job identifier text
+     * @param idempotencyKey required client-generated cancellation key
+     * @param principal authenticated principal namespace
+     * @return cancelled operator-safe status and replay evidence
+     */
+    @PostMapping("/{jobRecordId}/cancellation")
+    @Observed(name = "etl.jobs.cancel", contextualName = "etl-job-cancellation")
+    public ResponseEntity<EtlJobStatusResponse> cancel(
+            @PathVariable("jobRecordId") String jobRecordIdText,
+            @RequestHeader(value = "Idempotency-Key", required = false)
+            @Nullable String idempotencyKey,
+            @Nullable Principal principal
+    ) {
+        if (principal == null) {
+            throw new EtlRequestException(EtlRequestError.IDEMPOTENCY_PRINCIPAL_REQUIRED);
+        }
+        if (idempotencyKey == null) {
+            throw new EtlRequestException(EtlRequestError.JOB_CANCELLATION_KEY_REQUIRED);
+        }
+
+        UUID jobRecordId = parseJobRecordId(jobRecordIdText);
+        final EtlJobCancellation cancellation;
+        try {
+            cancellation = etlJobService.cancelOwned(
+                    jobRecordId,
+                    idempotencyKey,
+                    principal.getName()
+            );
+        } catch (EtlRequestException | DataAccessException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            throw new EtlUnexpectedException(exception);
+        }
+
+        EtlJobStatusResponse responseBody = EtlJobStatusResponse.from(cancellation.snapshot());
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .eTag(statusEntityTag(responseBody))
+                .header(
+                        IDEMPOTENCY_REPLAYED_HEADER,
+                        Boolean.toString(cancellation.replayed())
+                )
+                .contentType(MediaType.APPLICATION_JSON)
                 .body(responseBody);
     }
 
