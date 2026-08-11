@@ -133,6 +133,66 @@ class EtlJobReplayBoundaryTest {
     }
 
     @Test
+    void rejectsOversizedReplayPayloadBeforeLockOrDatabaseWork() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        EtlBatchProperties properties = new EtlBatchProperties();
+        properties.setMaxPayloadBytes(4);
+        EtlJobReplayService service = new EtlJobReplayService(
+                jdbcTemplate,
+                new ObjectMapper(),
+                properties,
+                hash -> false
+        );
+
+        assertErrorCode(
+                "etl_payload_too_large",
+                () -> service.replayOwned(SOURCE_ID, PAYLOAD, REPLAY_KEY, "tenant_alpha")
+        );
+        verifyNoInteractions(jdbcTemplate);
+    }
+
+    @Test
+    void rejectsOversizedReplayBatchBeforeLockOrDatabaseWork() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        EtlBatchProperties properties = new EtlBatchProperties();
+        properties.setMaxBatchRecords(1);
+        EtlJobReplayService service = new EtlJobReplayService(
+                jdbcTemplate,
+                new ObjectMapper(),
+                properties,
+                hash -> false
+        );
+
+        assertErrorCode(
+                "etl_batch_too_large",
+                () -> service.replayOwned(
+                        SOURCE_ID,
+                        "[{\"id\":\"record_alpha\"},{\"id\":\"record_beta\"}]",
+                        REPLAY_KEY,
+                        "tenant_alpha"
+                )
+        );
+        verifyNoInteractions(jdbcTemplate);
+    }
+
+    @Test
+    void rejectsInvalidReplayRecordBeforeLockOrDatabaseWork() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        EtlJobReplayService service = new EtlJobReplayService(
+                jdbcTemplate,
+                new ObjectMapper(),
+                new EtlBatchProperties(),
+                hash -> false
+        );
+
+        assertErrorCode(
+                "etl_invalid_record",
+                () -> service.replayOwned(SOURCE_ID, "[{}]", REPLAY_KEY, "tenant_alpha")
+        );
+        verifyNoInteractions(jdbcTemplate);
+    }
+
+    @Test
     void rejectsAnAbsentParsedRootBeforeDatabaseWork() {
         JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
         ObjectMapper absentRootMapper = new ObjectMapper() {
