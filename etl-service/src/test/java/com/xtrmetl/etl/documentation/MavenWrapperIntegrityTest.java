@@ -136,7 +136,7 @@ class MavenWrapperIntegrityTest {
     }
 
     private static boolean containsWrapperInvocation(String line) {
-        return line.contains("./mvnw ") || line.contains(".\\\\mvnw.cmd ");
+        return line.contains("./mvnw ") || line.contains(".\\mvnw.cmd ");
     }
 
     private static int previousStepStart(List<String> lines, int fromIndex) {
