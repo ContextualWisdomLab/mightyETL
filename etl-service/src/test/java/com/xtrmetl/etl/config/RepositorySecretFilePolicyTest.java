@@ -10,11 +10,13 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
- * Guards the repository boundary that keeps developer-local environment files out of Git.
+ * Guards repository boundaries that keep developer-local environment files out of Git and Docker
+ * build contexts.
  *
  * <p>The local Compose guidance uses environment overrides for database and service credentials.
- * Those files must remain untracked by default, while a non-secret {@code .env.example} template
- * may remain reviewable in source control.
+ * Those files must remain untracked and excluded from Docker build transfer by default, while a
+ * reviewed non-secret {@code .env.example} template may remain available for source-controlled
+ * documentation.</p>
  */
 class RepositorySecretFilePolicyTest {
 
@@ -23,11 +25,29 @@ class RepositorySecretFilePolicyTest {
         Path repositoryRoot = findRepositoryRoot(Path.of("").toAbsolutePath().normalize());
         assertNotNull(repositoryRoot, "repository root containing .gitignore must be discoverable");
 
-        List<String> ignoredPatterns = Files.readAllLines(repositoryRoot.resolve(".gitignore"));
+        assertEnvironmentFileRules(
+                Files.readAllLines(repositoryRoot.resolve(".gitignore")),
+                "root .gitignore"
+        );
+    }
 
-        assertTrue(ignoredPatterns.contains(".env"), "root .gitignore must ignore .env");
-        assertTrue(ignoredPatterns.contains(".env.*"), "root .gitignore must ignore environment-specific .env files");
-        assertTrue(ignoredPatterns.contains("!.env.example"), "root .gitignore must permit a reviewed non-secret .env.example template");
+    @Test
+    void localEnvironmentFilesAreExcludedFromDockerBuildContext() throws IOException {
+        Path repositoryRoot = findRepositoryRoot(Path.of("").toAbsolutePath().normalize());
+        assertNotNull(repositoryRoot, "repository root containing .gitignore must be discoverable");
+
+        Path dockerIgnore = repositoryRoot.resolve(".dockerignore");
+        assertTrue(Files.isRegularFile(dockerIgnore), "root .dockerignore must exist");
+        assertEnvironmentFileRules(Files.readAllLines(dockerIgnore), "root .dockerignore");
+    }
+
+    private static void assertEnvironmentFileRules(List<String> patterns, String boundary) {
+        assertTrue(patterns.contains(".env"), boundary + " must ignore .env");
+        assertTrue(patterns.contains(".env.*"), boundary + " must ignore environment-specific .env files");
+        assertTrue(
+                patterns.contains("!.env.example"),
+                boundary + " must permit a reviewed non-secret .env.example template"
+        );
     }
 
     private static Path findRepositoryRoot(Path start) {
