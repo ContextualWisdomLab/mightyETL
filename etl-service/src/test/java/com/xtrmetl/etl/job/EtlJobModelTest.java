@@ -144,4 +144,56 @@ class EtlJobModelTest {
                 )
         );
     }
+
+    @Test
+    void rejectsFailureCodeOutsideFailedState() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new EtlJobSnapshot(
+                        JOB_RECORD_ID,
+                        EtlJobStatus.SUCCEEDED,
+                        1,
+                        "target_write_failed",
+                        CREATED_AT,
+                        UPDATED_AT
+                )
+        );
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new EtlJobStatusResponse(
+                        JOB_RECORD_ID,
+                        EtlJobStatus.RUNNING,
+                        1,
+                        "target_write_failed",
+                        CREATED_AT,
+                        UPDATED_AT
+                )
+        );
+    }
+
+    @Test
+    void requiresNonBlankFailureCodeForFailedState() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new EtlJobSnapshot(
+                        JOB_RECORD_ID,
+                        EtlJobStatus.FAILED,
+                        1,
+                        null,
+                        CREATED_AT,
+                        UPDATED_AT
+                )
+        );
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new EtlJobStatusResponse(
+                        JOB_RECORD_ID,
+                        EtlJobStatus.FAILED,
+                        1,
+                        "   ",
+                        CREATED_AT,
+                        UPDATED_AT
+                )
+        );
+    }
 }
