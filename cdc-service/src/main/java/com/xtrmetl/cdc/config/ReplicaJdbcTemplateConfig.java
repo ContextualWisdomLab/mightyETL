@@ -44,8 +44,7 @@ public class ReplicaJdbcTemplateConfig {
             initializationFailTimeout = Long.parseLong(initializationFailTimeoutValue);
         } catch (NumberFormatException e) {
             throw new IllegalStateException(
-                    "Invalid value for REPLICA_HIKARI_INITIALIZATION_FAIL_TIMEOUT_MS: " + initializationFailTimeoutValue,
-                    e
+                    "Invalid value for REPLICA_HIKARI_INITIALIZATION_FAIL_TIMEOUT_MS"
             );
         }
         config.setInitializationFailTimeout(initializationFailTimeout);
