@@ -29,8 +29,7 @@ public class MightyEtlConfigAliasEnvironmentPostProcessor implements Environment
             "etl.max-batch-records",
             "etl.jobs.intake-enabled",
             "connectors.databricks.enabled",
-            "connectors.snowflake.enabled",
-            "connectors.qlik-sense.enabled"
+            "connectors.snowflake.enabled"
     );
 
     /**

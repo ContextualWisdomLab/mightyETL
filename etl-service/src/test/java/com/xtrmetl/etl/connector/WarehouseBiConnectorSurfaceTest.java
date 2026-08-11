@@ -15,15 +15,14 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Unit tests on shipped warehouse/BI connector classes (not live SaaS).
+ * Unit tests on warehouse target connectors intentionally exposed by the production registry.
  */
 class WarehouseBiConnectorSurfaceTest {
 
     static Stream<TargetConnector> scaffolds() {
         return Stream.of(
                 new DatabricksTargetConnector(),
-                new SnowflakeTargetConnector(),
-                new QlikSenseTargetConnector()
+                new SnowflakeTargetConnector()
         );
     }
 
@@ -83,11 +82,11 @@ class WarehouseBiConnectorSurfaceTest {
     }
 
     @Test
-    void qlikRequiresTenantAuthApp() {
-        QlikSenseTargetConnector c = new QlikSenseTargetConnector();
-        assertEquals("qlik-sense", c.id());
-        assertTrue(c.requiredConfigKeys().containsAll(
-                List.of("tenant-url", "api-key", "app-id")));
+    void qlikIsNotPublishedAsARowWriteTargetUntilItsRealProductBoundaryExists() {
+        TargetConnectorRegistry registry = new TargetConnectorRegistry();
+
+        assertTrue(registry.find("qlik-sense").isEmpty());
+        assertTrue(registry.all().stream().noneMatch(connector -> connector.id().equals("qlik-sense")));
     }
 
     @Test
@@ -133,12 +132,13 @@ class WarehouseBiConnectorSurfaceTest {
     }
 
     @Test
-    void catalogExposesRequiredKeysAndIntegrationHooks() {
+    void catalogExposesOnlyIntentionalWarehouseScaffolds() {
         TargetConnectorDispatcher dispatcher =
                 new TargetConnectorDispatcher(new TargetConnectorRegistry(), new ConnectorProperties());
 
         List<Map<String, Object>> catalog = dispatcher.catalog();
-        assertEquals(3, catalog.size());
+        assertEquals(2, catalog.size());
+        assertTrue(catalog.stream().noneMatch(row -> "qlik-sense".equals(row.get("id"))));
         for (Map<String, Object> row : catalog) {
             assertEquals("SCAFFOLD", row.get("status"));
             assertEquals(false, row.get("writable"));

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Qlik Sense is no longer published as a mightyETL row-write target: it is removed from the production target registry/catalog, Spring `ConnectorProperties`, and the modern/legacy Qlik enable alias. `QlikSenseTargetConnector` remains only non-registered reference/design code until a separately reviewed Qlik reload/data-file integration is implemented and verified.
 - Durable `POST /api/etl/jobs` submissions now return RFC 9110 `202 Accepted`, a stable pending-job representation, `Location` status-monitor metadata, and explicit replay metadata without changing the synchronous `/api/etl/process` contract. The incomplete intake controller is fail-closed and requires explicit `xtrmetl.etl.jobs.intake-enabled=true` operator opt-in until worker execution and terminal payload clearing are implemented.
 - Concurrent requests using the same authenticated-principal-scoped semantic idempotency key now return immediate RFC 9457 `409 etl_idempotency_request_in_progress` responses through PostgreSQL `pg_try_advisory_xact_lock`; retries after completion still replay the committed response.
 - `POST /api/etl/process` now supports optional authenticated-principal-scoped `Idempotency-Key` retries with atomic target writes, durable response replay, payload-conflict rejection, and explicit replay response metadata.
@@ -27,14 +28,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ETL problem-details client and operator contract: `docs/api/problem-details.md`.
 - Operator-configurable ETL admission limits under `mightyetl.etl.*` / `xtrmetl.etl.*`, backed by `ETL_MAX_PAYLOAD_BYTES` and `ETL_MAX_BATCH_RECORDS` environment variables with hard safety ceilings.
 - ETL transaction rollback integration coverage and the operator runbook `docs/etl/bounded-atomic-batches.md`.
-- Connector scaffolds (contracts + docs only): Qlik Sense, Databricks, Snowflake under `docs/connectors/` and `etl-service` SPI stubs.
+- Connector scaffold/reference contracts and docs: Databricks, Snowflake, and the non-registered Qlik design reference under `docs/connectors/` and `etl-service` SPI code.
 - Any-to-any CDC design notes and source SPI scaffold: `docs/cdc/any-to-any-cdc.md`, `cdc-service` SPI stubs.
 - CDC operations notes: `docs/cdc/ops-and-reliability.md`.
 - Product upgrade progress tracker: `docs/mightyETL-product-upgrade-progress.md`.
 - CDC status/sources API: `GET /api/cdc/status`, `GET /api/cdc/sources` (no secrets).
 - `DebeziumChangeRecordMapper` + `CanonicalChangeRecord` (mapper unit-tested; not on live publish path).
 - CDC target SPI registry (`kafka`, `jdbc-replica`) for any-to-any routing scaffold.
-- `etl-service` `xtrmetl.connectors.*` disabled config keys for Databricks/Snowflake/Qlik.
+- `etl-service` `xtrmetl.connectors.*` disabled config keys for the still-registered Databricks and Snowflake scaffolds.
 - Dual-read config aliases: `mightyetl.*` preferred → `xtrmetl.*` (`MightyEtlConfigAliasEnvironmentPostProcessor`).
 - Configurable replica tables (`xtrmetl.replica.tables`) for `(id,data)`-shaped tables.
 - Optional CDC canonical-map counters (`xtrmetl.cdc.canonical-map-enabled`).

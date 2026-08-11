@@ -243,13 +243,15 @@ class EtlControllerTest {
     }
 
     @Test
-    void connectorCatalogRemainsAvailable() throws Exception {
+    void connectorCatalogRemainsAvailableWithoutQlikRowWriteScaffold() throws Exception {
         mockMvc.perform(get("/api/etl/connectors"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.product").value("mightyETL"))
                 .andExpect(jsonPath("$.primaryLoadPath").value("postgresql"))
-                .andExpect(jsonPath("$.connectors.length()").value(3))
+                .andExpect(jsonPath("$.connectors.length()").value(2))
                 .andExpect(jsonPath("$.connectors[?(@.id == 'databricks')]").exists())
+                .andExpect(jsonPath("$.connectors[?(@.id == 'snowflake')]").exists())
+                .andExpect(jsonPath("$.connectors[?(@.id == 'qlik-sense')]").doesNotExist())
                 .andExpect(jsonPath("$.connectors[*].requiredConfigKeys").exists())
                 .andExpect(jsonPath("$.connectors[*].integration").exists());
     }
