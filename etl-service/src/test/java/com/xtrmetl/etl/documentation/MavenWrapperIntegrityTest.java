@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
 import java.util.Properties;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -29,6 +30,8 @@ class MavenWrapperIntegrityTest {
                     + "apache-maven-3.9.11-bin.zip";
     private static final String REVIEWED_DISTRIBUTION_SHA256 =
             "0d7125e8c91097b36edb990ea5934e6c68b4440eef4ea96510a0f6815e7eeadb";
+    private static final String PREFLIGHT_COMMAND =
+            "run: java .github/scripts/VerifyMavenWrapperIntegrity.java";
 
     /**
      * Requires the fixed Maven 3.9.11 download to remain bound to its reviewed SHA-256 checksum.
@@ -69,6 +72,90 @@ class MavenWrapperIntegrityTest {
                 distributionSha256,
                 "The checksum must match the reviewed Maven 3.9.11 distribution"
         );
+    }
+
+    /**
+     * Requires a fail-closed integrity preflight immediately before every CI/SBOM wrapper step.
+     *
+     * <p>The preflight must have the same GitHub Actions {@code if:} condition as the wrapper step,
+     * so neither Unix nor Windows execution can bootstrap Maven without validating the reviewed
+     * distribution URL and checksum first.</p>
+     *
+     * @throws IOException when a workflow cannot be read as repository source
+     */
+    @Test
+    void preflightsEveryCiAndSbomWrapperInvocation() throws IOException {
+        for (String workflow : List.of(
+                ".github/workflows/ci.yml",
+                ".github/workflows/sbom.yml"
+        )) {
+            List<String> lines = Files.readAllLines(
+                    projectRoot().resolve(workflow),
+                    StandardCharsets.UTF_8
+            );
+            int wrapperInvocations = 0;
+
+            for (int lineIndex = 0; lineIndex < lines.size(); lineIndex++) {
+                String line = lines.get(lineIndex).trim();
+                if (!line.startsWith("run:") || !containsWrapperInvocation(line)) {
+                    continue;
+                }
+                wrapperInvocations++;
+
+                int wrapperStep = previousStepStart(lines, lineIndex);
+                int preflightStep = previousStepStart(lines, wrapperStep - 1);
+                assertTrue(
+                        preflightStep >= 0,
+                        workflow + ": wrapper invocation must have a preceding preflight step"
+                );
+
+                String preflightBlock = String.join(
+                        "\n",
+                        lines.subList(preflightStep, wrapperStep)
+                );
+                assertTrue(
+                        preflightBlock.contains(PREFLIGHT_COMMAND),
+                        workflow + ": every Maven Wrapper invocation must be immediately preceded "
+                                + "by the integrity preflight"
+                );
+
+                String wrapperCondition = stepCondition(lines, wrapperStep, lineIndex + 1);
+                String preflightCondition = stepCondition(lines, preflightStep, wrapperStep);
+                assertEquals(
+                        wrapperCondition,
+                        preflightCondition,
+                        workflow + ": preflight and wrapper step must use the same condition"
+                );
+            }
+
+            assertTrue(
+                    wrapperInvocations > 0,
+                    workflow + ": expected at least one Maven Wrapper invocation"
+            );
+        }
+    }
+
+    private static boolean containsWrapperInvocation(String line) {
+        return line.contains("./mvnw ") || line.contains(".\\\\mvnw.cmd ");
+    }
+
+    private static int previousStepStart(List<String> lines, int fromIndex) {
+        for (int lineIndex = fromIndex; lineIndex >= 0; lineIndex--) {
+            if (lines.get(lineIndex).trim().startsWith("- name:")) {
+                return lineIndex;
+            }
+        }
+        return -1;
+    }
+
+    private static String stepCondition(List<String> lines, int startInclusive, int endExclusive) {
+        for (int lineIndex = startInclusive; lineIndex < endExclusive; lineIndex++) {
+            String line = lines.get(lineIndex).trim();
+            if (line.startsWith("if:")) {
+                return line;
+            }
+        }
+        return "";
     }
 
     /**
