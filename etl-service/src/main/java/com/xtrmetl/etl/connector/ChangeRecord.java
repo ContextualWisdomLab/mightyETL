@@ -2,6 +2,7 @@ package com.xtrmetl.etl.connector;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -14,9 +15,13 @@ import java.util.Objects;
  * JSON-shaped {@link Map} and {@link List} containers cannot alter a record after it has entered
  * a connector pipeline. Nested containers exposed through this record are unmodifiable. Null
  * database values are preserved, and values that are not maps or lists keep their original object
- * identity.</p>
+ * identity. Cyclic map/list graphs are rejected deterministically rather than recursing until the
+ * JVM stack is exhausted.</p>
  */
 public final class ChangeRecord {
+
+    private static final String CYCLIC_CONTAINER_MESSAGE =
+            "ChangeRecord JSON containers must not contain cycles";
 
     private final String sourceId;
     private final String op;
@@ -38,6 +43,7 @@ public final class ChangeRecord {
      * @param before row values before the change, or {@code null} when unavailable
      * @param after row values after the change, or {@code null} when unavailable
      * @param pk primary-key values for the changed row, or {@code null} when unavailable
+     * @throws IllegalArgumentException when a map/list container graph contains a cycle
      */
     public ChangeRecord(
             String sourceId,
@@ -158,22 +164,51 @@ public final class ChangeRecord {
         if (source == null || source.isEmpty()) {
             return Map.of();
         }
-        Map<String, Object> copy = new LinkedHashMap<>();
-        source.forEach((key, value) -> copy.put(key, snapshotValue(value)));
-        return Collections.unmodifiableMap(copy);
+        IdentityHashMap<Object, Boolean> activeContainers = new IdentityHashMap<>();
+        enterContainer(source, activeContainers);
+        try {
+            Map<String, Object> copy = new LinkedHashMap<>();
+            source.forEach((key, value) -> copy.put(key, snapshotValue(value, activeContainers)));
+            return Collections.unmodifiableMap(copy);
+        } finally {
+            activeContainers.remove(source);
+        }
     }
 
-    private static Object snapshotValue(Object value) {
+    private static Object snapshotValue(
+            Object value,
+            IdentityHashMap<Object, Boolean> activeContainers
+    ) {
         if (value instanceof Map<?, ?> nestedMap) {
-            Map<Object, Object> copy = new LinkedHashMap<>();
-            nestedMap.forEach((key, nestedValue) -> copy.put(key, snapshotValue(nestedValue)));
-            return Collections.unmodifiableMap(copy);
+            enterContainer(nestedMap, activeContainers);
+            try {
+                Map<Object, Object> copy = new LinkedHashMap<>();
+                nestedMap.forEach((key, nestedValue) ->
+                        copy.put(key, snapshotValue(nestedValue, activeContainers)));
+                return Collections.unmodifiableMap(copy);
+            } finally {
+                activeContainers.remove(nestedMap);
+            }
         }
         if (value instanceof List<?> nestedList) {
-            List<Object> copy = new ArrayList<>(nestedList.size());
-            nestedList.forEach(element -> copy.add(snapshotValue(element)));
-            return Collections.unmodifiableList(copy);
+            enterContainer(nestedList, activeContainers);
+            try {
+                List<Object> copy = new ArrayList<>(nestedList.size());
+                nestedList.forEach(element -> copy.add(snapshotValue(element, activeContainers)));
+                return Collections.unmodifiableList(copy);
+            } finally {
+                activeContainers.remove(nestedList);
+            }
         }
         return value;
+    }
+
+    private static void enterContainer(
+            Object container,
+            IdentityHashMap<Object, Boolean> activeContainers
+    ) {
+        if (activeContainers.put(container, Boolean.TRUE) != null) {
+            throw new IllegalArgumentException(CYCLIC_CONTAINER_MESSAGE);
+        }
     }
 }
