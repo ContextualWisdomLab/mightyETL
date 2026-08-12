@@ -6,6 +6,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -84,6 +85,23 @@ class CdcRegistryIdentityTest {
         );
 
         assertEquals("CDC target connector id must not be blank", failure.getMessage());
+    }
+
+    @Test
+    void sourceConnectorCollectionCannotDeleteRegistrationAuthority() {
+        CdcSourceRegistry registry = new CdcSourceRegistry(List.of(source("immutable-source")));
+
+        assertThrows(UnsupportedOperationException.class, () -> registry.all().clear());
+        assertTrue(registry.find("immutable-source").isPresent());
+    }
+
+    @Test
+    void targetConnectorCollectionCannotDeleteRegistrationAuthority() {
+        CdcTargetRegistry registry = new CdcTargetRegistry();
+
+        assertThrows(UnsupportedOperationException.class, () -> registry.all().clear());
+        assertTrue(registry.find(KafkaCdcTargetConnector.ID).isPresent());
+        assertTrue(registry.find(JdbcReplicaCdcTargetConnector.ID).isPresent());
     }
 
     private static CdcSourceConnector source(String id) {
