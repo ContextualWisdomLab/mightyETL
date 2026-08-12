@@ -1,11 +1,13 @@
 package com.xtrmetl.cdc.build;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -17,20 +19,24 @@ import org.junit.jupiter.api.Test;
  */
 final class MockitoMockMakerOverrideContractTest {
 
-    private static final List<String> LEGACY_OVERRIDE_PATHS = List.of(
-            "cdc-service/src/test/resources/mockito-extensions/org.mockito.plugins.MockMaker",
-            "etl-service/src/test/resources/mockito-extensions/org.mockito.plugins.MockMaker",
-            "zuul-gateway/src/test/resources/mockito-extensions/org.mockito.plugins.MockMaker"
-    );
+    private static final Path LEGACY_OVERRIDE_SUFFIX = Path.of(
+            "src", "test", "resources", "mockito-extensions", "org.mockito.plugins.MockMaker");
 
     @Test
-    void noTestModuleForcesTheLegacySubclassMockMaker() {
+    void noTestModuleForcesTheLegacySubclassMockMaker() throws IOException {
         Path repositoryRoot = findProjectRoot();
 
-        for (String relativePath : LEGACY_OVERRIDE_PATHS) {
-            assertFalse(
-                    Files.exists(repositoryRoot.resolve(relativePath)),
-                    "Mockito 5 startup instrumentation requires removing legacy override: " + relativePath
+        try (Stream<Path> paths = Files.walk(repositoryRoot)) {
+            List<Path> overrides = paths
+                    .filter(Files::isRegularFile)
+                    .filter(path -> path.endsWith(LEGACY_OVERRIDE_SUFFIX))
+                    .map(repositoryRoot::relativize)
+                    .sorted()
+                    .toList();
+
+            assertTrue(
+                    overrides.isEmpty(),
+                    "Mockito 5 startup instrumentation requires removing legacy overrides: " + overrides
             );
         }
     }
