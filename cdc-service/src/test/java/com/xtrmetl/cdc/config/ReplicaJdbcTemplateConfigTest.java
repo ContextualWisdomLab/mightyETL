@@ -4,6 +4,7 @@ import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.mock.env.MockEnvironment;
 
 import javax.sql.DataSource;
 import java.util.concurrent.atomic.AtomicReference;
@@ -13,6 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ReplicaJdbcTemplateConfigTest {
@@ -127,5 +129,33 @@ class ReplicaJdbcTemplateConfigTest {
                     }
                     assertTrue(keyWasReported);
                 });
+    }
+
+    @Test
+    void invalidInitializationFailTimeoutControlCharactersDoNotReachExceptionChain() {
+        String rejectedValue =
+                "jdbc:postgresql://replica.internal/app?password=secret\r\nAuthorization: Bearer token";
+        MockEnvironment environment = new MockEnvironment()
+                .withProperty("REPLICA_PGHOST", "replica-host")
+                .withProperty("REPLICA_PGDATABASE", "xtrmetl")
+                .withProperty("REPLICA_PGUSER", "xtrmetl_user")
+                .withProperty("REPLICA_PGPASSWORD", "xtrmetl_password")
+                .withProperty("REPLICA_HIKARI_INITIALIZATION_FAIL_TIMEOUT_MS", rejectedValue);
+
+        IllegalStateException failure = assertThrows(
+                IllegalStateException.class,
+                () -> new ReplicaJdbcTemplateConfig().replicaDataSource(environment)
+        );
+
+        boolean keyWasReported = false;
+        for (Throwable current = failure; current != null; current = current.getCause()) {
+            String message = current.getMessage();
+            if (message != null) {
+                keyWasReported |= message.contains("REPLICA_HIKARI_INITIALIZATION_FAIL_TIMEOUT_MS");
+                assertFalse(message.contains(rejectedValue));
+                assertFalse(message.contains("Authorization: Bearer token"));
+            }
+        }
+        assertTrue(keyWasReported);
     }
 }
