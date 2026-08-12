@@ -27,10 +27,17 @@ public class DebeziumChangeRecordMapper {
     }
 
     /**
+     * Maps one Debezium value envelope and its optional key into a canonical change record.
+     *
+     * <p>A missing or malformed required value is rejected. A malformed optional key is treated
+     * as unavailable key metadata so a valid value can still supply the existing {@code id}
+     * fallback from its {@code after} or {@code before} object.</p>
+     *
      * @param sourceId logical source id (e.g. {@code postgres-debezium})
-     * @param topic    Kafka / Debezium destination topic ({@code prefix.schema.table})
-     * @param keyJson  optional Debezium key JSON
+     * @param topic Kafka / Debezium destination topic ({@code prefix.schema.table})
+     * @param keyJson optional Debezium key JSON
      * @param valueJson Debezium value JSON
+     * @return the mapped record when the required value envelope is valid, otherwise empty
      */
     public Optional<CanonicalChangeRecord> map(
             String sourceId,
