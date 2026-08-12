@@ -81,6 +81,33 @@ class DebeziumChangeRecordMapperTest {
     }
 
     @Test
+    void malformedKeyFallsBackToValidAfterIdentifierWithoutDroppingTheEvent() {
+        String value = """
+                {
+                  "payload": {
+                    "op": "u",
+                    "before": {"id": 41, "data": "old"},
+                    "after": {"id": 42, "data": "new"},
+                    "source": {"schema": "public", "table": "processed_data"}
+                  }
+                }
+                """;
+
+        Optional<CanonicalChangeRecord> result = mapper.map(
+                "postgres-debezium",
+                "xtrmetl-cdc.public.processed_data",
+                "{malformed-key-json",
+                value
+        );
+
+        assertTrue(result.isPresent(), "a malformed optional key must not discard an otherwise valid CDC value");
+        CanonicalChangeRecord record = result.get();
+        assertEquals("u", record.getOp());
+        assertEquals(42, ((Number) record.getPk().get("id")).intValue());
+        assertEquals("new", record.getAfter().get("data"));
+    }
+
+    @Test
     void emptyValueReturnsEmpty() {
         assertTrue(mapper.map("s", "t", null, null).isEmpty());
         assertTrue(mapper.map("s", "t", null, "  ").isEmpty());

@@ -27,10 +27,17 @@ public class DebeziumChangeRecordMapper {
     }
 
     /**
+     * Maps one Debezium value envelope and its optional key into a canonical change record.
+     *
+     * <p>A missing or malformed required value is rejected. A malformed optional key is treated
+     * as unavailable key metadata so a valid value can still supply the existing {@code id}
+     * fallback from its {@code after} or {@code before} object.</p>
+     *
      * @param sourceId logical source id (e.g. {@code postgres-debezium})
-     * @param topic    Kafka / Debezium destination topic ({@code prefix.schema.table})
-     * @param keyJson  optional Debezium key JSON
+     * @param topic Kafka / Debezium destination topic ({@code prefix.schema.table})
+     * @param keyJson optional Debezium key JSON
      * @param valueJson Debezium value JSON
+     * @return the mapped record when the required value envelope is valid, otherwise empty
      */
     public Optional<CanonicalChangeRecord> map(
             String sourceId,
@@ -105,13 +112,17 @@ public class DebeziumChangeRecordMapper {
         }
     }
 
-    private Map<String, Object> extractPk(String keyJson) throws IOException {
+    private Map<String, Object> extractPk(String keyJson) {
         if (keyJson == null || keyJson.isBlank()) {
             return Map.of();
         }
-        JsonNode root = objectMapper.readTree(keyJson);
-        JsonNode payload = root.has("payload") ? root.get("payload") : root;
-        return toMap(payload);
+        try {
+            JsonNode root = objectMapper.readTree(keyJson);
+            JsonNode payload = root.has("payload") ? root.get("payload") : root;
+            return toMap(payload);
+        } catch (IOException e) {
+            return Map.of();
+        }
     }
 
     private static String[] schemaTableFromTopic(String topic) {
