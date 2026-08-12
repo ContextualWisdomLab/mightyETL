@@ -10,6 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -39,5 +40,35 @@ class PostgresDebeziumCdcSourceConfigurationTest {
         assertFalse(failure.getMessage().contains(rejectedSecret));
         assertFalse(failure.getMessage().contains("database.password"));
         verifyNoInteractions(service);
+    }
+
+    @Test
+    void rejectsNullConfigurationBeforeServiceLookup() {
+        CdcService service = mock(CdcService.class);
+        @SuppressWarnings("unchecked")
+        ObjectProvider<CdcService> provider = mock(ObjectProvider.class);
+        PostgresDebeziumCdcSource source = new PostgresDebeziumCdcSource(provider);
+
+        IllegalArgumentException failure = assertThrows(
+                IllegalArgumentException.class,
+                () -> source.start(null)
+        );
+
+        assertEquals("config must not be null", failure.getMessage());
+        verifyNoInteractions(provider, service);
+    }
+
+    @Test
+    void emptyConfigurationStartsDeploymentConfiguredService() {
+        CdcService service = mock(CdcService.class);
+        @SuppressWarnings("unchecked")
+        ObjectProvider<CdcService> provider = mock(ObjectProvider.class);
+        when(provider.getIfAvailable()).thenReturn(service);
+        PostgresDebeziumCdcSource source = new PostgresDebeziumCdcSource(provider);
+
+        source.start(Map.of());
+
+        verify(provider).getIfAvailable();
+        verify(service).start();
     }
 }
