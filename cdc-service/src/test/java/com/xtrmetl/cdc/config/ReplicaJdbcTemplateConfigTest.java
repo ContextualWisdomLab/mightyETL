@@ -9,6 +9,7 @@ import javax.sql.DataSource;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -96,6 +97,35 @@ class ReplicaJdbcTemplateConfigTest {
                     Throwable failure = context.getStartupFailure();
                     assertNotNull(failure);
                     assertTrue(failure.getMessage().contains("REPLICA_HIKARI_INITIALIZATION_FAIL_TIMEOUT_MS"));
+                });
+    }
+
+    @Test
+    void invalidInitializationFailTimeoutDiagnosticDoesNotRepublishRejectedValue() {
+        String rejectedValue = "not-a-number-Bearer-replica-secret";
+
+        contextRunner
+                .withPropertyValues(
+                        "xtrmetl.replica.enabled=true",
+                        "REPLICA_PGHOST=replica-host",
+                        "REPLICA_PGDATABASE=xtrmetl",
+                        "REPLICA_PGUSER=xtrmetl_user",
+                        "REPLICA_PGPASSWORD=xtrmetl_password",
+                        "REPLICA_HIKARI_INITIALIZATION_FAIL_TIMEOUT_MS=" + rejectedValue
+                )
+                .run(context -> {
+                    Throwable failure = context.getStartupFailure();
+                    assertNotNull(failure);
+
+                    boolean keyWasReported = false;
+                    for (Throwable current = failure; current != null; current = current.getCause()) {
+                        String message = current.getMessage();
+                        if (message != null) {
+                            keyWasReported |= message.contains("REPLICA_HIKARI_INITIALIZATION_FAIL_TIMEOUT_MS");
+                            assertFalse(message.contains(rejectedValue));
+                        }
+                    }
+                    assertTrue(keyWasReported);
                 });
     }
 }
