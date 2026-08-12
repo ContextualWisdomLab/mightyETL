@@ -12,12 +12,21 @@ import java.util.Optional;
 /**
  * Registry of CDC source connector types discovered as Spring beans, plus a safe
  * fallback for unit tests without a Spring context.
+ *
+ * <p>Connector identifiers are registration authority. Null connectors, blank
+ * identifiers, and duplicate identifiers are rejected before the registry is
+ * mutated so one implementation cannot silently replace another.</p>
  */
 @Component
 public class CdcSourceRegistry {
 
     private final Map<String, CdcSourceConnector> byId = new LinkedHashMap<>();
 
+    /**
+     * Builds a registry from Spring-discovered connector beans.
+     *
+     * @param connectors provider of discovered source connectors
+     */
     public CdcSourceRegistry(ObjectProvider<CdcSourceConnector> connectors) {
         connectors.orderedStream().forEach(this::register);
         if (byId.isEmpty()) {
@@ -27,7 +36,10 @@ public class CdcSourceRegistry {
     }
 
     /**
-     * Explicit list for tests.
+     * Builds a registry from an explicit connector list, primarily for tests and
+     * standalone embedding.
+     *
+     * @param connectors source connectors to register; a null list is treated as empty
      */
     public CdcSourceRegistry(List<CdcSourceConnector> connectors) {
         if (connectors != null) {
@@ -38,18 +50,50 @@ public class CdcSourceRegistry {
         }
     }
 
+    /**
+     * Builds a standalone registry with the built-in PostgreSQL/Debezium source.
+     */
     public CdcSourceRegistry() {
         this(List.of());
     }
 
+    /**
+     * Registers a CDC source connector without permitting ambiguous authority.
+     *
+     * @param connector connector to register
+     * @throws IllegalArgumentException when the connector is null, its identifier
+     *                                  is blank, or its identifier is already registered
+     */
     public final void register(CdcSourceConnector connector) {
-        byId.put(connector.id(), connector);
+        if (connector == null) {
+            throw new IllegalArgumentException("CDC source connector must not be null");
+        }
+
+        String id = connector.id();
+        if (id == null || id.isBlank()) {
+            throw new IllegalArgumentException("CDC source connector id must not be blank");
+        }
+
+        if (byId.putIfAbsent(id, connector) != null) {
+            throw new IllegalArgumentException("Duplicate CDC source connector id: " + id);
+        }
     }
 
+    /**
+     * Finds a registered source connector by its exact identifier.
+     *
+     * @param id connector identifier
+     * @return the connector when registered, otherwise empty
+     */
     public Optional<CdcSourceConnector> find(String id) {
         return Optional.ofNullable(byId.get(id));
     }
 
+    /**
+     * Returns all registered source connectors in registration order.
+     *
+     * @return registered source connectors
+     */
     public Collection<CdcSourceConnector> all() {
         return byId.values();
     }
