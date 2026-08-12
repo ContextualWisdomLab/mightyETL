@@ -105,13 +105,17 @@ public class DebeziumChangeRecordMapper {
         }
     }
 
-    private Map<String, Object> extractPk(String keyJson) throws IOException {
+    private Map<String, Object> extractPk(String keyJson) {
         if (keyJson == null || keyJson.isBlank()) {
             return Map.of();
         }
-        JsonNode root = objectMapper.readTree(keyJson);
-        JsonNode payload = root.has("payload") ? root.get("payload") : root;
-        return toMap(payload);
+        try {
+            JsonNode root = objectMapper.readTree(keyJson);
+            JsonNode payload = root.has("payload") ? root.get("payload") : root;
+            return toMap(payload);
+        } catch (IOException e) {
+            return Map.of();
+        }
     }
 
     private static String[] schemaTableFromTopic(String topic) {
