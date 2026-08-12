@@ -8,11 +8,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Guards the shared Maven dependency-management boundary against Jackson Databind versions that
- * remain inside the currently known vulnerable 2.21.x range.
+ * Guards the shared Maven dependency-management boundary against Jackson Databind versions below
+ * the selected patched 2.21.5 security baseline.
  */
 class JacksonSecurityBaselineTest {
 
@@ -22,6 +23,31 @@ class JacksonSecurityBaselineTest {
     void jacksonSecurityBomPrecedesImportedSpringBootDependencyManagement() throws IOException {
         String pom = Files.readString(PROJECT_ROOT.resolve("pom.xml"), StandardCharsets.UTF_8);
 
+        assertJacksonBomContract(pom);
+    }
+
+    @Test
+    void rejectsJacksonBomDecoysOutsideRootDependencyManagement() {
+        String pomWithDecoy = """
+                <project>
+                  <properties>
+                    <jackson-bom.version>2.21.5</jackson-bom.version>
+                  </properties>
+                  <!-- <artifactId>jackson-bom</artifactId> -->
+                  <dependencyManagement>
+                    <dependencies>
+                      <dependency>
+                        <artifactId>spring-boot-dependencies</artifactId>
+                      </dependency>
+                    </dependencies>
+                  </dependencyManagement>
+                </project>
+                """;
+
+        assertThrows(AssertionError.class, () -> assertJacksonBomContract(pomWithDecoy));
+    }
+
+    private static void assertJacksonBomContract(String pom) {
         assertTrue(
                 pom.contains("<jackson-bom.version>2.21.5</jackson-bom.version>"),
                 "Root dependency management must pin Jackson 2.21.5, the current patched 2.21 LTS baseline"
