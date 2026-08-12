@@ -38,9 +38,17 @@ jobs:
           java-version: "25"
           cache: maven
 
+      - name: Verify Maven Wrapper integrity (Unix)
+        if: runner.os != 'Windows'
+        run: java .github/scripts/VerifyMavenWrapperIntegrity.java
+
       - name: Run tests (Unix)
         if: runner.os != 'Windows'
         run: ./mvnw -B test
+
+      - name: Verify Maven Wrapper integrity (Windows)
+        if: runner.os == 'Windows'
+        run: java .github/scripts/VerifyMavenWrapperIntegrity.java
 
       - name: Run tests (Windows)
         if: runner.os == 'Windows'
@@ -60,9 +68,17 @@ jobs:
           java-version: "25"
           cache: maven
 
+      - name: Verify Maven Wrapper integrity (Unix)
+        if: runner.os != 'Windows'
+        run: java .github/scripts/VerifyMavenWrapperIntegrity.java
+
       - name: Run tests (Unix)
         if: runner.os != 'Windows'
         run: ./mvnw -B test
+
+      - name: Verify Maven Wrapper integrity (Windows)
+        if: runner.os == 'Windows'
+        run: java .github/scripts/VerifyMavenWrapperIntegrity.java
 
       - name: Run tests (Windows)
         if: runner.os == 'Windows'
