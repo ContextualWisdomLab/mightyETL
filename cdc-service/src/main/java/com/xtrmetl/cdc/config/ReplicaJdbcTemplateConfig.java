@@ -12,10 +12,25 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import javax.sql.DataSource;
 
+/**
+ * Configures the JDBC client used to apply CDC changes to an optional PostgreSQL replica.
+ *
+ * <p>Replica endpoint components are validated before the JDBC URL is constructed. Rejected
+ * configuration values are classified by key without being copied into exception messages, so
+ * credential-like or control-character-bearing input cannot be republished through startup
+ * diagnostics.</p>
+ */
 @Configuration
 @ConditionalOnProperty(prefix = "xtrmetl.replica", name = "enabled", havingValue = "true")
 public class ReplicaJdbcTemplateConfig {
 
+    /**
+     * Creates the replica connection pool from environment-backed CDC configuration.
+     *
+     * @param environment source of replica endpoint, credentials, and Hikari startup settings
+     * @return a Hikari data source configured for the replica PostgreSQL endpoint
+     * @throws IllegalStateException when a required endpoint value or initialization timeout is invalid
+     */
     @Bean(name = "replicaDataSource", destroyMethod = "close")
     public HikariDataSource replicaDataSource(Environment environment) {
         String host = ValidationUtils.requireValidHost(
@@ -42,11 +57,8 @@ public class ReplicaJdbcTemplateConfig {
         long initializationFailTimeout;
         try {
             initializationFailTimeout = Long.parseLong(initializationFailTimeoutValue);
-        } catch (NumberFormatException e) {
-            throw new IllegalStateException(
-                    "Invalid value for REPLICA_HIKARI_INITIALIZATION_FAIL_TIMEOUT_MS: " + initializationFailTimeoutValue,
-                    e
-            );
+        } catch (NumberFormatException ignored) {
+            throw new IllegalStateException("Invalid value for REPLICA_HIKARI_INITIALIZATION_FAIL_TIMEOUT_MS");
         }
         config.setInitializationFailTimeout(initializationFailTimeout);
         config.setDriverClassName("org.postgresql.Driver");
@@ -57,6 +69,12 @@ public class ReplicaJdbcTemplateConfig {
         return new HikariDataSource(config);
     }
 
+    /**
+     * Creates the JDBC template used by replica apply services.
+     *
+     * @param dataSource validated replica connection pool
+     * @return a JDBC template bound to the replica data source
+     */
     @Bean(name = "replicaJdbcTemplate")
     public JdbcTemplate replicaJdbcTemplate(@Qualifier("replicaDataSource") DataSource dataSource) {
         return new JdbcTemplate(dataSource);
