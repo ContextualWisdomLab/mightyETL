@@ -55,6 +55,21 @@ class KafkaConfigTest {
     }
 
     @Test
+    void preservesZeroRetrySettings() {
+        KafkaConfig config = new KafkaConfig();
+        KafkaTemplate<String, String> kafkaTemplate = mock(KafkaTemplate.class);
+
+        DefaultErrorHandler errorHandler = config.kafkaListenerErrorHandler(kafkaTemplate, 0L, 0L);
+
+        Object failureTracker = ReflectionTestUtils.getField(errorHandler, "failureTracker");
+        assertNotNull(failureTracker);
+        FixedBackOff fixedBackOff = (FixedBackOff) ReflectionTestUtils.getField(failureTracker, "backOff");
+        assertNotNull(fixedBackOff);
+        assertEquals(0L, fixedBackOff.getInterval());
+        assertEquals(0L, fixedBackOff.getMaxAttempts());
+    }
+
+    @Test
     void rejectsNegativeRetryBackoffBeforeBuildingErrorHandler() {
         KafkaConfig config = new KafkaConfig();
         KafkaTemplate<String, String> kafkaTemplate = mock(KafkaTemplate.class);

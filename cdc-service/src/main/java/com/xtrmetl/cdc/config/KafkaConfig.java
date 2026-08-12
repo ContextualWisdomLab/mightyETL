@@ -62,6 +62,14 @@ public class KafkaConfig {
         return errorHandler;
     }
 
+    /**
+     * Builds the replica Kafka listener factory with record-level acknowledgement semantics.
+     *
+     * @param consumerFactory Kafka consumer factory for replica records
+     * @param kafkaListenerErrorHandler bounded retry and dead-letter error handler
+     * @param concurrency requested listener concurrency
+     * @return configured listener container factory
+     */
     @Bean
     public ConcurrentKafkaListenerContainerFactory<String, String> kafkaListenerContainerFactory(
             @NonNull ConsumerFactory<String, String> consumerFactory,
