@@ -61,9 +61,6 @@ xtrmetl:
       mode: ${QLIK_MODE:reload-only}
 
 management:
-  tracing:
-    sampling:
-      probability: 1.0
   zipkin:
     tracing:
       endpoint: http://${ZIPKIN_HOST:localhost}:9412/api/v2/spans
@@ -84,8 +81,3 @@ eureka:
 logging:
   level:
     root: INFO
-    com:
-      xtrmetl: DEBUG
-    org:
-      springframework:
-        web: DEBUG
