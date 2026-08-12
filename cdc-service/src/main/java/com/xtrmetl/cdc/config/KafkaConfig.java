@@ -27,11 +27,12 @@ public class KafkaConfig {
     private static final String RETRY_MAX_ATTEMPTS_KEY = "xtrmetl.replica.kafka.retry-max-attempts";
 
     /**
-     * Builds the replica-listener error handler with terminal dead-letter recovery.
+     * Builds the replica-listener error handler with bounded retry configuration and terminal
+     * dead-letter recovery.
      *
-     * <p>Retry settings are deployment-owned, so this boundary rejects negative values before
-     * delegating to Spring's {@link FixedBackOff}. Zero is valid: a zero interval retries
-     * immediately, and zero maximum attempts sends a retryable failure directly to recovery.</p>
+     * <p>Retry settings are deployment-owned. Negative values are rejected before they reach
+     * Spring's {@link FixedBackOff}, while zero remains a valid explicit choice for immediate
+     * retry or no retry attempts.</p>
      *
      * @param kafkaTemplate template used to publish exhausted records to the dead-letter topic
      * @param retryBackoffMs fixed delay between retry attempts in milliseconds; must be non-negative
