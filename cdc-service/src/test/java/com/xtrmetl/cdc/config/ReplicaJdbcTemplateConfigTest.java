@@ -146,6 +146,7 @@ class ReplicaJdbcTemplateConfigTest {
                 IllegalStateException.class,
                 () -> new ReplicaJdbcTemplateConfig().replicaDataSource(environment)
         );
+        assertNull(failure.getCause());
 
         boolean keyWasReported = false;
         for (Throwable current = failure; current != null; current = current.getCause()) {
@@ -154,6 +155,8 @@ class ReplicaJdbcTemplateConfigTest {
                 keyWasReported |= message.contains("REPLICA_HIKARI_INITIALIZATION_FAIL_TIMEOUT_MS");
                 assertFalse(message.contains(rejectedValue));
                 assertFalse(message.contains("Authorization: Bearer token"));
+                assertFalse(message.contains("\r"));
+                assertFalse(message.contains("\n"));
             }
         }
         assertTrue(keyWasReported);
