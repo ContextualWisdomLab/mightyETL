@@ -1,0 +1,17 @@
+spring:
+  config:
+    activate:
+      on-profile: local
+
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+
+logging:
+  level:
+    com:
+      xtrmetl: DEBUG
+    org:
+      springframework:
+        web: DEBUG
