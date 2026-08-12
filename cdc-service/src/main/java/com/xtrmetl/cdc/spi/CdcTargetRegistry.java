@@ -3,6 +3,7 @@ package com.xtrmetl.cdc.spi;
 import org.springframework.stereotype.Component;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -60,11 +61,11 @@ public class CdcTargetRegistry {
     }
 
     /**
-     * Returns all registered target connectors in registration order.
+     * Returns an unmodifiable live view of all registered target connectors in registration order.
      *
-     * @return registered target connectors
+     * @return unmodifiable registered target connectors
      */
     public Collection<CdcTargetConnector> all() {
-        return byId.values();
+        return Collections.unmodifiableCollection(byId.values());
     }
 }

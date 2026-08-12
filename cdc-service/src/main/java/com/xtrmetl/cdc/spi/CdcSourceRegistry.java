@@ -4,6 +4,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -90,11 +91,11 @@ public class CdcSourceRegistry {
     }
 
     /**
-     * Returns all registered source connectors in registration order.
+     * Returns an unmodifiable live view of all registered source connectors in registration order.
      *
-     * @return registered source connectors
+     * @return unmodifiable registered source connectors
      */
     public Collection<CdcSourceConnector> all() {
-        return byId.values();
+        return Collections.unmodifiableCollection(byId.values());
     }
 }
