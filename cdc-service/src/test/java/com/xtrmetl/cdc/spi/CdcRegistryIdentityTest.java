@@ -1,10 +1,15 @@
 package com.xtrmetl.cdc.spi;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 
+import java.lang.reflect.Constructor;
+import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -22,18 +27,21 @@ class CdcRegistryIdentityTest {
     void duplicateSourceConnectorIdsFailClosedInsteadOfReplacingRegistration() {
         CdcSourceConnector first = source("duplicate-source");
         CdcSourceConnector second = source("duplicate-source");
+        CdcSourceRegistry registry = new CdcSourceRegistry(List.of(first));
 
         IllegalArgumentException failure = assertThrows(
                 IllegalArgumentException.class,
-                () -> new CdcSourceRegistry(List.of(first, second))
+                () -> registry.register(second)
         );
 
         assertEquals("Duplicate CDC source connector id: duplicate-source", failure.getMessage());
+        assertSame(first, registry.find("duplicate-source").orElseThrow());
     }
 
     @Test
     void duplicateTargetConnectorIdsFailClosedInsteadOfReplacingRegistration() {
         CdcTargetRegistry registry = new CdcTargetRegistry();
+        CdcTargetConnector originalKafka = registry.find(KafkaCdcTargetConnector.ID).orElseThrow();
         CdcTargetConnector duplicateKafka = target(KafkaCdcTargetConnector.ID);
 
         IllegalArgumentException failure = assertThrows(
@@ -42,6 +50,21 @@ class CdcRegistryIdentityTest {
         );
 
         assertEquals("Duplicate CDC target connector id: kafka", failure.getMessage());
+        assertSame(originalKafka, registry.find(KafkaCdcTargetConnector.ID).orElseThrow());
+    }
+
+    @Test
+    void springDiscoveryConstructorIsExplicitlyAutowired() {
+        Constructor<?> discoveryConstructor = Arrays.stream(CdcSourceRegistry.class.getConstructors())
+                .filter(constructor -> Arrays.equals(
+                        constructor.getParameterTypes(),
+                        new Class<?>[]{ObjectProvider.class}
+                ))
+                .findFirst()
+                .orElseThrow();
+
+        assertTrue(discoveryConstructor.isAnnotationPresent(Autowired.class),
+                "Spring discovery constructor must be explicitly selected when other public constructors exist");
     }
 
     @Test
