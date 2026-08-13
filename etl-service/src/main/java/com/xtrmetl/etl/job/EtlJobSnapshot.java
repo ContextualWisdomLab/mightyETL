@@ -16,7 +16,8 @@ import java.util.UUID;
  * @param jobRecordId opaque durable job identifier
  * @param jobStatus current stable lifecycle state
  * @param attemptCount number of worker claims recorded for this job
- * @param failureCode stable terminal failure code, or {@code null} before failure
+ * @param failureCode non-blank stable terminal failure code when {@code jobStatus} is
+ *                    {@link EtlJobStatus#FAILED}; otherwise {@code null}
  * @param createdAt creation timestamp
  * @param updatedAt most recent state-change timestamp
  */
@@ -30,12 +31,12 @@ public record EtlJobSnapshot(
 ) {
 
     /**
-     * Validates the immutable status representation.
+     * Validates the immutable status representation and its lifecycle-dependent failure metadata.
      *
      * @param jobRecordId opaque durable job identifier
      * @param jobStatus current stable lifecycle state
      * @param attemptCount non-negative number of worker claims
-     * @param failureCode stable terminal failure code, or {@code null}
+     * @param failureCode non-blank stable failure code exactly when the job has failed
      * @param createdAt creation timestamp
      * @param updatedAt most recent state-change timestamp
      */
@@ -46,6 +47,17 @@ public record EtlJobSnapshot(
         Objects.requireNonNull(updatedAt, "updatedAt must not be null");
         if (attemptCount < 0) {
             throw new IllegalArgumentException("attemptCount must not be negative");
+        }
+        if (jobStatus == EtlJobStatus.FAILED) {
+            if (failureCode == null || failureCode.isBlank()) {
+                throw new IllegalArgumentException(
+                        "failureCode must be non-blank when jobStatus is FAILED"
+                );
+            }
+        } else if (failureCode != null) {
+            throw new IllegalArgumentException(
+                    "failureCode must be null unless jobStatus is FAILED"
+            );
         }
     }
 }

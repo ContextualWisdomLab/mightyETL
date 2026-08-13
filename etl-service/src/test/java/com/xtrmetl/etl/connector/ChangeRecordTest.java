@@ -2,7 +2,9 @@ package com.xtrmetl.etl.connector;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -39,6 +41,101 @@ class ChangeRecordTest {
         assertEquals("old", record.getBefore().get("status"));
         assertEquals("new", record.getAfter().get("status"));
         assertEquals(7L, record.getPk().get("id"));
+    }
+
+    @Test
+    void recursivelySnapshotsJsonShapedContainers() {
+        Map<String, Object> address = new LinkedHashMap<>();
+        address.put("city", "Seoul");
+        List<Object> tags = new ArrayList<>();
+        tags.add("priority");
+        tags.add(null);
+
+        Map<String, Object> after = new LinkedHashMap<>();
+        after.put("address", address);
+        after.put("tags", tags);
+
+        ChangeRecord record = new ChangeRecord(
+                "source",
+                "u",
+                "public",
+                "orders",
+                123L,
+                Map.of(),
+                after,
+                Map.of("id", 7L)
+        );
+
+        address.put("city", "Busan");
+        tags.set(0, "mutated");
+        tags.add("late");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> snapshottedAddress =
+                (Map<String, Object>) record.getAfter().get("address");
+        @SuppressWarnings("unchecked")
+        List<Object> snapshottedTags = (List<Object>) record.getAfter().get("tags");
+
+        assertEquals("Seoul", snapshottedAddress.get("city"));
+        assertEquals(2, snapshottedTags.size());
+        assertEquals("priority", snapshottedTags.get(0));
+        assertNull(snapshottedTags.get(1));
+    }
+
+    @Test
+    void nestedSnapshotContainersAreUnmodifiable() {
+        Map<String, Object> address = new LinkedHashMap<>();
+        address.put("city", "Seoul");
+        List<Object> tags = new ArrayList<>();
+        tags.add("priority");
+
+        Map<String, Object> after = new LinkedHashMap<>();
+        after.put("address", address);
+        after.put("tags", tags);
+
+        ChangeRecord record = new ChangeRecord(
+                "source",
+                "u",
+                "public",
+                "orders",
+                123L,
+                Map.of(),
+                after,
+                Map.of("id", 7L)
+        );
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> snapshottedAddress =
+                (Map<String, Object>) record.getAfter().get("address");
+        @SuppressWarnings("unchecked")
+        List<Object> snapshottedTags = (List<Object>) record.getAfter().get("tags");
+
+        assertThrows(UnsupportedOperationException.class,
+                () -> snapshottedAddress.put("city", "Busan"));
+        assertThrows(UnsupportedOperationException.class,
+                () -> snapshottedTags.add("late"));
+    }
+
+    @Test
+    void rejectsCyclicNestedContainersDeterministically() {
+        Map<String, Object> cyclic = new LinkedHashMap<>();
+        cyclic.put("self", cyclic);
+
+        IllegalArgumentException failure = assertThrows(
+                IllegalArgumentException.class,
+                () -> new ChangeRecord(
+                        "source",
+                        "c",
+                        "public",
+                        "orders",
+                        123L,
+                        Map.of(),
+                        Map.of("cycle", cyclic),
+                        Map.of("id", 7L)
+                )
+        );
+
+        assertEquals("ChangeRecord JSON containers must not contain cycles", failure.getMessage());
     }
 
     @Test
