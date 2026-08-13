@@ -383,6 +383,12 @@ public class EtlService {
     }
 
     private String transformValue(String key, @Nullable JsonNode valueNode) {
+        if ("AMOUNT".equals(key)) {
+            if (valueNode == null || !(valueNode.isNumber() || valueNode.isTextual())) {
+                throw invalidRecord();
+            }
+            return formatAmount(valueNode.asText());
+        }
         if (valueNode == null || valueNode.isNull()) {
             return "null";
         }
@@ -394,7 +400,6 @@ public class EtlService {
         return switch (key) {
             case "NAME" -> value.toUpperCase(Locale.ROOT);
             case "EMAIL" -> value.toLowerCase(Locale.ROOT);
-            case "AMOUNT" -> formatAmount(value);
             default -> value;
         };
     }
