@@ -44,9 +44,12 @@ Fields are transformed directly from the Jackson JSON tree; values are not split
 - `NAME` values use locale-independent uppercase conversion.
 - `EMAIL` values use locale-independent lowercase conversion.
 - `AMOUNT` values use `BigDecimal`, `HALF_UP`, scale `2`, and `toPlainString()`.
-- Invalid, excessive-precision, or extreme-scale amounts retain the legacy fallback `0.00` without expanding attacker-controlled exponents into huge strings.
+- Malformed, blank, excessive-precision, or extreme-scale `AMOUNT` values are rejected as invalid records before the first JDBC call instead of being rewritten to a valid-looking zero.
+- Batch admission remains all-or-nothing: if any record has an invalid `AMOUNT`, the request performs no database writes.
 - Nested arrays and objects are retained as compact JSON instead of collapsing to empty text.
 - Response lines remain `Processed: <id>` in input order. Identifier whitespace, ISO control, Unicode format-control, Unicode line-separator characters, and length are bounded so one record cannot inject, visually reorder, conceal, or amplify response lines.
+
+Rows created by historic releases that rewrote invalid amounts to zero cannot be distinguished from genuine zero values after the fact without independent source-system evidence. Reconcile affected historical data from an authoritative source before making accounting or compliance decisions.
 
 ## Configuration
 
@@ -73,6 +76,8 @@ Values outside the supported range fail configuration binding instead of silentl
 - Keep the payload limit aligned with gateway and ingress body-size limits. The service-level check occurs after the MVC stack has materialized the request string and is not a substitute for edge enforcement.
 - Keep the record limit below the transaction size that the target database can commit within the request timeout and lock budget.
 - Monitor request latency, transaction duration, rollback rate, database pool wait time, and rejected payload/record-limit errors before raising either limit.
+- Monitor invalid-record rejection rates and reconcile upstream amount-format changes before retrying rejected inputs.
+- Do not log raw amount values or request payloads when diagnosing rejections; use bounded request/error metadata instead.
 - Use descriptive string identifiers. Numeric JSON identifier types are rejected to keep identifier contracts explicit and stable across systems.
 
 ## Remaining boundary
