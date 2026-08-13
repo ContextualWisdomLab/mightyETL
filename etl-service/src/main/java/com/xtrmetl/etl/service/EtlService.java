@@ -400,18 +400,19 @@ public class EtlService {
     }
 
     private String formatAmount(String value) {
+        final BigDecimal amount;
         try {
-            BigDecimal amount = new BigDecimal(value.trim());
-            int scale = amount.scale();
-            if (amount.precision() > MAX_AMOUNT_PRECISION
-                    || scale < -MAX_AMOUNT_ABSOLUTE_SCALE
-                    || scale > MAX_AMOUNT_ABSOLUTE_SCALE) {
-                return "0.00";
-            }
-            return amount.setScale(2, RoundingMode.HALF_UP).toPlainString();
+            amount = new BigDecimal(value.trim());
         } catch (NumberFormatException exception) {
-            return "0.00";
+            throw invalidRecord();
         }
+        int scale = amount.scale();
+        if (amount.precision() > MAX_AMOUNT_PRECISION
+                || scale < -MAX_AMOUNT_ABSOLUTE_SCALE
+                || scale > MAX_AMOUNT_ABSOLUTE_SCALE) {
+            throw invalidRecord();
+        }
+        return amount.setScale(2, RoundingMode.HALF_UP).toPlainString();
     }
 
     private record StoredIdempotencyRecord(String requestDigest, String responseBody) {
