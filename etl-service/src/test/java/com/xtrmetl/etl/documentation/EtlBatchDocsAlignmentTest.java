@@ -46,6 +46,17 @@ class EtlBatchDocsAlignmentTest {
     }
 
     @Test
+    void runbookRejectsInvalidAmountsInsteadOfManufacturingZero() throws IOException {
+        String runbook = read("docs/etl/bounded-atomic-batches.md");
+
+        assertTrue(runbook.contains(
+                "Malformed, blank, excessive-precision, or extreme-scale `AMOUNT` values are rejected"
+        ));
+        assertTrue(runbook.contains("before the first JDBC call"));
+        assertFalse(runbook.contains("legacy fallback `0.00`"));
+    }
+
+    @Test
     void configurationAndChangelogUseTheSameLimits() throws IOException {
         String application = read("etl-service/src/main/resources/application.yml");
         String changelog = read("CHANGELOG.md");
@@ -54,6 +65,15 @@ class EtlBatchDocsAlignmentTest {
         assertTrue(application.contains("max-batch-records: ${ETL_MAX_BATCH_RECORDS:1000}"));
         assertTrue(changelog.contains("docs/etl/bounded-atomic-batches.md"));
         assertTrue(changelog.contains("retry only transient Spring data-access failures"));
+    }
+
+    @Test
+    void changelogRecordsFailClosedAmountIntegrity() throws IOException {
+        String changelog = read("CHANGELOG.md");
+
+        assertTrue(changelog.contains("invalid `AMOUNT` values fail closed"));
+        assertTrue(changelog.contains("genuine zero"));
+        assertFalse(changelog.contains("invalid `AMOUNT` values to `0.00`"));
     }
 
     private static String read(String relativePath) throws IOException {

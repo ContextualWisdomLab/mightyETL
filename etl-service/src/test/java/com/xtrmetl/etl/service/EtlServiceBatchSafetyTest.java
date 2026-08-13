@@ -274,15 +274,16 @@ class EtlServiceBatchSafetyTest {
     }
 
     @Test
-    void boundsExtremeDecimalInputsWithoutHugePlainStringExpansion() {
+    void rejectsExtremeDecimalInputsWithoutHugePlainStringExpansion() {
         EtlService service = service();
 
-        service.processData("[{\"id\":\"record_alpha\",\"amount\":\"1E+1000000\"}]");
-
-        verify(jdbcTemplate).update(
-                "INSERT INTO processed_data (data) VALUES (?)",
-                "ID:record_alpha,AMOUNT:0.00,"
+        EtlRequestException exception = assertThrows(
+                EtlRequestException.class,
+                () -> service.processData("[{\"id\":\"record_alpha\",\"amount\":\"1E+1000000\"}]")
         );
+
+        assertSame(EtlRequestError.INVALID_RECORD, exception.error());
+        verifyNoInteractions(jdbcTemplate);
     }
 
     @Test

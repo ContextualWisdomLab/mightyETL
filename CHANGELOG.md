@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ETL request errors now use RFC 9457 `application/problem+json` responses with a stable `errorCode`, fixed type URI, explicit 400/401/404/409/413/422/503/500 taxonomy, and no internal exception text in client responses.
 - ETL requests now enforce bounded UTF-8 payload and record-count limits, prevalidate and transform the complete batch before the first JDBC call, and commit accepted records inside one Spring transaction.
 - ETL transformations now preserve comma/colon-bearing values, use locale-independent text conversion and deterministic `BigDecimal` amount formatting, and retry only transient Spring data-access failures.
+- ETL amount integrity: invalid `AMOUNT` values fail closed before persistence instead of being rewritten to `0.00`, preserving the distinction from genuine zero values.
 - Product branding: user-facing docs and suggested image tags use **mightyETL** (formerly xtrmETL).
   - Legacy Java packages (`com.xtrmetl.*`), Maven `artifactId` `xtrmETL`, and some env/topic defaults remain for compatibility.
   - See `docs/rebrand-name-matrix.md`.
