@@ -4,9 +4,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DebeziumChangeRecordMapperTest {
@@ -84,5 +90,36 @@ class DebeziumChangeRecordMapperTest {
     void emptyValueReturnsEmpty() {
         assertTrue(mapper.map("s", "t", null, null).isEmpty());
         assertTrue(mapper.map("s", "t", null, "  ").isEmpty());
+    }
+
+    @Test
+    void productionMapperUsesSupportedJacksonPropertyIterationApi() throws IOException {
+        String source = Files.readString(
+                projectRoot().resolve("cdc-service/src/main/java/com/xtrmetl/cdc/spi/DebeziumChangeRecordMapper.java"),
+                StandardCharsets.UTF_8
+        );
+
+        assertFalse(source.contains("node.fields()"),
+                "JsonNode.fields() is deprecated since Jackson 2.19 and must not remain in production CDC code");
+        assertTrue(source.contains("node.properties()"),
+                "CDC object-node iteration must use the supported JsonNode.properties() API");
+    }
+
+    private static Path projectRoot() {
+        Path current = Paths.get(System.getProperty("user.dir")).toAbsolutePath();
+        Path lastPomParent = null;
+        while (current != null) {
+            if (Files.exists(current.resolve(".git"))) {
+                return current;
+            }
+            if (Files.exists(current.resolve("pom.xml"))) {
+                lastPomParent = current;
+            }
+            current = current.getParent();
+        }
+        if (lastPomParent != null) {
+            return lastPomParent;
+        }
+        throw new IllegalStateException("Could not find project root");
     }
 }
