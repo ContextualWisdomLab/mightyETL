@@ -38,6 +38,11 @@ import java.util.stream.Collectors;
  * batch back rather than leaving committed prefix records. The service intentionally avoids the
  * JVM common pool and one-task-per-record fan-out.</p>
  *
+ * <p>Synchronous request entry points own Spring Retry outside their transaction boundaries. A
+ * durable worker instead uses {@link #processDataInExistingTransaction(String)} exactly once per
+ * persisted attempt so the lease, target rows, response ledger, and terminal state remain in one
+ * database transaction and retry accounting stays in the durable job record.</p>
+ *
  * <p>Callers may optionally use {@link #processDataIdempotently(String, String, String)}. That
  * method attempts a principal-scoped transaction lock without waiting, replays a prior successful
  * response, and commits the ETL rows and durable ledger entry in the same transaction.</p>
@@ -142,8 +147,8 @@ public class EtlService {
     /**
      * Processes one JSON-array request as a prevalidated transaction-scoped batch.
      *
-     * <p>Only transient Spring data-access failures are retried. Typed input failures and
-     * deterministic target constraints fail immediately instead of repeating the same work.</p>
+     * <p>Only transient Spring data-access failures are retried. Retry advice wraps the transaction
+     * advice so every synchronous request attempt receives a fresh transaction.</p>
      *
      * @param data UTF-8 JSON array payload
      * @return one {@code Processed: <id>} line per record, in input order
@@ -157,6 +162,26 @@ public class EtlService {
     )
     @Transactional
     public String processData(@Nullable String data) {
+        return processDataInCurrentTransaction(data);
+    }
+
+    /**
+     * Processes one durable-job payload exactly once inside the caller's existing transaction.
+     *
+     * <p>This method deliberately has neither {@link Retryable} nor {@link Transactional}. The
+     * durable worker owns its persisted retry count and supplies the transaction that also contains
+     * its lease-fenced terminal transition and response-ledger write. An in-process retry inside
+     * that outer transaction could reuse an already failed transaction and would not represent a
+     * new durable attempt.</p>
+     *
+     * @param data retained UTF-8 JSON array payload
+     * @return one {@code Processed: <id>} line per record, in input order
+     * @throws IllegalStateException when the caller did not establish an actual transaction
+     * @throws EtlRequestException when the retained request violates a deterministic contract
+     * @throws org.springframework.dao.DataAccessException when the target database rejects work
+     */
+    public String processDataInExistingTransaction(@Nullable String data) {
+        requireActiveTransaction("Durable ETL execution requires an active transaction");
         return processDataInCurrentTransaction(data);
     }
 
@@ -200,7 +225,7 @@ public class EtlService {
         if (data == null) {
             throw new EtlRequestException(EtlRequestError.INVALID_JSON);
         }
-        requireActiveTransaction();
+        requireActiveTransaction("Idempotent ETL processing requires an active transaction");
         enforcePayloadLimit(data);
 
         String idempotencyKeyHash = sha256(
@@ -288,11 +313,9 @@ public class EtlService {
         return principalScope;
     }
 
-    private static void requireActiveTransaction() {
+    private static void requireActiveTransaction(String failureMessage) {
         if (!TransactionSynchronizationManager.isActualTransactionActive()) {
-            throw new IllegalStateException(
-                    "Idempotent ETL processing requires an active transaction"
-            );
+            throw new IllegalStateException(failureMessage);
         }
     }
 

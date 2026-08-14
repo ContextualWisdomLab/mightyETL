@@ -28,6 +28,12 @@ public class MightyEtlConfigAliasEnvironmentPostProcessor implements Environment
             "etl.max-payload-bytes",
             "etl.max-batch-records",
             "etl.jobs.intake-enabled",
+            "etl.jobs.worker.enabled",
+            "etl.jobs.worker.fixed-delay-milliseconds",
+            "etl.jobs.worker.initial-delay-milliseconds",
+            "etl.jobs.worker.lease-duration-seconds",
+            "etl.jobs.worker.max-attempts",
+            "etl.jobs.worker.lease-owner-id",
             "connectors.databricks.enabled",
             "connectors.snowflake.enabled",
             "connectors.qlik-sense.enabled"
