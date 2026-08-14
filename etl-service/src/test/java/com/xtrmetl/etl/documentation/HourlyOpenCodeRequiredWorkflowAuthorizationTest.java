@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class HourlyOpenCodeRequiredWorkflowAuthorizationTest {
 
     /**
-     * Requires the authorization loop to wait for, associate, and account for every required
+     * Requires the authorization loop to wait for, structurally associate, and account for every
      * workflow. The polling count and terminal diagnostic text are intentionally pinned because
      * they are part of the bounded authorization and operator-diagnostic contract.
      *
@@ -30,6 +30,16 @@ class HourlyOpenCodeRequiredWorkflowAuthorizationTest {
     @Test
     void waitsForEveryRequiredExactHeadWorkflow() throws IOException {
         String workflow = workflow();
+        String associatedRunSelection = between(
+                workflow,
+                "            jq -c \\\n              --arg expected_head",
+                "              ' \"${all_runs_file}\" > \"${runs_file}\""
+        );
+        String approvalLoop = between(
+                workflow,
+                "            while IFS= read -r run_id; do",
+                "            observed_workflow_names="
+        );
 
         assertTrue(workflow.contains(
                 "required_workflow_names='[\"CI\",\"Dependency Review\","
@@ -38,11 +48,21 @@ class HourlyOpenCodeRequiredWorkflowAuthorizationTest {
         assertTrue(workflow.contains("observed_workflow_names"));
         assertTrue(workflow.contains("missing_workflow_names"));
         assertTrue(workflow.contains("for _ in $(seq 1 18); do"));
-        assertTrue(workflow.contains(".head_sha == $expected_head"));
-        assertTrue(workflow.contains(
-                "any(.pull_requests[]?; .number == $pull_request_number)"
-        ));
-        assertTrue(workflow.contains("/actions/runs/${run_id}/approve"));
+        assertTrue(
+                associatedRunSelection.contains("select(.head_sha == $expected_head)"),
+                "The associated-run selection must bind the exact expected head"
+        );
+        assertTrue(
+                associatedRunSelection.contains(
+                        "select(any(.pull_requests[]?; .number == $pull_request_number))"
+                ),
+                "The same associated-run selection must bind the exact pull-request number"
+        );
+        assertAppearsBefore(
+                approvalLoop,
+                "gh api --method POST \"/repos/${repository}/actions/runs/${run_id}/approve\"",
+                "printf '%s\\n' \"${run_id}\" >> \"${approved_run_ids_file}\""
+        );
         assertTrue(workflow.contains("jq 'length' <<<\"${missing_workflow_names}\""));
         assertTrue(workflow.contains("Missing required exact-head workflows for PR"));
         assertTrue(workflow.contains("Authorized exact-head pull-request checks for PR"));
@@ -80,6 +100,36 @@ class HourlyOpenCodeRequiredWorkflowAuthorizationTest {
                 ),
                 "A run id must be recorded only after its approval request succeeds"
         );
+    }
+
+    /**
+     * Requires one marker to occur before another in the same authorization section.
+     *
+     * @param text authorization section being checked
+     * @param first marker that must execute first
+     * @param second marker that must execute later
+     */
+    private static void assertAppearsBefore(String text, String first, String second) {
+        int firstIndex = text.indexOf(first);
+        int secondIndex = text.indexOf(second);
+        assertTrue(firstIndex >= 0, () -> "Missing first marker: " + first);
+        assertTrue(secondIndex > firstIndex, () -> "Marker must appear after first marker: " + second);
+    }
+
+    /**
+     * Extracts a required text section between two ordered markers.
+     *
+     * @param text complete source text
+     * @param startMarker inclusive section marker
+     * @param endMarker exclusive section marker
+     * @return required section text
+     */
+    private static String between(String text, String startMarker, String endMarker) {
+        int start = text.indexOf(startMarker);
+        assertTrue(start >= 0, () -> "Missing start marker: " + startMarker);
+        int end = text.indexOf(endMarker, start + startMarker.length());
+        assertTrue(end > start, () -> "Missing end marker after start: " + endMarker);
+        return text.substring(start, end);
     }
 
     /**

@@ -38,6 +38,25 @@ class HourlyOpenCodeCandidateSelectionTest {
     }
 
     /**
+     * Requires unexpected remote publication movement to use a diagnostic that is accurate for
+     * either one or many remote candidates.
+     *
+     * @throws IOException when the workflow cannot be read
+     */
+    @Test
+    void reportsAnyUnexpectedRemotePublicationCandidateAccurately() throws IOException {
+        String workflow = workflowText();
+
+        assertTrue(workflow.contains(
+                "Remote publication candidates changed during the model job; "
+                        + "refusing to race another writer"
+        ));
+        assertFalse(workflow.contains(
+                "Multiple agent publication candidates were detected remotely"
+        ));
+    }
+
+    /**
      * Requires policy-file rejection at both deterministic publication boundaries.
      *
      * <p>The model job now has read-only repository credentials and produces only a local commit.
@@ -139,8 +158,8 @@ class HourlyOpenCodeCandidateSelectionTest {
      */
     private static String between(String text, String startMarker, String endMarker) {
         int start = text.indexOf(startMarker);
-        int end = text.indexOf(endMarker, start + startMarker.length());
         assertTrue(start >= 0, () -> "Missing start marker: " + startMarker);
+        int end = text.indexOf(endMarker, start + startMarker.length());
         assertTrue(end > start, () -> "Missing end marker after start: " + endMarker);
         return text.substring(start, end);
     }
