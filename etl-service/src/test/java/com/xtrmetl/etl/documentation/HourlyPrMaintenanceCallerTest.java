@@ -23,20 +23,28 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class HourlyPrMaintenanceCallerTest {
 
     private static String workflow;
+    private static String legacyDispositionWorkflow;
+    private static String documentation;
+    private static String changelog;
 
     /**
-     * Reads the production caller once with normalized line endings.
+     * Reads the production caller and its operator evidence once with normalized line endings.
      *
-     * @throws IOException when the workflow exists but cannot be read
+     * @throws IOException when a required repository artifact exists but cannot be read
      */
     @BeforeAll
     static void readWorkflow() throws IOException {
-        Path workflowPath = projectRoot().resolve(
+        Path root = projectRoot();
+        Path workflowPath = root.resolve(
                 ".github/workflows/hourly-pr-maintenance.yml"
         );
         assertTrue(Files.exists(workflowPath), "The hourly PR maintenance caller must exist");
-        workflow = Files.readString(workflowPath, StandardCharsets.UTF_8)
-                .replace("\r\n", "\n");
+        workflow = readNormalized(workflowPath);
+        legacyDispositionWorkflow = readNormalized(
+                root.resolve(".github/workflows/hourly-pr-disposition.yml")
+        );
+        documentation = readNormalized(root.resolve("docs/hourly-pr-disposition.md"));
+        changelog = readNormalized(root.resolve("CHANGELOG.md"));
     }
 
     /** Verifies one serialized run each hour with an explicit manual recovery trigger. */
@@ -76,6 +84,45 @@ class HourlyPrMaintenanceCallerTest {
         assertFalse(workflow.contains("COPILOT_GITHUB_TOKEN"));
         assertFalse(workflow.contains("NVIDIA_NIM_API_KEY"));
         assertFalse(workflow.contains("security-events: write"));
+    }
+
+    /** Verifies the previous local merger remains available only as a manual fail-closed fallback. */
+    @Test
+    void keepsLegacyDispositionAsManualOnlyFallback() {
+        assertTrue(legacyDispositionWorkflow.contains("workflow_dispatch:"));
+        assertFalse(legacyDispositionWorkflow.contains("schedule:"));
+        assertFalse(legacyDispositionWorkflow.contains("cron: \"11 * * * *\""));
+    }
+
+    /** Verifies operators can identify the one scheduled authority and its manual fallback. */
+    @Test
+    void documentsCentralAuthorityAndManualFallback() {
+        assertTrue(documentation.contains(".github/workflows/hourly-pr-maintenance.yml"));
+        assertTrue(documentation.contains("minute 17"));
+        assertTrue(documentation.contains("centrally governed"));
+        assertTrue(documentation.contains(".github/workflows/hourly-pr-disposition.yml"));
+        assertTrue(documentation.contains("manual fail-closed fallback"));
+        assertTrue(documentation.contains("no duplicate scheduled merge authority"));
+    }
+
+    /** Verifies the maintenance-authority change is discoverable in release history. */
+    @Test
+    void recordsMaintenanceAuthorityChange() {
+        assertTrue(changelog.contains("Hourly pull-request maintenance"));
+        assertTrue(changelog.contains("manual fail-closed fallback"));
+    }
+
+    /**
+     * Reads one UTF-8 repository artifact and normalizes platform line endings.
+     *
+     * @param path repository artifact to read
+     * @return normalized UTF-8 text
+     * @throws IOException when the artifact cannot be read
+     */
+    private static String readNormalized(Path path) throws IOException {
+        return Files.readString(path, StandardCharsets.UTF_8)
+                .replace("\r\n", "\n")
+                .replace('\r', '\n');
     }
 
     /**
