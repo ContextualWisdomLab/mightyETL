@@ -24,7 +24,8 @@ import java.net.URI;
  * <p>The advice is scoped to the synchronous and durable-job ETL controllers; unrelated
  * controllers retain their existing exception contracts. Every client-visible field is fixed by a
  * typed definition. Raw exception messages, SQL details, credentials, paths, causes, and stack
- * traces are never copied into the HTTP body. Covered responses use
+ * traces are never copied into the HTTP body. Ordinary failure logs keep bounded classifications
+ * without request resource paths or owner-scoped identifiers. Covered responses use
  * {@code Cache-Control: no-store} so authenticated operational failures are not retained by shared
  * or private caches. Spring MVC routing and response-negotiation failures are deliberately not
  * captured by a broad exception handler and therefore retain their framework-owned status
@@ -58,11 +59,7 @@ public class EtlApiProblemHandler {
             HttpServletRequest request
     ) {
         EtlRequestError error = exception.error();
-        log.debug(
-                "Rejected ETL request path={} code={}",
-                request.getRequestURI(),
-                error.errorCode()
-        );
+        log.debug("Rejected ETL request code={}", error.errorCode());
         return problem(
                 error.status(),
                 error.type(),
@@ -86,8 +83,7 @@ public class EtlApiProblemHandler {
             HttpServletRequest request
     ) {
         log.debug(
-                "Rejected unreadable ETL request path={} exceptionType={}",
-                request.getRequestURI(),
+                "Rejected unreadable ETL request exceptionType={}",
                 exception.getClass().getName()
         );
         EtlRequestError error = EtlRequestError.INVALID_JSON;
@@ -114,8 +110,7 @@ public class EtlApiProblemHandler {
             HttpServletRequest request
     ) {
         log.warn(
-                "Transient ETL target failure path={} exceptionType={}",
-                request.getRequestURI(),
+                "Transient ETL target failure exceptionType={}",
                 exception.getClass().getName()
         );
         return problem(
@@ -141,8 +136,7 @@ public class EtlApiProblemHandler {
             HttpServletRequest request
     ) {
         log.error(
-                "ETL target failure path={} exceptionType={}",
-                request.getRequestURI(),
+                "ETL target failure exceptionType={}",
                 exception.getClass().getName()
         );
         return problem(
@@ -168,8 +162,7 @@ public class EtlApiProblemHandler {
             HttpServletRequest request
     ) {
         log.error(
-                "Unexpected ETL failure path={} exceptionType={}",
-                request.getRequestURI(),
+                "Unexpected ETL failure exceptionType={}",
                 exception.getCause().getClass().getName()
         );
         return problem(
