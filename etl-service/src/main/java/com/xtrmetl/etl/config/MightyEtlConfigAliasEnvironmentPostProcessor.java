@@ -29,8 +29,29 @@ public class MightyEtlConfigAliasEnvironmentPostProcessor implements Environment
             "etl.max-batch-records",
             "etl.jobs.intake-enabled",
             "connectors.databricks.enabled",
+            "connectors.databricks.host",
+            "connectors.databricks.http-path",
+            "connectors.databricks.token",
+            "connectors.databricks.catalog",
+            "connectors.databricks.schema",
+            "connectors.databricks.table",
+            "connectors.databricks.write-mode",
             "connectors.snowflake.enabled",
-            "connectors.qlik-sense.enabled"
+            "connectors.snowflake.account",
+            "connectors.snowflake.warehouse",
+            "connectors.snowflake.database",
+            "connectors.snowflake.schema",
+            "connectors.snowflake.user",
+            "connectors.snowflake.password",
+            "connectors.snowflake.private-key",
+            "connectors.snowflake.role",
+            "connectors.snowflake.table",
+            "connectors.snowflake.merge-keys",
+            "connectors.qlik-sense.enabled",
+            "connectors.qlik-sense.tenant-url",
+            "connectors.qlik-sense.api-key",
+            "connectors.qlik-sense.app-id",
+            "connectors.qlik-sense.mode"
     );
 
     /**

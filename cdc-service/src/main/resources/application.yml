@@ -46,9 +46,6 @@ xtrmetl:
     ddl-blocked-prefixes: ${REPLICA_DDL_BLOCKED_PREFIXES:DROP TABLE,DROP SCHEMA,DROP DATABASE,TRUNCATE}
 
 management:
-  tracing:
-    sampling:
-      probability: 1.0
   zipkin:
     tracing:
       endpoint: http://${ZIPKIN_HOST:localhost}:9412/api/v2/spans
@@ -69,10 +66,5 @@ eureka:
 logging:
   level:
     root: INFO
-    com:
-      xtrmetl: DEBUG
     io:
       debezium: INFO
-    org:
-      springframework:
-        web: DEBUG

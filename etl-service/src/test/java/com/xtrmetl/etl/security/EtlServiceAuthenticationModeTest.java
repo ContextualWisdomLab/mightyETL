@@ -9,27 +9,25 @@ import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
+import org.springframework.test.context.web.WebAppConfiguration;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.context.WebApplicationContext;
-import org.springframework.test.context.web.WebAppConfiguration;
 import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.security.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.security.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Exercises the registered ETL {@link SecurityConfig} rather than a source-text approximation.
+ * Exercises the registered ETL {@link SecurityConfig} default-deny posture.
  *
- * <p>The protected service currently accepts HTTP Basic on {@code /api/**}. The acquisition-ready
- * target in issue #161 requires independently authenticated ETL access without retaining Basic as
- * the secure production mechanism. This fail-first contract gives the current Basic filter a real
- * valid test principal and proves that those credentials can still authenticate through the actual
- * Spring Security filter chain.</p>
+ * <p>A valid user known only to the historical HTTP Basic mechanism must not regain access to
+ * {@code /api/**}. Deployments must explicitly select JWT mode and provide issuer and audience
+ * authority before workload endpoints can be reached.</p>
  */
 @SpringJUnitConfig(classes = {
         SecurityConfig.class,
