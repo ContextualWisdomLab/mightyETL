@@ -1,6 +1,7 @@
 package com.xtrmetl.cdc.spi;
 
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.Collection;
@@ -29,6 +30,7 @@ public class CdcSourceRegistry {
      * @param connectors ordered provider of source connector beans
      * @throws IllegalArgumentException when a discovered connector has an invalid or duplicate id
      */
+    @Autowired
     public CdcSourceRegistry(ObjectProvider<CdcSourceConnector> connectors) {
         connectors.orderedStream().forEach(this::register);
         if (byId.isEmpty()) {
