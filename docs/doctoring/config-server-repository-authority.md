@@ -28,7 +28,7 @@ Rejected alternatives:
 - treat repository credentials as proof that a destination is authorized;
 - treat a YAML `String.contains` test as live fail-closed evidence.
 
-The selected remedy keeps the explicit `${CONFIG_REPO_URI}` token and adds `ConfigServerRepositoryAuthorityValidator` on every non-`native` profile. That bean rejects blank, unresolved `${CONFIG_REPO_URI...}`, and the retired demo remote before JGit can run. Config Server HTTP authentication, Git credentials, trust material, retry and timeout policy, readiness, repository support status, and service-to-service identity remain separate controls.
+The selected remedy keeps the explicit `${CONFIG_REPO_URI}` token and registers `ConfigServerRepositoryAuthorityEnvironmentPostProcessor` after config-data load. That processor rejects blank, Unicode-padded blank, unresolved `${CONFIG_REPO_URI...}`, request-templated `{application}` / `{profile}` / `{label}` locations, and the retired `github.com/your-repo/config-repo` destination (any case, with or without `.git`, HTTPS or `git@`) before JGit `afterPropertiesSet`. `ConfigServerRepositoryAuthorityValidator` remains as defense in depth on every non-`native` profile. Combining `native` with `prod` or `production` fails unless `xtrmetl.config.allow-native=true`. Config Server HTTP authentication, Git credentials, trust material, retry and timeout policy, readiness, repository support status, and service-to-service identity remain separate controls.
 
 ## Spring Cloud Config 5.0.4 contract
 
@@ -44,7 +44,7 @@ Git credentials are deployment secrets, not repository authority. They must be e
 
 A missing or blank `CONFIG_REPO_URI` on the default profile is a deployment-configuration failure. The process must stop with a finite message that names `CONFIG_REPO_URI`. That failure is safer and more actionable than contacting an invented external repository or serving misleading configuration from an empty URI.
 
-The `native` profile remains independently startable without `CONFIG_REPO_URI` so inbound-security fixtures and local filesystem backends keep working. Do not use `native` to bypass destination authority in a composed production topology.
+The `native` profile remains independently startable without `CONFIG_REPO_URI` so inbound-security fixtures and local filesystem backends keep working. Do not use `native` to bypass destination authority in a composed production topology. A `native,prod` or `native,production` mix is a configuration failure unless an operator sets `xtrmetl.config.allow-native=true` for an approved fixture.
 
 Repository URLs and provider exceptions can expose internal hostnames, usernames, paths, query parameters, or credentials. Ordinary observability should retain finite configuration and fetch outcome classifications rather than raw credential-bearing URLs or unrestricted exception text. This is purpose-bound diagnostic minimization, not blanket PII masking.
 
@@ -58,7 +58,7 @@ No central orchestrator, gateway, or sibling service acquires authority to rewri
 
 ## Evidence and replacement lineage
 
-`ConfigServerRepositoryAuthorityLiveTest` starts `ConfigServerApplication` on the default servlet profile and requires startup failure for unset and blank `CONFIG_REPO_URI`. `ConfigServerRepositoryAuthorityTest` and `ConfigServerRepositoryAuthorityValidatorTest` cover null, whitespace, unresolved placeholder, demo remote, and explicit `https` / `file:` values. `ConfigServerRepositoryConfigurationTest` keeps the YAML token and doctoring contract from PR #189 / #322. Old PR #189 must not merge separately after this unique work is accepted.
+`ConfigServerRepositoryAuthorityLiveTest` starts `ConfigServerApplication` on the default servlet profile. Blank and retired-demo URIs with `clone-on-start=true` must fail with the authority message, which is the evidence that the processor ran before JGit clone. Unset `CONFIG_REPO_URI` must fail with that message or Spring's unresolved-placeholder failure. `native,prod` must fail with the native/production message. `ConfigServerRepositoryAuthorityEnvironmentPostProcessorTest` covers blank, demo, trim, native skip, and native+prod opt-in. `ConfigServerRepositoryAuthorityTest` covers null, ASCII blank, NBSP/ZWSP, `${CONFIG_REPO_URI:}` defaults, case and no-`.git` demo variants, `git@` demo, request templates, padded `https`, `ssh`, `file:`, and a non-demo nested path. `ConfigServerRepositoryConfigurationTest` pins the exact YAML token with no default colon. Old PR #189 / #322 / #327 must not merge separately after this unique work is accepted.
 
 Canonical PRD, TRD, Architecture, UML, Security, Threat Model, Operability, and Traceability must represent this capability as `active_pr` until protected integration. The documentation must not infer that Config Server became a shipped default component merely because repository authority was hardened.
 
@@ -69,5 +69,9 @@ Spring Boot. (2026). *Externalized configuration*. https://docs.spring.io/spring
 Spring Cloud Config. (2026). *Config Server (Spring Cloud Config 5.0.4)*. https://docs.spring.io/spring-cloud-config/reference/server.html
 
 Spring Cloud Config. (2026). *Git backend (Spring Cloud Config 5.0.4)*. https://docs.spring.io/spring-cloud-config/reference/server/environment-repository/git-backend.html
+
+Spring Boot. (2026). *EnvironmentPostProcessor*. https://docs.spring.io/spring-boot/api/java/org/springframework/boot/env/EnvironmentPostProcessor.html
+
+Spring Boot. (2026). *SpringApplication*. https://docs.spring.io/spring-boot/reference/features/spring-application.html
 
 Spring Cloud Config. (2026). *Security (Spring Cloud Config 5.0.4)*. https://docs.spring.io/spring-cloud-config/reference/server/security.html

@@ -6,10 +6,13 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 /**
- * Fails default-profile startup when Git repository authority is not explicit.
+ * Defense-in-depth fail-closed check after context refresh begins.
  *
- * <p>The {@code native} profile is excluded so reviewed local fixtures can start
- * without a remote. Do not use {@code native} as a production fallback.</p>
+ * <p>{@link ConfigServerRepositoryAuthorityEnvironmentPostProcessor} is the
+ * authority that runs before JGit. This bean remains so a missing processor
+ * registration still stops the default profile. The {@code native} profile is
+ * excluded so reviewed local fixtures can start without a remote. Do not use
+ * {@code native} as a production fallback.</p>
  */
 @Component
 @Profile("!native")
