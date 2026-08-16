@@ -1,18 +1,22 @@
 # Config Server repository authority doctoring
 
-**Capability status:** `active_pr` via replacement PR #322; not `implemented_on_develop` until protected integration.  
-**Protected baseline assessed:** `develop@d6c6665163eabe1b5eca80556c6963bafd6b2625`  
+**Capability status:** `active_pr` via repair of replacement PR #322; not `implemented_on_develop` until protected integration.  
+**Protected baseline assessed:** `develop@e8373b7193019e72b7a860c9f14d109fe7963ee7`  
 **Component:** Spring Cloud Config 5.0.4, managed through the repository's Spring Cloud 2025.0.3 release train
 
 ## Decision boundary
 
-mightyETL's independently runnable Config Server Git backend must have explicit deployment-owned repository authority. The deployable property `spring.cloud.config.server.git.uri` therefore uses only `${CONFIG_REPO_URI}` and has no example, demo, guessed, or implicit remote fallback. Missing repository authority must fail closed before remote Git access instead of silently selecting a destination that the operator did not approve.
+mightyETL's independently runnable Config Server Git backend must have explicit deployment-owned repository authority. The deployable property `spring.cloud.config.server.git.uri` uses only `${CONFIG_REPO_URI}` and has no example, demo, guessed, or implicit remote fallback. Missing, blank, unresolved, or demo repository authority must fail closed at default-profile startup, before remote Git access.
 
 This is a narrow destination-authority decision, not a claim that Config Server is part of the default supported topology. The protected Compose profile does not establish Config Server as a required production dependency. A later product decision may promote, constrain, or retire the module, but none of those outcomes requires retaining a fake repository fallback.
+
+Operators: export `CONFIG_REPO_URI` to the reviewed Git URI, then start the default profile. Use the `native` profile only for local fixtures that must not depend on a remote. Do not start the default profile with a blank secret.
 
 ## Root cause and rejected alternatives
 
 The prior configuration used a syntactically valid default resembling `https://github.com/your-repo/config-repo.git`. That deferred a missing deployment decision into an outbound network attempt while providing no real ownership, provenance, credential, availability, change-control, or recovery contract.
+
+Removing the demo default alone is not fail-closed. On Spring Cloud Config 5.0.4, `JGitEnvironmentRepository.afterPropertiesSet` accepts a non-null empty URI when `cloneOnStart` is false. Local evidence on `50ddcc0` showed both unset and blank `CONFIG_REPO_URI` starting Tomcat and exposing `/actuator` before any Git work. Spring also left `${CONFIG_REPO_URI}` unresolved instead of failing Environment bootstrap, so a YAML token change cannot be the only control.
 
 Rejected alternatives:
 
@@ -21,15 +25,16 @@ Rejected alternatives:
 - embed credentials in `CONFIG_REPO_URI` or repository source;
 - enable `skipSslValidation` to make an untrusted repository reachable;
 - discover repository authority through mutable remote bootstrap code;
-- treat repository credentials as proof that a destination is authorized.
+- treat repository credentials as proof that a destination is authorized;
+- treat a YAML `String.contains` test as live fail-closed evidence.
 
-The selected remedy changes only repository selection. Config Server HTTP authentication, Git credentials, trust material, retry and timeout policy, readiness, repository support status, and service-to-service identity remain separate controls.
+The selected remedy keeps the explicit `${CONFIG_REPO_URI}` token and adds `ConfigServerRepositoryAuthorityValidator` on every non-`native` profile. That bean rejects blank, unresolved `${CONFIG_REPO_URI...}`, and the retired demo remote before JGit can run. Config Server HTTP authentication, Git credentials, trust material, retry and timeout policy, readiness, repository support status, and service-to-service identity remain separate controls.
 
 ## Spring Cloud Config 5.0.4 contract
 
 Spring Cloud Config documents `spring.cloud.config.server.git.uri` as the Git environment-repository location. Local filesystem repositories can be useful for deliberately configured development or testing, while production repository location and access remain deployment decisions. mightyETL externalizes this authority through `CONFIG_REPO_URI` rather than assigning a product-owned demo default.
 
-`cloneOnStart` can surface an invalid repository during startup instead of first request. Replacement PR #322 deliberately does not enable it because that would change startup and network-availability semantics beyond the demonstrated fake-fallback defect. If Config Server becomes a supported profile, fail-early cloning must be evaluated together with bounded connect/fetch timeouts, readiness, retry, recovery, and SLO policy.
+`cloneOnStart` can surface an invalid repository during startup instead of first request. This repair still does not enable it, because fail-early cloning changes startup and network-availability semantics beyond destination authority. Blank-authority rejection is a local configuration check and does not need a clone. If Config Server becomes a supported profile, fail-early cloning must be evaluated together with bounded connect/fetch timeouts, readiness, retry, recovery, and SLO policy.
 
 TLS certificate validation remains enabled. The documented `skipSslValidation` escape hatch must not become a convenience default. Private Git services needing custom roots require explicit trust-material provenance and rotation rather than global certificate-verification bypass.
 
@@ -37,11 +42,13 @@ Git credentials are deployment secrets, not repository authority. They must be e
 
 ## Failure, privacy, and operability semantics
 
-With no fallback, a missing `CONFIG_REPO_URI` is a deployment-configuration failure. That failure is safer and more actionable than contacting an invented external repository and possibly serving misleading configuration.
+A missing or blank `CONFIG_REPO_URI` on the default profile is a deployment-configuration failure. The process must stop with a finite message that names `CONFIG_REPO_URI`. That failure is safer and more actionable than contacting an invented external repository or serving misleading configuration from an empty URI.
+
+The `native` profile remains independently startable without `CONFIG_REPO_URI` so inbound-security fixtures and local filesystem backends keep working. Do not use `native` to bypass destination authority in a composed production topology.
 
 Repository URLs and provider exceptions can expose internal hostnames, usernames, paths, query parameters, or credentials. Ordinary observability should retain finite configuration and fetch outcome classifications rather than raw credential-bearing URLs or unrestricted exception text. This is purpose-bound diagnostic minimization, not blanket PII masking.
 
-Rollback must never restore the demo remote. When an approved repository is unavailable, the safe choices are to disable or not deploy Config Server, restore the approved repository service, or supply another explicitly authorized repository through a reviewed deployment change. A deliberate local-development `file:` URI belongs in an explicit profile, not in a production fallback.
+Rollback must never restore the demo remote. When an approved repository is unavailable, the safe choices are to disable or not deploy Config Server, restore the approved repository service, or supply another explicitly authorized repository through a reviewed deployment change. A deliberate local-development `file:` URI belongs in an explicit operator-supplied `CONFIG_REPO_URI` or the `native` profile, not in a production fallback.
 
 ## Standalone and modular MSA implications
 
@@ -51,14 +58,16 @@ No central orchestrator, gateway, or sibling service acquires authority to rewri
 
 ## Evidence and replacement lineage
 
-`ConfigServerRepositoryAuthorityLiveTest` on replacement PR #322 establishes current-base RED against the real deployable YAML. `ConfigServerRepositoryConfigurationTest` preserves the earlier behavior and doctoring contracts from PR #189. The replacement branch carries both tests plus the one-line production correction and this source-backed evidence; old PR #189 must not merge separately after exact unique-work preservation and current-head acceptance are proven.
+`ConfigServerRepositoryAuthorityLiveTest` starts `ConfigServerApplication` on the default servlet profile and requires startup failure for unset and blank `CONFIG_REPO_URI`. `ConfigServerRepositoryAuthorityTest` and `ConfigServerRepositoryAuthorityValidatorTest` cover null, whitespace, unresolved placeholder, demo remote, and explicit `https` / `file:` values. `ConfigServerRepositoryConfigurationTest` keeps the YAML token and doctoring contract from PR #189 / #322. Old PR #189 must not merge separately after this unique work is accepted.
 
 Canonical PRD, TRD, Architecture, UML, Security, Threat Model, Operability, and Traceability must represent this capability as `active_pr` until protected integration. The documentation must not infer that Config Server became a shipped default component merely because repository authority was hardened.
 
 ## References (APA 7)
 
+Spring Boot. (2026). *Externalized configuration*. https://docs.spring.io/spring-boot/reference/features/external-config.html
+
+Spring Cloud Config. (2026). *Config Server (Spring Cloud Config 5.0.4)*. https://docs.spring.io/spring-cloud-config/reference/server.html
+
 Spring Cloud Config. (2026). *Git backend (Spring Cloud Config 5.0.4)*. https://docs.spring.io/spring-cloud-config/reference/server/environment-repository/git-backend.html
 
 Spring Cloud Config. (2026). *Security (Spring Cloud Config 5.0.4)*. https://docs.spring.io/spring-cloud-config/reference/server/security.html
-
-Spring Cloud Config. (2026). *Config Server (Spring Cloud Config 5.0.4)*. https://docs.spring.io/spring-cloud-config/reference/server.html

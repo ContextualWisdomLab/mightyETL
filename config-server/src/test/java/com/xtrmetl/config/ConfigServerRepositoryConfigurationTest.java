@@ -48,6 +48,8 @@ class ConfigServerRepositoryConfigurationTest {
         assertTrue(doctoring.contains("CONFIG_REPO_URI"));
         assertTrue(doctoring.contains("cloneOnStart"));
         assertTrue(doctoring.contains("skipSslValidation"));
+        assertTrue(doctoring.contains("ConfigServerRepositoryAuthorityValidator"));
+        assertTrue(doctoring.contains("blank"));
         assertTrue(doctoring.contains("https://docs.spring.io/spring-cloud-config/reference/server/environment-repository/git-backend.html"));
         assertTrue(doctoring.contains("https://docs.spring.io/spring-cloud-config/reference/server/security.html"));
         assertTrue(doctoring.contains("APA 7"));

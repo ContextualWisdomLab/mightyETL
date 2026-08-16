@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Config Server default Git profile now rejects unset, blank, unresolved, and demo `CONFIG_REPO_URI` values at startup. Removing the example remote is not enough: Spring Cloud Config 5.0.4 still boots with an empty URI when `cloneOnStart` is false. Set `CONFIG_REPO_URI` to a reviewed Git URI before starting the default profile; use `native` only for local fixtures.
 - Production container builds now use digest-pinned Docker base images while retaining readable Maven/Temurin tags, preventing upstream tag movement from silently changing reviewed build inputs.
 - Durable `POST /api/etl/jobs` submissions now return RFC 9110 `202 Accepted`, a stable pending-job representation, `Location` status-monitor metadata, and explicit replay metadata without changing the synchronous `/api/etl/process` contract. The incomplete intake controller is fail-closed and requires explicit `xtrmetl.etl.jobs.intake-enabled=true` operator opt-in until worker execution and terminal payload clearing are implemented.
 - Concurrent requests using the same authenticated-principal-scoped semantic idempotency key now return immediate RFC 9457 `409 etl_idempotency_request_in_progress` responses through PostgreSQL `pg_try_advisory_xact_lock`; retries after completion still replay the committed response.
