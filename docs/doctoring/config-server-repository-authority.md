@@ -1,8 +1,21 @@
 # Config Server repository authority doctoring
 
-**Capability status:** `active_pr` via repair of replacement PR #322; not `implemented_on_develop` until protected integration.  
+**Capability status:** `active_pr` via repair of #327 / #322; not `implemented_on_develop` until protected integration.  
 **Protected baseline assessed:** `develop@e8373b7193019e72b7a860c9f14d109fe7963ee7`  
 **Component:** Spring Cloud Config 5.0.4, managed through the repository's Spring Cloud 2025.0.3 release train
+
+```mermaid
+flowchart TD
+  start[Start Config Server] --> native{native profile active?}
+  native -->|yes| prod{prod or production also active?}
+  prod -->|yes| allow{xtrmetl.config.allow-native=true?}
+  allow -->|no| failNative[Stop. Export CONFIG_REPO_URI and start the default Git profile, or set allow-native only for an approved fixture]
+  allow -->|yes| fixtures[Continue native fixtures]
+  prod -->|no| fixtures
+  native -->|no| uri{CONFIG_REPO_URI a reviewed concrete Git destination?}
+  uri -->|blank, unresolved, demo, or template| failUri[Stop. Export CONFIG_REPO_URI to the reviewed repository, then start again]
+  uri -->|yes| git[Bind the Git backend]
+```
 
 ## Decision boundary
 
