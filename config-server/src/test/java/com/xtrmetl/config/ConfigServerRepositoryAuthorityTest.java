@@ -32,12 +32,28 @@ class ConfigServerRepositoryAuthorityTest {
                 IllegalStateException.class,
                 () -> ConfigServerRepositoryAuthority.requireExplicitRepository("${CONFIG_REPO_URI}")
         );
-        assertThrows(
-                IllegalStateException.class,
-                () -> ConfigServerRepositoryAuthority.requireExplicitRepository(
-                        "https://github.com/your-repo/config-repo.git"
-                )
-        );
+        for (String demoRemote : new String[] {
+                "https://github.com/your-repo/config-repo.git",
+                "https://github.com/your-repo/config-repo",
+                "HTTPS://GITHUB.COM/YOUR-REPO/CONFIG-REPO.GIT",
+                "https://github.com/your-repo/config-repo/"
+        }) {
+            assertThrows(
+                    IllegalStateException.class,
+                    () -> ConfigServerRepositoryAuthority.requireExplicitRepository(demoRemote),
+                    () -> "Retired demo repository must be rejected: " + demoRemote
+            );
+        }
+    }
+
+    @Test
+    void demoRepositoryMatchingDoesNotRejectUnrelatedPaths() {
+        assertDoesNotThrow(() -> ConfigServerRepositoryAuthority.requireExplicitRepository(
+                "https://github.com/acme/your-repo/config-repo.git"
+        ));
+        assertDoesNotThrow(() -> ConfigServerRepositoryAuthority.requireExplicitRepository(
+                "https://github.com/your-repo/config-repo-backup.git"
+        ));
     }
 
     @Test
