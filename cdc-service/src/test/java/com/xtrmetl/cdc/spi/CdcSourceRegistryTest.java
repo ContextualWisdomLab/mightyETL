@@ -20,62 +20,62 @@ class CdcSourceRegistryTest {
 
     @Test
     void defaultConstructorRegistersPostgresOnly() {
-        CdcSourceRegistry registry = new CdcSourceRegistry();
+        CdcSourceRegistry sourceRegistry = new CdcSourceRegistry();
 
-        assertEquals(1, registry.all().size());
-        CdcSourceConnector source = registry.find(PostgresDebeziumCdcSource.ID).orElseThrow();
-        assertEquals("PostgreSQL (Debezium embedded)", source.displayName());
-        assertFalse(source.capabilities().scaffoldOnly());
-        assertTrue(source.capabilities().databases().contains("postgresql"));
+        assertEquals(1, sourceRegistry.all().size());
+        CdcSourceConnector postgresSource = sourceRegistry.find(PostgresDebeziumCdcSource.SOURCE_ID).orElseThrow();
+        assertEquals("PostgreSQL (Debezium embedded)", postgresSource.displayName());
+        assertFalse(postgresSource.capabilities().scaffoldOnly());
+        assertTrue(postgresSource.capabilities().databases().contains("postgresql"));
     }
 
     @Test
     void postgresSpiStartAndStopDelegateToCdcService() throws Exception {
-        CdcService service = mock(CdcService.class);
-        ObjectProvider<CdcService> provider = providerFor(service);
-        PostgresDebeziumCdcSource source = new PostgresDebeziumCdcSource(provider);
+        CdcService cdcService = mock(CdcService.class);
+        ObjectProvider<CdcService> cdcServiceProvider = providerFor(cdcService);
+        PostgresDebeziumCdcSource postgresSource = new PostgresDebeziumCdcSource(cdcServiceProvider);
 
-        source.validate(Map.of());
-        source.start(Map.of());
-        source.stop();
+        postgresSource.validate(Map.of());
+        postgresSource.start(Map.of());
+        postgresSource.stop();
 
-        verify(service).start();
-        verify(service).stop();
+        verify(cdcService).start();
+        verify(cdcService).stop();
     }
 
     @Test
     void registersScaffoldSourcesWhenProvided() {
-        CdcSourceRegistry registry = new CdcSourceRegistry(List.of(
+        CdcSourceRegistry sourceRegistry = new CdcSourceRegistry(List.of(
                 new PostgresDebeziumCdcSource(),
                 new MysqlDebeziumCdcSource(),
                 new SqlServerDebeziumCdcSource()
         ));
 
-        assertEquals(3, registry.all().size());
-        assertTrue(registry.find(MysqlDebeziumCdcSource.ID).orElseThrow().capabilities().scaffoldOnly());
-        assertTrue(registry.find(SqlServerDebeziumCdcSource.ID).orElseThrow().capabilities().scaffoldOnly());
+        assertEquals(3, sourceRegistry.all().size());
+        assertTrue(sourceRegistry.find(MysqlDebeziumCdcSource.SOURCE_ID).orElseThrow().capabilities().scaffoldOnly());
+        assertTrue(sourceRegistry.find(SqlServerDebeziumCdcSource.SOURCE_ID).orElseThrow().capabilities().scaffoldOnly());
     }
 
-    private static ObjectProvider<CdcService> providerFor(CdcService service) {
+    private static ObjectProvider<CdcService> providerFor(CdcService cdcService) {
         return new ObjectProvider<>() {
             @Override
             public CdcService getObject() {
-                return service;
+                return cdcService;
             }
 
             @Override
             public CdcService getObject(Object... args) {
-                return service;
+                return cdcService;
             }
 
             @Override
             public CdcService getIfAvailable() {
-                return service;
+                return cdcService;
             }
 
             @Override
             public CdcService getIfUnique() {
-                return service;
+                return cdcService;
             }
         };
     }
