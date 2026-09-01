@@ -14,7 +14,7 @@ import java.util.Optional;
 @Component
 public class TargetConnectorRegistry {
 
-    private final Map<String, TargetConnector> byId = new LinkedHashMap<>();
+    private final Map<String, TargetConnector> targetConnectorsById = new LinkedHashMap<>();
 
     public TargetConnectorRegistry() {
         register(new DatabricksTargetConnector());
@@ -22,15 +22,15 @@ public class TargetConnectorRegistry {
         register(new QlikSenseTargetConnector());
     }
 
-    public final void register(TargetConnector connector) {
-        byId.put(connector.id(), connector);
+    public final void register(TargetConnector targetConnector) {
+        targetConnectorsById.put(targetConnector.targetId(), targetConnector);
     }
 
-    public Optional<TargetConnector> find(String id) {
-        return Optional.ofNullable(byId.get(id));
+    public Optional<TargetConnector> find(String targetId) {
+        return Optional.ofNullable(targetConnectorsById.get(targetId));
     }
 
     public Collection<TargetConnector> all() {
-        return byId.values();
+        return targetConnectorsById.values();
     }
 }
