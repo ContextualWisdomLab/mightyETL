@@ -19,18 +19,18 @@ class CdcSourceRegistrySpringWiringTest {
 
     @Test
     void springContextRegistersDiscoveredSourceConnectorBean() {
-        TestSourceConnector connector = new TestSourceConnector();
+        TestSourceConnector sourceConnector = new TestSourceConnector();
 
-        try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext()) {
-            context.registerBean(CdcSourceConnector.class, () -> connector);
-            context.register(CdcSourceRegistry.class);
-            context.refresh();
+        try (AnnotationConfigApplicationContext applicationContext = new AnnotationConfigApplicationContext()) {
+            applicationContext.registerBean(CdcSourceConnector.class, () -> sourceConnector);
+            applicationContext.register(CdcSourceRegistry.class);
+            applicationContext.refresh();
 
-            CdcSourceRegistry registry = context.getBean(CdcSourceRegistry.class);
+            CdcSourceRegistry sourceRegistry = applicationContext.getBean(CdcSourceRegistry.class);
 
             assertSame(
-                    connector,
-                    registry.find(connector.id()).orElseThrow(),
+                    sourceConnector,
+                    sourceRegistry.find(sourceConnector.sourceId()).orElseThrow(),
                     "Spring must construct the registry through its connector-provider constructor"
             );
         }
@@ -39,8 +39,15 @@ class CdcSourceRegistrySpringWiringTest {
     private static final class TestSourceConnector implements CdcSourceConnector {
 
         @Override
-        public String id() {
+        public String sourceId() {
             return "test_source";
+        }
+
+        /** @deprecated compatibility fixture for the historical SPI accessor. */
+        @Override
+        @Deprecated(forRemoval = false)
+        public String id() {
+            return sourceId();
         }
 
         @Override
@@ -54,12 +61,12 @@ class CdcSourceRegistrySpringWiringTest {
         }
 
         @Override
-        public void validate(Map<String, String> config) {
+        public void validate(Map<String, String> sourceConfig) {
             // No configuration is required for this constructor-selection regression fixture.
         }
 
         @Override
-        public void start(Map<String, String> config) {
+        public void start(Map<String, String> sourceConfig) {
             // No runtime capture is required for this constructor-selection regression fixture.
         }
 
