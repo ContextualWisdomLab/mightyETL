@@ -103,11 +103,11 @@ public final class PostgresDebeziumCdcSource implements CdcSourceConnector {
     @Override
     public void validate(Map<String, String> sourceConfig) {
         if (sourceConfig == null) {
-            throw new IllegalArgumentException("sourceConfig must not be null");
+            throw new IllegalArgumentException("config must not be null");
         }
         if (!sourceConfig.isEmpty()) {
             throw new IllegalArgumentException(
-                    "postgres-debezium uses deployment-owned configuration; per-call sourceConfig must be empty"
+                    "postgres-debezium uses deployment-owned configuration; per-call config must be empty"
             );
         }
     }
