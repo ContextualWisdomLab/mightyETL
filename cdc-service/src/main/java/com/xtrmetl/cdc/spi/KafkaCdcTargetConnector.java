@@ -54,7 +54,7 @@ public final class KafkaCdcTargetConnector implements CdcTargetConnector {
     @Override
     public void validate(Map<String, String> targetConfig) {
         if (targetConfig == null) {
-            throw new IllegalArgumentException("targetConfig must not be null");
+            throw new IllegalArgumentException("config must not be null");
         }
     }
 
