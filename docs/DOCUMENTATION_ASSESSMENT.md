@@ -8,7 +8,7 @@
 
 Protected `develop` is **not acquisition-documentation sufficient**. Its historical root documents do not fully describe the bounded transactional ETL, principal-scoped idempotency, durable intake, current trust boundaries, evidence semantics, or live commercial-readiness work.
 
-PR #149 is the single canonical remediation line. On this active branch, Architecture, ADR, UML, ERD/logical data modeling, Test Strategy, and Traceability are now code-current enough to be `present_current`; that does not make them protected product truth. PRD and TRD remain `present_stale` relative to later cross-cutting work. Security/Threat Model, Operability/recovery, release/provenance/licensing, and data-governance implementation evidence remain incomplete. Issue #159 tracks protected integration and continuing live reconciliation.
+PR #149 is the single canonical remediation line. On this active branch, Architecture, ADR, UML, ERD/logical data modeling, Test Strategy, Traceability, and the repository-source licensing decision are now code-current enough to be `present_current`; that does not make them protected product truth. PRD and TRD remain `present_stale` relative to later cross-cutting work. Security/Threat Model, Operability/recovery, release/provenance, and third-party licensing/attribution evidence remain incomplete. Issue #159 tracks protected integration and continuing live reconciliation.
 
 File count is not the completion criterion. A purchaser must be able to distinguish protected implementation, active pull requests, accepted decisions, known gaps, external artifacts, and measured operational evidence without reconstructing chat or PR bodies.
 
@@ -50,7 +50,7 @@ An active PR is never shipped truth.
 | Test Strategy | `present_current` on PR #149 | It rejects zero-class coverage, focused-as-repository-wide claims, synthetic-as-literal evidence, and incomplete Maven dependency graphs; protected controls remain gaps |
 | Operability / recovery | `partial` | PR #208 supplies active backup/restore provenance, but destructive-loss application recovery, external-effect reconciliation, and measured RPO/RTO are absent |
 | Traceability | `present_current` on PR #149 | Current live work and ADR-0009..0014 are bound without promotion to shipped truth |
-| Release / provenance / licensing | `missing_or_partial` | Issue #151 and issue #165 remain unresolved; automation cannot choose a license or invent release acceptance |
+| Release / provenance / licensing | `partial` | PR #149 now carries an Apache-2.0 grant for mightyETL original source/documentation; third-party/imported-material inventory, attribution/packaging enforcement, release provenance, and protected integration remain incomplete under #151/#165 |
 | Data governance / privacy / retention | `partial` | ADR-0011 and ADR-0014 define authority, but DLT, payload, deletion, residency, tenant, and privileged-evidence controls are not protected implementation |
 | Agent guidance | `active_pr` | PR #121 and issue #154 own protected runtime alignment; external scheduler wording is not repository implementation |
 | Changelog | `partial` | Current documentation work is discoverable, but protected integration and later product merges still require exact release entries |
@@ -83,6 +83,8 @@ Protected PR workflows can run a GitHub synthetic merge rather than the literal 
 
 A check, status, model judgment, SBOM, scanner result, formal review, merge, protected runtime proof, artifact, provenance, licensing decision, and publication verification are separate authorities under ADR-0012.
 
+The repository-source licensing decision is now explicit on PR #149: mightyETL original source and documentation use Apache-2.0. That grant does not relicense third-party dependencies, container bases, bundled tools/assets, standards, or generated artifacts. Issue #151 remains the diligence owner for complete provenance/attribution and packaging enforcement rather than a reason to leave first-party source rights ambiguous.
+
 ## Live work opened after the canonical spine was drafted
 
 The following references are intentionally preserved as unshipped evidence:
@@ -94,7 +96,7 @@ The following references are intentionally preserved as unshipped evidence:
 - issue #196 and issue #205 evidence-completeness work;
 - PR #222 and PR #228 structured snapshot integrity;
 - PR #224, PR #226, and PR #230 public bootstrap/environment/configuration documentation;
-- issue #151 licensing/copyright authority and issue #159 documentation completion.
+- issue #151 third-party provenance/attribution and packaging enforcement, issue #165 release/provenance authority, and issue #159 documentation completion.
 
 No item above is `implemented_on_develop` merely because it is described here.
 
@@ -126,7 +128,7 @@ The whole documentation graph remains insufficient on protected `develop` until 
 3. machine-readable API/event contracts integrate from PR #157;
 4. source, dependency graph, non-vacuous focused and repository-wide coverage evidence is complete;
 5. identity, schema, DLT, recovery, runtime, connector, and data-governance implementations reach protected history or remain explicitly known gaps;
-6. issue #151 licensing and issue #165 release/provenance authority are resolved by eligible owners;
+6. issue #151 completes third-party provenance/attribution and distributable-license enforcement, while issue #165 resolves release/provenance authority; the first-party Apache-2.0 grant on PR #149 must integrate rather than remain branch-only;
 7. protected operational acceptance proves actual behavior without inventing certification, RPO, RTO, SLO, or disaster-recovery attainment;
 8. issue #159 closes only after machine-checkable live traceability remains current after integration.
 
@@ -134,6 +136,7 @@ The whole documentation graph remains insufficient on protected `develop` until 
 
 - **Design-document spine on PR #149:** substantially sufficient and internally structured.
 - **Architecture/ADR/UML/ERD on PR #149:** `present_current` after the cross-cutting repair.
+- **First-party source/documentation license on PR #149:** Apache-2.0; third-party/release diligence remains partial until protected integration and #151/#165 completion.
 - **PRD/TRD/Security/Operability/release authority:** still incomplete or stale.
 - **Protected `develop`:** not acquisition-documentation sufficient.
 - **Whole repository:** not release-ready or acquisition-ready merely because the documentation tests pass.
