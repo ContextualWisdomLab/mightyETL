@@ -8,11 +8,26 @@ import java.util.Map;
  */
 public final class JdbcReplicaCdcTargetConnector implements CdcTargetConnector {
 
-    public static final String ID = "jdbc-replica";
+    public static final String TARGET_ID = "jdbc-replica";
+
+    /**
+     * @deprecated compatibility alias; organization-owned callers use {@link #TARGET_ID}
+     */
+    @Deprecated(forRemoval = false)
+    public static final String ID = TARGET_ID;
 
     @Override
+    public String targetId() {
+        return TARGET_ID;
+    }
+
+    /**
+     * @deprecated compatibility alias; organization-owned callers use {@link #targetId()}
+     */
+    @Override
+    @Deprecated(forRemoval = false)
     public String id() {
-        return ID;
+        return targetId();
     }
 
     @Override
@@ -36,14 +51,14 @@ public final class JdbcReplicaCdcTargetConnector implements CdcTargetConnector {
     }
 
     @Override
-    public void validate(Map<String, String> config) {
-        if (config == null) {
-            throw new IllegalArgumentException("config must not be null");
+    public void validate(Map<String, String> targetConfig) {
+        if (targetConfig == null) {
+            throw new IllegalArgumentException("targetConfig must not be null");
         }
     }
 
     @Override
-    public void write(List<CanonicalChangeRecord> batch) {
+    public void write(List<CanonicalChangeRecord> changeBatch) {
         throw new UnsupportedOperationException(
                 "Replica apply is owned by ProcessedDataReplicaApplier (table processed_data only); "
                         + "SPI write path not wired. See docs/cdc/ops-and-reliability.md"
