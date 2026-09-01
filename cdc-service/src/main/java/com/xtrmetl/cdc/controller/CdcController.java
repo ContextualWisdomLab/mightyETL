@@ -24,7 +24,7 @@ import java.util.stream.Collectors;
 public class CdcController {
 
     private final CdcService cdcService;
-    private final XtrmetlProperties properties;
+    private final XtrmetlProperties xtrmetlProperties;
     private final CdcSourceRegistry sourceRegistry;
     private final CdcTargetRegistry targetRegistry;
     private final CdcSourceFactory sourceFactory;
@@ -32,14 +32,14 @@ public class CdcController {
 
     public CdcController(
             CdcService cdcService,
-            XtrmetlProperties properties,
+            XtrmetlProperties xtrmetlProperties,
             CdcSourceRegistry sourceRegistry,
             CdcTargetRegistry targetRegistry,
             CdcSourceFactory sourceFactory,
             ReplicationSlotProbe replicationSlotProbe
     ) {
         this.cdcService = cdcService;
-        this.properties = properties;
+        this.xtrmetlProperties = xtrmetlProperties;
         this.sourceRegistry = sourceRegistry;
         this.targetRegistry = targetRegistry;
         this.sourceFactory = sourceFactory;
@@ -48,64 +48,70 @@ public class CdcController {
 
     @GetMapping("/status")
     @Observed(name = "cdc.status", contextualName = "cdc-status")
-    public ResponseEntity<Map<String, Object>> status() {
-        Map<String, Object> body = new LinkedHashMap<>(cdcService.getStatus());
-        body.put("replicaEnabled", properties.getReplica().isEnabled());
-        body.put("replicaDdlEnabled", properties.getReplica().isDdlEnabled());
-        body.put("replicaTopicPattern", properties.getReplica().getTopicPattern());
-        body.put("replicaTables", properties.getReplica().getTables());
-        body.put("replicationSlot", replicationSlotProbe.probeConfiguredSlot());
-        body.put("configuredSources", sourceFactory.describeConfigured(
-                properties.getCdc().getSources().stream()
-                        .map(s -> new CdcSourceFactory.SourceSpec(s.getId(), s.getType(), s.isEnabled()))
+    public ResponseEntity<Map<String, Object>> cdcStatus() {
+        Map<String, Object> statusBody = new LinkedHashMap<>(cdcService.getStatus());
+        statusBody.put("replicaEnabled", xtrmetlProperties.getReplica().isEnabled());
+        statusBody.put("replicaDdlEnabled", xtrmetlProperties.getReplica().isDdlEnabled());
+        statusBody.put("replicaTopicPattern", xtrmetlProperties.getReplica().getTopicPattern());
+        statusBody.put("replicaTables", xtrmetlProperties.getReplica().getTables());
+        statusBody.put("replicationSlot", replicationSlotProbe.probeConfiguredSlot());
+        statusBody.put("configuredSources", sourceFactory.describeConfigured(
+                xtrmetlProperties.getCdc().getSources().stream()
+                        .map(sourceConfiguration -> new CdcSourceFactory.SourceSpec(
+                                sourceConfiguration.getSourceId(),
+                                sourceConfiguration.getSourceType(),
+                                sourceConfiguration.isEnabled()
+                        ))
                         .collect(Collectors.toList())
         ));
-        body.put("registeredSources", sourceRegistry.all().stream()
-                .map(this::sourceEntry)
+        statusBody.put("registeredSources", sourceRegistry.all().stream()
+                .map(this::sourceRegistryEntry)
                 .collect(Collectors.toList()));
-        body.put("registeredTargets", targetRegistry.all().stream()
-                .map(target -> {
-                    Map<String, Object> entry = new LinkedHashMap<>();
-                    entry.put("id", target.id());
-                    entry.put("displayName", target.displayName());
-                    entry.put("scaffoldOnly", target.scaffoldOnly());
-                    return entry;
+        statusBody.put("registeredTargets", targetRegistry.all().stream()
+                .map(targetConnector -> {
+                    Map<String, Object> targetEntry = new LinkedHashMap<>();
+                    targetEntry.put("id", targetConnector.id());
+                    targetEntry.put("displayName", targetConnector.displayName());
+                    targetEntry.put("scaffoldOnly", targetConnector.scaffoldOnly());
+                    return targetEntry;
                 })
                 .collect(Collectors.toList()));
-        return ResponseEntity.ok(body);
+        return ResponseEntity.ok(statusBody);
     }
 
     @GetMapping("/sources")
     @Observed(name = "cdc.sources", contextualName = "cdc-sources")
-    public ResponseEntity<List<Map<String, Object>>> sources() {
+    public ResponseEntity<List<Map<String, Object>>> cdcSources() {
         return ResponseEntity.ok(sourceRegistry.all().stream()
-                .map(this::sourceEntry)
+                .map(this::sourceRegistryEntry)
                 .collect(Collectors.toList()));
     }
 
     @GetMapping("/targets")
     @Observed(name = "cdc.targets", contextualName = "cdc-targets")
-    public ResponseEntity<List<Map<String, Object>>> targets() {
-        List<Map<String, Object>> body = targetRegistry.all().stream()
-                .map(target -> {
-                    Map<String, Object> entry = new LinkedHashMap<>();
-                    entry.put("id", target.id());
-                    entry.put("displayName", target.displayName());
-                    entry.put("scaffoldOnly", target.scaffoldOnly());
-                    return entry;
+    public ResponseEntity<List<Map<String, Object>>> cdcTargets() {
+        List<Map<String, Object>> targetEntries = targetRegistry.all().stream()
+                .map(targetConnector -> {
+                    Map<String, Object> targetEntry = new LinkedHashMap<>();
+                    targetEntry.put("id", targetConnector.id());
+                    targetEntry.put("displayName", targetConnector.displayName());
+                    targetEntry.put("scaffoldOnly", targetConnector.scaffoldOnly());
+                    return targetEntry;
                 })
                 .collect(Collectors.toList());
-        return ResponseEntity.ok(body);
+        return ResponseEntity.ok(targetEntries);
     }
 
-    private Map<String, Object> sourceEntry(com.xtrmetl.cdc.spi.CdcSourceConnector source) {
-        Map<String, Object> entry = new LinkedHashMap<>();
-        entry.put("id", source.id());
-        entry.put("displayName", source.displayName());
-        entry.put("engine", source.capabilities().engine());
-        entry.put("databases", source.capabilities().databases());
-        entry.put("scaffoldOnly", source.capabilities().scaffoldOnly());
-        return entry;
+    private Map<String, Object> sourceRegistryEntry(
+            com.xtrmetl.cdc.spi.CdcSourceConnector sourceConnector
+    ) {
+        Map<String, Object> sourceEntry = new LinkedHashMap<>();
+        sourceEntry.put("id", sourceConnector.id());
+        sourceEntry.put("displayName", sourceConnector.displayName());
+        sourceEntry.put("engine", sourceConnector.capabilities().engine());
+        sourceEntry.put("databases", sourceConnector.capabilities().databases());
+        sourceEntry.put("scaffoldOnly", sourceConnector.capabilities().scaffoldOnly());
+        return sourceEntry;
     }
 
     @PostMapping("/start")
@@ -121,8 +127,10 @@ public class CdcController {
         try {
             cdcService.stop();
             return ResponseEntity.ok("CDC process stopped");
-        } catch (IOException e) {
-            return ResponseEntity.internalServerError().body("Error stopping CDC process: " + e.getMessage());
+        } catch (IOException stopFailure) {
+            return ResponseEntity.internalServerError().body(
+                    "Error stopping CDC process: " + stopFailure.getMessage()
+            );
         }
     }
 }
