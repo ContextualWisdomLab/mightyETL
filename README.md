@@ -1,5 +1,7 @@
 # mightyETL — Enterprise ETL and CDC Platform
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ContextualWisdomLab/mightyETL)
+
 mightyETL is a modular Spring-based data-movement platform for **bounded atomic ETL**, **durable retry/job state**, and **PostgreSQL change data capture**. It can be operated as standalone ETL/CDC services or composed behind Gateway/Eureka/Config/observability infrastructure.
 
 > **Formerly xtrmETL.** Product-facing naming is **mightyETL**. Java packages (`com.xtrmetl.*`), Maven coordinates, and some configuration/topic defaults remain legacy compatibility surfaces; see [docs/rebrand-name-matrix.md](docs/rebrand-name-matrix.md).
@@ -262,4 +264,4 @@ Do not release because one PR is green. A release requires the exact integrated 
 
 ## License
 
-No repository license file is present on the protected baseline assessed by this documentation set. Do not assume redistribution or reuse rights; establish and review the intended license before external distribution or acquisition diligence relies on one.
+mightyETL original source and documentation are licensed under the [Apache License 2.0](LICENSE). Third-party dependencies, container bases, bundled tools/assets, standards, and generated artifacts retain their own commercially compatible terms and attribution requirements; this repository license does not relicense them.
