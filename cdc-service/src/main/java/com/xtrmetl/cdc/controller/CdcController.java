@@ -70,7 +70,7 @@ public class CdcController {
         statusBody.put("registeredTargets", targetRegistry.all().stream()
                 .map(targetConnector -> {
                     Map<String, Object> targetEntry = new LinkedHashMap<>();
-                    targetEntry.put("id", targetConnector.id());
+                    targetEntry.put("id", targetConnector.targetId());
                     targetEntry.put("displayName", targetConnector.displayName());
                     targetEntry.put("scaffoldOnly", targetConnector.scaffoldOnly());
                     return targetEntry;
@@ -93,7 +93,7 @@ public class CdcController {
         List<Map<String, Object>> targetEntries = targetRegistry.all().stream()
                 .map(targetConnector -> {
                     Map<String, Object> targetEntry = new LinkedHashMap<>();
-                    targetEntry.put("id", targetConnector.id());
+                    targetEntry.put("id", targetConnector.targetId());
                     targetEntry.put("displayName", targetConnector.displayName());
                     targetEntry.put("scaffoldOnly", targetConnector.scaffoldOnly());
                     return targetEntry;
@@ -106,7 +106,7 @@ public class CdcController {
             com.xtrmetl.cdc.spi.CdcSourceConnector sourceConnector
     ) {
         Map<String, Object> sourceEntry = new LinkedHashMap<>();
-        sourceEntry.put("id", sourceConnector.id());
+        sourceEntry.put("id", sourceConnector.sourceId());
         sourceEntry.put("displayName", sourceConnector.displayName());
         sourceEntry.put("engine", sourceConnector.capabilities().engine());
         sourceEntry.put("databases", sourceConnector.capabilities().databases());
