@@ -10,9 +10,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class TargetConnectorSemanticIdentityTest {
 
     @Test
-    void targetConnectorExposesTargetIdentityBySemanticName() {
+    @SuppressWarnings("deprecation")
+    void targetConnectorExposesSemanticIdentityAndPreservesLegacyAlias() {
         TargetConnector databricksTargetConnector = new DatabricksTargetConnector();
 
         assertEquals("databricks", databricksTargetConnector.targetId());
+        assertEquals(databricksTargetConnector.targetId(), databricksTargetConnector.id());
     }
 }
