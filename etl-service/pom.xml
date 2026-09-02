@@ -98,12 +98,6 @@
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
                 <version>0.8.15</version>
-                <configuration>
-                    <includes>
-                        <include>com.xtrmetl.etl.job.*</include>
-                        <include>com.xtrmetl.etl.controller.EtlJobController*</include>
-                    </includes>
-                </configuration>
                 <executions>
                     <execution>
                         <id>prepare-durable-job-coverage</id>
@@ -118,6 +112,12 @@
                         <goals>
                             <goal>report</goal>
                         </goals>
+                        <configuration>
+                            <includes>
+                                <include>com/xtrmetl/etl/job/*.class</include>
+                                <include>com/xtrmetl/etl/controller/EtlJobController*.class</include>
+                            </includes>
+                        </configuration>
                     </execution>
                     <execution>
                         <id>check-durable-job-coverage</id>
@@ -126,14 +126,19 @@
                             <goal>check</goal>
                         </goals>
                         <configuration>
+                            <includes>
+                                <include>com/xtrmetl/etl/job/*.class</include>
+                                <include>com/xtrmetl/etl/controller/EtlJobController*.class</include>
+                            </includes>
                             <rules>
                                 <rule>
-                                    <element>CLASS</element>
-                                    <includes>
-                                        <include>com.xtrmetl.etl.job.*</include>
-                                        <include>com.xtrmetl.etl.controller.EtlJobController*</include>
-                                    </includes>
+                                    <element>BUNDLE</element>
                                     <limits>
+                                        <limit>
+                                            <counter>CLASS</counter>
+                                            <value>TOTALCOUNT</value>
+                                            <minimum>1</minimum>
+                                        </limit>
                                         <limit>
                                             <counter>INSTRUCTION</counter>
                                             <value>MISSEDCOUNT</value>
