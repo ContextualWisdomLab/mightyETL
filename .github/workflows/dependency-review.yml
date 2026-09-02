@@ -7,24 +7,8 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
-
 jobs:
   dependency-review:
-    if: ${{ github.event.repository.private == false }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Dependency Review
-        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
-        with:
-          fail-on-severity: high
-
-  dependency-review-private-note:
-    if: ${{ github.event.repository.private == true }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Document unavailability on private repositories
-        run: |
-          echo "Dependency Review Action requires Dependency Graph + GitHub Advanced Security on private repositories."
-          echo "Using Dependabot + Scorecard workflows as baseline coverage until GHAS is enabled."
+    uses: ContextualWisdomLab/.github/.github/workflows/dependency-review.yml@main
+    with:
+      fail_on_severity: high
