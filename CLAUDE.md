@@ -8,5 +8,6 @@ Contributor and agent guidance for this repository.
 - Never commit secrets, credentials, `.env` files, or private keys.
 - Do not commit or push unless a human explicitly asks.
 - For workflow edits, run local YAML parsing and `actionlint` on edited files.
+- Config Server default Git profile requires `CONFIG_REPO_URI` and must fail closed on blank, unresolved, request-templated, or demo authority before JGit. `native` plus `prod`/`production` requires `xtrmetl.config.allow-native=true`. See `docs/doctoring/config-server-repository-authority.md`.
 
 If any guidance here conflicts with `AGENTS.md`, `AGENTS.md` wins.

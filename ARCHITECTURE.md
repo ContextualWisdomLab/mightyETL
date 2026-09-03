@@ -588,7 +588,7 @@ ETL Processing with Retry:
 | ETL Service | 8000 | HTTP | Internal |
 | CDC Service | 8001 | HTTP | Internal |
 | Eureka Server | 8761 | HTTP | Internal |
-| Config Server | 8888 | HTTP | Internal |
+| Config Server | 8888 | HTTP | Internal; optional module, not a default Compose dependency. Default Git profile requires `CONFIG_REPO_URI` and fails closed on blank, unresolved, request-templated, or demo authority before JGit. Use `native` only for local fixtures; `native` plus `prod`/`production` requires `xtrmetl.config.allow-native=true`. |
 | PostgreSQL | 5432 | TCP | Internal |
 | Kafka | 9092 | TCP | Internal |
 | Zipkin | 9412 | HTTP | Internal |
