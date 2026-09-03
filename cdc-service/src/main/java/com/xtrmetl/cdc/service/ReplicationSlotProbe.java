@@ -45,15 +45,31 @@ public class ReplicationSlotProbe {
 
     private final JdbcTemplate jdbcTemplate;
 
+    /**
+     * Creates an operator probe backed by the primary PostgreSQL datasource.
+     *
+     * @param jdbcTemplate datasource client used to read replication-slot state
+     */
     public ReplicationSlotProbe(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
     }
 
+    /**
+     * Reads the slot selected by {@code CDC_SLOT_NAME}, or the default slot when unset.
+     *
+     * @return finite operator status that never exposes database diagnostics
+     */
     public Map<String, Object> probeConfiguredSlot() {
         String slotName = EnvUtils.getEnv("CDC_SLOT_NAME", "xtrmetl_slot");
         return probeSlot(slotName);
     }
 
+    /**
+     * Reads one logical replication slot and converts database failures into stable status data.
+     *
+     * @param slotName PostgreSQL replication-slot identifier to inspect
+     * @return slot state, not-found state, or a confidential fail-open classification
+     */
     public Map<String, Object> probeSlot(String slotName) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("slotName", slotName);
@@ -78,11 +94,12 @@ public class ReplicationSlotProbe {
             result.put("flushLagBytes", toLong(row.get("flush_lag_bytes")));
             return result;
         } catch (DataAccessException e) {
-            log.debug("Replication slot probe failed for {}: {}", slotName, e.toString());
+            log.debug("Replication slot probe query failed with classification {}",
+                    e.getClass().getSimpleName());
             result.put("available", false);
             result.put("found", false);
             result.put("error", "query_failed");
-            result.put("message", safeMessage(e));
+            result.put("message", "Replication slot state unavailable");
             return result;
         }
     }
@@ -100,16 +117,5 @@ public class ReplicationSlotProbe {
         } catch (NumberFormatException e) {
             return null;
         }
-    }
-
-    private static String safeMessage(DataAccessException e) {
-        String msg = e.getMostSpecificCause() != null
-                ? e.getMostSpecificCause().getMessage()
-                : e.getMessage();
-        if (msg == null || msg.isBlank()) {
-            return e.getClass().getSimpleName();
-        }
-        // Avoid leaking connection strings if drivers embed them.
-        return msg.length() > 200 ? msg.substring(0, 200) + "…" : msg;
     }
 }
