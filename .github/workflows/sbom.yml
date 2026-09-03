@@ -2,14 +2,8 @@ name: SBOM (CycloneDX)
 
 on:
   pull_request:
-    paths-ignore:
-      - "docs/**"
-      - "*.md"
   push:
     branches: [main]
-    paths-ignore:
-      - "docs/**"
-      - "*.md"
   workflow_dispatch:
     inputs:
       use_self_hosted:
