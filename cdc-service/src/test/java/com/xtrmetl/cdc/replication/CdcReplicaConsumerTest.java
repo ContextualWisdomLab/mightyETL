@@ -6,9 +6,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -40,6 +41,22 @@ class CdcReplicaConsumerTest {
 
         verify(schemaChangeReplicaApplier).apply("xtrmetl-cdc.schema-changes", "k", "v");
         verify(processedDataReplicaApplier, never()).apply("xtrmetl-cdc.schema-changes", "k", "v");
+    }
+
+    @Test
+    void ignoresDeadLetterTopicSoRecoveryCannotCreateDltChains() {
+        CdcReplicaConsumer consumer = new CdcReplicaConsumer(processedDataReplicaApplier, schemaChangeReplicaApplier);
+        ConsumerRecord<String, String> record = new ConsumerRecord<>(
+                "xtrmetl-cdc.public.processed_data.DLT",
+                0,
+                0L,
+                "k",
+                "poison"
+        );
+
+        consumer.onMessage(record);
+
+        verifyNoInteractions(processedDataReplicaApplier, schemaChangeReplicaApplier);
     }
 
     @Test
