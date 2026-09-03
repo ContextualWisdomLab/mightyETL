@@ -3,28 +3,24 @@ name: Dependency Review
 on:
   pull_request:
 
+permissions:
+  contents: read
+  pull-requests: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
-
 jobs:
   dependency-review:
-    if: ${{ github.event.repository.private == false }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Dependency Review
-        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
-        with:
-          fail-on-severity: high
-
-  dependency-review-private-note:
-    if: ${{ github.event.repository.private == true }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Document unavailability on private repositories
-        run: |
-          echo "Dependency Review Action requires Dependency Graph + GitHub Advanced Security on private repositories."
-          echo "Using Dependabot + Scorecard workflows as baseline coverage until GHAS is enabled."
+    uses: ContextualWisdomLab/.github/.github/workflows/dependency-review.yml@5f8e5b2a79e709c4ab1a4179a605d34c458b13a1
+    with:
+      fail_on_severity: high
+      # The central workflow's default comment_summary_in_pr ("on-failure")
+      # forwards to dependency-review-action's comment-summary-in-pr, which
+      # needs pull-requests: write to post a PR comment. This caller only
+      # grants pull-requests: read, so an actual failure would try to comment
+      # without permission (CodeRabbit). No PR summary comment is needed here
+      # -- the job's own pass/fail status is the signal -- so this opts out
+      # explicitly rather than escalating to write.
+      comment_summary_in_pr: never
