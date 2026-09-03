@@ -1,0 +1,31 @@
+name: Hourly PR maintenance
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: hourly-pr-maintenance
+  cancel-in-progress: false
+
+permissions:
+  actions: write
+  checks: read
+  contents: write
+  id-token: write
+  pull-requests: write
+
+jobs:
+  maintain-pull-requests:
+    uses: ContextualWisdomLab/.github/.github/workflows/pr-review-merge-scheduler.yml@6eb06cdd08c79a06f7b390069d4ffa49e2eb7dba
+    with:
+      base_branch: develop
+      project_flow: git-flow
+      max_prs: "100"
+      trigger_reviews: true
+      review_dispatch_limit: "100"
+      enable_auto_merge: true
+      merge_mode: direct_or_auto
+      update_branches: true
+      branch_update_limit: "100"
