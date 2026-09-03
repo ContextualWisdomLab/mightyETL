@@ -69,6 +69,20 @@ public class ProcessedDataReplicaApplier {
         this.sqlByTable = Map.copyOf(compiledSql);
     }
 
+    /**
+     * Applies one Debezium row event to an explicitly configured replica table.
+     *
+     * <p>Irrelevant topics, tombstones, malformed envelopes, and events without an identifier are
+     * ignored without exposing raw event or parser diagnostics. A create or update event whose
+     * {@code data} field is missing or null fails with a stable non-sensitive exception message.
+     * Delete and upsert identifiers and values remain JDBC-bound and are never interpolated into
+     * generated SQL.</p>
+     *
+     * @param topic Kafka topic carrying the Debezium event
+     * @param keyJson optional Debezium key JSON used to locate the row identifier
+     * @param valueJson optional Debezium value JSON containing the change envelope
+     * @throws IllegalStateException when a create or update event lacks usable {@code data}
+     */
     public void apply(@Nullable String topic, @Nullable String keyJson, @Nullable String valueJson) {
         if (topic == null) {
             return;
@@ -104,14 +118,14 @@ public class ProcessedDataReplicaApplier {
 
         JsonNode after = envelope.after();
         if (after == null || after.isNull() || !after.has("data")) {
-            log.error("Replica apply failed: missing data field (topic={}, id={})", topic, id);
-            throw new IllegalStateException("Missing data field in CDC event for id=" + id);
+            log.error("Replica apply failed: missing data field");
+            throw new IllegalStateException("Missing data field in CDC event");
         }
 
         JsonNode dataNode = after.get("data");
         if (dataNode.isNull()) {
-            log.error("Replica apply failed: data is null (topic={}, id={})", topic, id);
-            throw new IllegalStateException("data is null in CDC event for id=" + id);
+            log.error("Replica apply failed: data is null");
+            throw new IllegalStateException("CDC event data is null");
         }
 
         String data = dataNode.isTextual() ? dataNode.asText() : dataNode.toString();
@@ -186,7 +200,7 @@ public class ProcessedDataReplicaApplier {
 
             return new DebeziumEnvelope(op, after);
         } catch (IOException e) {
-            log.warn("Failed to parse Debezium value JSON; skipping replica apply", e);
+            log.warn("Failed to parse Debezium value JSON; skipping replica apply");
             return null;
         }
     }
@@ -210,7 +224,7 @@ public class ProcessedDataReplicaApplier {
             JsonNode payload = root.has("payload") ? root.get("payload") : root;
             return extractLong(payload, "id");
         } catch (IOException e) {
-            log.debug("Failed to parse Debezium key JSON; falling back to value payload", e);
+            log.debug("Failed to parse Debezium key JSON; falling back to value payload");
             return null;
         }
     }
