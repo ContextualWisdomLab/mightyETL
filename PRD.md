@@ -1,712 +1,427 @@
 # Product Requirements Document (PRD)
 
+**Product:** mightyETL  
+**Canonical baseline:** protected `develop@622e5e6c3d534f230c390f10e3832efadfc01825`  
+**Last reconciled:** 2026-08-09
+
+This PRD is the product-level source of truth for what mightyETL is intended to provide. It deliberately distinguishes protected-branch reality from active pull requests and future work so that a buyer, operator, or maintainer does not infer shipped capability from a design branch.
+
 ## 1. Executive Summary
 
-### 1.1 Product Overview
+### 1.1 Product overview
 
-mightyETL (formerly xtrmETL) is a microservices-based enterprise data integration platform
-that provides real-time Change Data Capture (CDC) and
-Extract-Transform-Load (ETL) capabilities. The platform enables
-organizations to capture database changes in real-time and process data
-through configurable transformation pipelines.
+mightyETL is a modular enterprise ETL and change-data-capture platform. It can run as individual Spring services or as a composed microservice deployment. The protected baseline provides:
 
-### 1.2 Product Vision
+- bounded, prevalidated, transaction-scoped synchronous ETL into PostgreSQL;
+- optional principal-scoped durable idempotency for synchronous ETL;
+- opt-in durable asynchronous job **intake and owner-scoped status**, without a shipped worker yet;
+- PostgreSQL CDC through embedded Debezium with Kafka publication;
+- CDC source/target discovery and operator-safe status surfaces;
+- target-connector discovery with PostgreSQL as the production load path and warehouse/BI connectors honestly exposed according to their runtime support state;
+- Spring Cloud Gateway, Eureka, Config Server, Micrometer, and Zipkin-compatible infrastructure surfaces.
 
-To provide a scalable, reliable, and secure platform for real-time
-data integration and transformation, enabling organizations to
-synchronize data across systems, build real-time analytics pipelines,
-and maintain data consistency across distributed architectures.
+### 1.2 Product vision
 
-### 1.3 Target Users
+Provide a defensible data-movement control plane in which retries are safe, long-running work is durable, CDC progress is honest, connectors are explicit about support level, operational state is observable, and every release can be traced from requirement to code, test, migration, review, and provenance evidence.
 
-- **Data Engineers**: Configure and manage data pipelines
-- **System Administrators**: Monitor and maintain platform infrastructure
-- **Application Developers**: Integrate applications with the platform
-- **Business Analysts**: Access transformed data for analytics
+### 1.3 Capability status taxonomy
+
+Canonical documents use these exact labels:
+
+- `implemented_on_develop` — present on the protected baseline above.
+- `active_pr` — present only on an open pull request; not shipped.
+- `planned` — accepted issue/design direction, not merge-ready code.
+- `superseded` — historical design or branch no longer intended for integration.
+- `out_of_scope` — intentionally excluded from the current boundary.
+- `known_gap` — shipped behavior whose limitation must remain visible.
+
+### 1.4 Target users
+
+- **Data engineers** — submit bounded ETL work, configure source/target connectivity, and operate durable data movement.
+- **Platform/SRE teams** — observe CDC/job state, control lifecycle, measure SLOs, and perform rollback/recovery.
+- **Application developers** — integrate over versioned HTTP and connector contracts.
+- **Security/compliance teams** — review least privilege, provenance, data-retention, audit, and release evidence.
+- **Analytics/data-platform owners** — consume CDC and target data without depending on undocumented implementation behavior.
 
 ## 2. Problem Statement
 
-### 2.1 Business Problems
+Enterprise data movement fails commercially when any of these are true:
 
-Organizations face several challenges in data integration:
+- a retry duplicates writes or returns a response that was not committed with the data;
+- a large batch partially commits before a later record fails;
+- asynchronous work disappears with a process restart or cannot be identified by its owner;
+- CDC offsets advance before downstream delivery is acknowledged;
+- a stop endpoint reports success before an asynchronous engine has actually terminated;
+- connector catalogs imply support that runtime code does not provide;
+- authentication documentation claims a real trust boundary while the implementation is still a placeholder;
+- CI reports green for a generated merge revision while a governance contract requires literal source-head evidence;
+- architecture decisions live only in PR descriptions or chat history.
 
-- **Manual Data Synchronization**: Time-consuming and error-prone manual data transfers between systems
-- **Batch Processing Delays**: Traditional ETL processes run on schedules, causing data latency
-- **Data Consistency**: Difficulty maintaining data consistency across multiple systems
-- **Scalability**: Inability to handle growing data volumes efficiently
-- **Real-time Requirements**: Modern applications require real-time data updates
-
-### 2.2 Technical Challenges
-
-- Capturing database changes without impacting source system performance
-- Processing high-volume data streams reliably
-- Handling failures and ensuring data integrity
-- Scaling horizontally to meet growing demands
-- Providing secure access control for data operations
+The product therefore treats correctness, durability, provenance, operational truthfulness, and documentation traceability as product requirements rather than internal engineering preferences.
 
 ## 3. Solution Overview
 
-### 3.1 Core Capabilities
+### 3.1 `implemented_on_develop`
 
-#### 3.1.1 Change Data Capture (CDC)
+#### Bounded atomic synchronous ETL
 
-- **Real-time Database Monitoring**: Captures INSERT, UPDATE, DELETE operations from PostgreSQL databases
-- **Debezium Integration**: Uses Debezium embedded engine for reliable change data capture
-- **Kafka Streaming**: Publishes change events to Kafka topics for downstream processing
-- **Minimal Source Impact**: Uses PostgreSQL logical replication (pgoutput) to minimize performance impact
+`POST /api/etl/process` accepts a bounded JSON array. Production processing validates and transforms the complete request before the first JDBC write and then performs all accepted target writes inside one Spring transaction. Only transient Spring data-access failures are retried. A deterministic request failure does not become a retry storm.
 
-#### 3.1.2 ETL Processing
+When `Idempotency-Key` is absent, existing synchronous behavior is preserved. When the key is present, an authenticated principal is required; the semantic key is normalized, principal-scoped, hashed, protected by a transaction-lifetime PostgreSQL try-lock, and tied to the request digest. Target writes and the durable response ledger commit in one transaction.
 
-- **JSON-based Data Processing**: Accepts and processes JSON-formatted data
-- **Extract-Transform-Load Pipeline**:
-  - Extract: Parse JSON data and extract fields
-  - Transform: Apply business rules (uppercase names, lowercase emails, format amounts)
-  - Load: Store transformed data in target database
-- **Parallel Processing**: Uses CompletableFuture for concurrent record processing
-- **Retry Mechanism**: Automatic retry on failures (3 attempts with 1-second backoff)
+#### Durable asynchronous intake
 
-#### 3.1.3 Security & Authentication
+When the disabled-by-default durable-intake feature is explicitly enabled:
 
-- **JWT-based Authentication**: Secure token-based authentication
-- **Role-based Access Control (RBAC)**: Support for USER and ADMIN roles
-- **Spring Security Integration**: Industry-standard security framework
-- **Password Encryption**: BCrypt password hashing
+- `POST /api/etl/jobs` durably creates or replays one principal-scoped pending job;
+- `GET /api/etl/jobs/{job_record_id}` returns only an owner-scoped status representation;
+- responses use `Cache-Control: no-store`;
+- successful submissions use `202 Accepted`, `Location`, and `Idempotency-Replayed` metadata;
+- malformed, missing, and foreign-owned identifiers share one non-enumerating not-found surface.
 
-### 3.2 System Architecture
+The protected baseline is intake-only. Worker execution, pagination, polling advice, conditional status, cancellation, and replay are not described as shipped. V2 requires terminal rows to have a null `request_payload`, but protected `develop` has no worker that transitions accepted jobs to terminal state; therefore an enabled intake can retain `PENDING` payloads without a bounded runtime lifetime. This retention boundary is a `known_gap`, and durable intake remains disabled by default until an integrated worker/lifecycle or explicit retention policy proves bounded retention and restart/recovery behavior.
 
-#### 3.2.1 Microservices Architecture
+#### CDC
 
-The platform consists of five independent microservices:
+The CDC service embeds Debezium 3.4 for PostgreSQL logical change capture, exposes start/stop/status/source/target surfaces, and publishes raw Debezium JSON to Kafka for compatibility. Optional canonical mapping remains an observational/scaffold path and does not replace the live publication format.
 
-1. **CDC Service** (Port 8001)
-   - Purpose: Capture database changes and publish to Kafka
-   - Technology: Spring Boot, Debezium, Kafka
-   - Database: PostgreSQL (monitored)
+#### Connector truthfulness
 
-2. **ETL Service** (Port 8000)
-   - Purpose: Process and transform data
-   - Technology: Spring Boot, Jackson, Spring Retry
-   - Database: PostgreSQL (target)
+`GET /api/etl/connectors` exposes connector capability/runtime state. PostgreSQL remains the primary load path. Databricks, Snowflake, Qlik and other surfaces must never be called production write paths unless their connector implementations, credentials, integration tests, and operational runbooks prove that claim.
 
-3. **Zuul Gateway** (Port 8080)
-   - Purpose: API Gateway with routing and authentication
-   - Routes:
-     - `/etl/**` → ETL Service
-     - `/cdc/**` → CDC Service
+### 3.2 `active_pr`
 
-4. **Eureka Server** (Port 8761)
-   - Purpose: Service discovery and registration
-   - Enables dynamic service location
+These are product directions with open code, not protected-branch capability:
 
-5. **Config Server**
-   - Purpose: Centralized configuration management
-   - Future enhancement for externalized configuration
+| PR | Capability | Status boundary |
+| --- | --- | --- |
+| #121 | literal-head CI/SBOM controls and hourly NVIDIA OpenCode maintenance authority separation | `active_pr`; not deployed until merged |
+| #139 | await Kafka acknowledgement before Debezium offset progress, bounded acknowledgement wait | `active_pr` |
+| #142 | replace placeholder gateway token handling with Spring Security reactive OAuth 2.0 Resource Server JWT | `active_pr` |
+| #143 | lease-fenced durable worker | `active_pr` |
+| #144 | owner-scoped keyset pagination | `active_pr` |
+| #145 | RFC 9110 `Retry-After` polling advice | `active_pr` |
+| #146 | weak ETag / `If-None-Match` conditional status | `active_pr` |
+| #147 | owner-scoped lease-fenced cancellation | `active_pr` |
+| #148 | immutable-lineage terminal-job replay replacement | `active_pr` |
 
-#### 3.2.2 Technology Stack
+A downstream active PR may depend on an earlier active PR. Nothing in this table transfers checks, approvals, or security evidence across a future head/base change.
 
-- **Runtime**: Java 25
-- **Framework**: Spring Boot 3.5.9, Spring Cloud 2025.0.1
-- **Database**: PostgreSQL
-- **Messaging**: Apache Kafka
-- **Service Discovery**: Netflix Eureka
-- **API Gateway**: Spring Cloud Gateway
-- **CDC Engine**: Debezium 3.4.0.Final (embedded engine)
-- **Monitoring**: Zipkin (distributed tracing), Micrometer
-- **Build Tool**: Maven
+### 3.3 `planned`
+
+- Issue #141: CDC stop must wait for graceful Debezium engine task completion before stopped-state observability is considered truthful.
+- dead-letter/replay controls for connector-side failures outside the durable-job replay boundary;
+- tenant-aware audit/control-plane UX and stronger enterprise identity lifecycle;
+- measured production-like SLO evidence, disaster recovery, and release provenance acceptance.
+
+### 3.4 `known_gap`
+
+Protected develop still contains a placeholder gateway class named `JwtAuthenticationFilter` whose validator accepts only the literal example token `valid_token`. This is **not** a cryptographic JWT validation boundary. PR #142 is the active remediation. Until it integrates, deployments must not advertise protected develop as providing production-grade JWT authentication.
+
+Protected develop CDC `stop()` requests engine close and clears the task reference without waiting for the asynchronous engine task to return. Issue #141 is the accepted reliability remediation path.
+
+Protected develop durable intake persists request payloads for active rows and has no integrated worker/TTL that guarantees an accepted `PENDING` row becomes terminal. The V2 terminal-null constraint prevents payload retention *after* a terminal transition, but does not itself create that transition or a TTL. Keep durable intake disabled by default and restrict production enablement until the worker/retention lifecycle is integrated and validated.
 
 ## 4. Functional Requirements
 
-### 4.1 CDC Service Requirements
+### 4.1 ETL
 
-#### FR-CDC-1: Database Connection Management
+#### FR-ETL-1: Bounded request admission
 
-- **Priority**: P0 (Critical)
-- **Description**: Connect to PostgreSQL database using environment variables
-- **Acceptance Criteria**:
-  - Support PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDATABASE environment variables
-  - Validate connection on startup
-  - Log connection errors clearly
+- Validate UTF-8 request byte size and record count against configured hard ceilings.
+- Reject malformed JSON, non-array roots, duplicate JSON fields, invalid records, unsafe identifiers, and unsupported numeric representations before any target write.
 
-#### FR-CDC-2: Change Event Capture
+#### FR-ETL-2: Whole-batch prevalidation
 
-- **Priority**: P0 (Critical)
-- **Description**: Capture all data changes from configured tables
-- **Acceptance Criteria**:
-  - Capture INSERT, UPDATE, DELETE operations
-  - Include before/after values for UPDATE operations
-  - Preserve event ordering
-  - Handle schema changes gracefully
+- Transform the complete accepted batch before the first JDBC write.
+- Preserve input result ordering.
+- Never silently discard a row.
 
-#### FR-CDC-3: Event Publishing
+#### FR-ETL-3: Transactional atomic load
 
-- **Priority**: P0 (Critical)
-- **Description**: Publish change events to Kafka topics
-- **Acceptance Criteria**:
-  - Topic naming: `xtrmetl-cdc.{schema}.{table}`
-  - Include event metadata (timestamp, operation type, source info)
-  - Guarantee at-least-once delivery
+- Commit all accepted synchronous rows or none.
+- Retry only transient data-access failures.
+- Preserve a stable RFC 9457 problem taxonomy for deterministic failures.
 
-#### FR-CDC-4: CDC Control API
+#### FR-ETL-4: Principal-scoped idempotency
 
-- **Priority**: P1 (High)
-- **Description**: Provide REST API to control CDC process
-- **Endpoints**:
-  - `POST /api/cdc/start`: Start CDC capture
-  - `POST /api/cdc/stop`: Stop CDC capture
-- **Acceptance Criteria**:
-  - Return appropriate status codes
-  - Handle concurrent start/stop requests
-  - Graceful shutdown without data loss
+- Support optional `Idempotency-Key` on `POST /api/etl/process`.
+- Normalize the quoted RFC 9651 String representation and retained safe legacy raw representation to one semantic key.
+- Never persist raw principals or raw idempotency keys.
+- Same principal + same key + same payload replays the committed response without another target write.
+- Same key with different payload fails closed.
+- An in-progress same-key request is rejected without waiting indefinitely.
 
-### 4.2 ETL Service Requirements
+#### FR-ETL-5: Connector catalog
 
-#### FR-ETL-1: Data Processing API
+- Expose connector support/runtime state without secrets.
+- Distinguish scaffold/discovery capability from a proven write path.
 
-- **Priority**: P0 (Critical)
-- **Description**: Accept JSON data for ETL processing
-- **Endpoint**: `POST /api/etl/process`
-- **Acceptance Criteria**:
-  - Accept JSON array of records
-  - Each record must have an 'id' field
-  - Return processing results
-  - Handle malformed JSON gracefully
+#### FR-ETL-6: Durable job intake
 
-#### FR-ETL-2: Data Extraction
+- `POST /api/etl/jobs` and `GET /api/etl/jobs/{job_record_id}` are available only when the explicit durable-intake feature is enabled.
+- Submission requires a principal and bounded idempotency key.
+- Status lookup is owner-scoped and no-store.
+- Intake-only protected develop must not claim worker execution.
+- Protected develop must keep intake disabled by default while active `request_payload` lifetime is not operationally bounded by an integrated worker or retention policy.
 
-- **Priority**: P0 (Critical)
-- **Description**: Extract fields from JSON records
-- **Acceptance Criteria**:
-  - Parse all JSON fields
-  - Handle nested objects
-  - Preserve data types
-  - Log extraction errors
+### 4.2 CDC
 
-#### FR-ETL-3: Data Transformation
+#### FR-CDC-1: PostgreSQL source capture
 
-- **Priority**: P0 (Critical)
-- **Description**: Apply business rules to transform data
-- **Transformation Rules**:
-  - NAME field: Convert to uppercase
-  - EMAIL field: Convert to lowercase
-  - AMOUNT field: Format to 2 decimal places, default to "0.00" on error
-- **Acceptance Criteria**:
-  - Apply rules consistently
-  - Handle missing fields gracefully
-  - Maintain audit trail of transformations
+- Configure Debezium PostgreSQL capture from deployment-owned environment/configuration.
+- Persist offsets and schema history according to the embedded-engine deployment contract.
 
-#### FR-ETL-4: Data Loading
+#### FR-CDC-2: Change publication
 
-- **Priority**: P0 (Critical)
-- **Description**: Load transformed data into target database
-- **Acceptance Criteria**:
-  - Insert records into `processed_data` table
-  - Handle duplicate keys
-  - Maintain transaction integrity
-  - Rollback on failure
+- Preserve destination topic, key, and raw Debezium JSON compatibility on the protected baseline.
+- Never advance source progress on a future acknowledged-delivery implementation before the configured downstream publication boundary succeeds.
 
-#### FR-ETL-5: Parallel Processing
+#### FR-CDC-3: Lifecycle control
 
-- **Priority**: P1 (High)
-- **Description**: Process multiple records concurrently
-- **Acceptance Criteria**:
-  - Use thread pool for parallel execution
-  - Limit concurrent threads to prevent resource exhaustion
-  - Aggregate results from all threads
-  - Handle individual record failures without failing entire batch
+- Expose start and stop controls that are idempotent where documented.
+- `known_gap`: protected develop stop completion is not yet equivalent to asynchronous engine termination; issue #141 owns remediation.
 
-### 4.3 Authentication & Authorization Requirements
+#### FR-CDC-4: Operator status
 
-#### FR-AUTH-1: User Registration
+- Expose runtime state, configured source description, registered source/target capability, replication-slot observations, and finite-cardinality counters without secrets.
 
-- **Priority**: P0 (Critical)
-- **Endpoint**: `POST /auth/signup`
-- **Acceptance Criteria**:
-  - Require unique username
-  - Encrypt passwords using BCrypt
-  - Assign default USER role
-  - Return clear error messages
+#### FR-CDC-5: Source/target extension
 
-#### FR-AUTH-2: User Login
+- New connectors must be discoverable through stable SPI contracts and must identify scaffold-only state honestly.
 
-- **Priority**: P0 (Critical)
-- **Endpoint**: `POST /auth/signin`
-- **Acceptance Criteria**:
-  - Validate credentials
-  - Generate JWT token (1 hour expiration)
-  - Return token in response
-  - Log authentication attempts
+### 4.3 Authentication, authorization, and data access
 
-#### FR-AUTH-3: Protected Endpoints
+#### FR-AUTH-1: Deployment principal boundary
 
-- **Priority**: P0 (Critical)
-- **Description**: Secure all API endpoints except authentication
-- **Acceptance Criteria**:
-  - Require valid JWT token for protected endpoints
-  - Return 401 for missing/invalid tokens
-  - Return 403 for insufficient permissions
-  - Support role-based access control
+- Keyed ETL and durable-job operations require an authenticated principal supplied by the runtime security context.
+- Raw principal values must not be persisted in idempotency or durable-job records.
 
-### 4.4 Service Discovery & Routing Requirements
+#### FR-AUTH-2: Gateway fail-closed production identity
 
-#### FR-DISC-1: Service Registration
+- `known_gap`: protected develop does not currently provide a production cryptographic gateway identity implementation.
+- `active_pr`: PR #142 provides the intended reactive OAuth 2.0 Resource Server JWT path.
+- Production deployment must reject unknown/missing trust configuration rather than invent issuer, key, client secret, or example-token authority.
 
-- **Priority**: P0 (Critical)
-- **Description**: All services register with Eureka
-- **Acceptance Criteria**:
-  - Auto-register on startup
-  - Send heartbeats every 30 seconds
-  - De-register on graceful shutdown
-  - Handle network partitions
+#### FR-AUTH-3: Superseded local-auth contract
 
-#### FR-GATE-1: API Gateway Routing
+Historical documentation described local username/password registration. That product API is not implemented. The exact strings below are retained only so historical documentation tests and migration readers can identify the superseded contract:
 
-- **Priority**: P0 (Critical)
-- **Description**: Route requests through Zuul Gateway
-- **Acceptance Criteria**:
-  - Route `/etl/**` to ETL Service
-  - Route `/cdc/**` to CDC Service
-  - Apply JWT authentication filter
-  - Handle service unavailability gracefully
+- superseded interface: `POST /auth/signin`
+- superseded interface: `POST /auth/signup`
+
+The local compose bootstrap still creates legacy user/role tables; persistence existence does not make these HTTP interfaces shipped.
+
+### 4.4 Operations and governance
+
+#### FR-OPS-1: Exact evidence
+
+- A merge/release decision must bind evidence to the unchanged source head and current live base.
+- Synthetic-merge previews may be retained as compatibility evidence but cannot substitute for literal-head evidence where the repository governance contract requires source identity.
+
+#### FR-OPS-2: Durable documentation
+
+- Public API, persisted state, lifecycle, security, deployment, autonomous-authority, and release-gate changes update PRD/TRD/Architecture/ADR/UML/ERD/traceability as applicable in the same pull request.
+
+#### FR-OPS-3: Autonomous maintenance boundaries
+
+- The model-executing agent may not gain review/merge authority by implication.
+- Branch publication, PR mutation, Actions authorization, independent review, and merge remain separately permissioned authorities when the scheduler from PR #121 integrates.
 
 ## 5. Non-Functional Requirements
 
-### 5.1 Performance Requirements
+### NFR-REL-1: Atomicity
 
-#### NFR-PERF-1: CDC Latency
+For synchronous ETL, a failure after admission must not commit a successful prefix of the request.
 
-- **Requirement**: Change events published within 1 second of database commit
-- **Measurement**: Monitor lag between transaction commit and Kafka publish
-- **Priority**: P0
+### NFR-REL-2: Idempotency
 
-#### NFR-PERF-2: ETL Throughput
+Repeated committed same-intent requests must converge on the same durable result without duplicate target effects within the documented transaction boundary.
 
-- **Requirement**: Process minimum 1000 records per second
-- **Measurement**: Monitor processing time and throughput metrics
-- **Priority**: P1
+### NFR-REL-3: Restart tolerance
 
-#### NFR-PERF-3: API Response Time
+Durable job intake records and idempotency ledger records survive application restart. CDC consumers and targets must tolerate documented at-least-once/replay behavior. Restart persistence alone does not satisfy bounded retention: accepted durable-job payloads require an integrated execution/retention lifecycle before production enablement is considered complete.
 
-- **Requirement**: 95th percentile response time < 500ms
-- **Measurement**: Use Micrometer metrics
-- **Priority**: P1
+### NFR-SEC-1: Least privilege
 
-### 5.2 Reliability Requirements
+Workflows, services, and connector credentials use the narrowest practical privilege and fail closed at trust boundaries.
 
-#### NFR-REL-1: Service Availability
+### NFR-SEC-2: Sensitive-data handling
 
-- **Requirement**: 99.9% uptime for production services
-- **Measurement**: Uptime monitoring and alerting
-- **Priority**: P0
+PII and business identifiers are not blanket-masked out of the product. Instead, access is purpose-bound, authorized, encrypted where stored/in transit, retained minimally, and audited. Logs/error responses must not disclose raw principals, idempotency keys, payloads, SQL, exception text, lease identifiers, or credentials. Durable request-payload lifetime must be operationally bounded before the intake path is promoted for production use.
 
-#### NFR-REL-2: Data Integrity
+### NFR-QUAL-1: Coverage
 
-- **Requirement**: Zero data loss for CDC events
-- **Measurement**: Audit logs and reconciliation processes
-- **Priority**: P0
+Owned production code must maintain 100% configured statement/line/method/branch coverage where the selected tool exposes the metric. Skipped tests never count as passing evidence.
 
-#### NFR-REL-3: Fault Tolerance
+### NFR-QUAL-2: Documentation
 
-- **Requirement**: Automatic retry on transient failures
-- **Implementation**: Spring Retry with exponential backoff (3 attempts, 1s delay)
-- **Priority**: P1
+Public production APIs require beginner-readable documentation. Canonical architecture documents must be machine-validated against shipped source contracts.
 
-### 5.3 Scalability Requirements
+### NFR-OPS-1: Observability
 
-#### NFR-SCALE-1: Horizontal Scaling
+Use finite-cardinality metrics, structured logs, health/status endpoints, correlation identifiers where available, and OpenTelemetry-compatible semantic naming for new cross-service telemetry.
 
-- **Requirement**: Support multiple instances of each service
-- **Implementation**: Stateless services with externalized session management
-- **Priority**: P1
+### NFR-OPS-2: Recovery
 
-#### NFR-SCALE-2: Data Volume
+Migrations, durable state, connector operations, and releases require bounded rollback/recovery instructions. A rollback claim must identify irreversible external side effects explicitly.
 
-- **Requirement**: Handle database tables with 100M+ rows
-- **Priority**: P1
+### NFR-PERF-1: Resource bounds
 
-### 5.4 Security Requirements
+No user request may create unbounded per-record thread fan-out, unbounded batch growth, unbounded retry, or unbounded in-memory retained payload without a documented limit.
 
-#### NFR-SEC-1: Authentication
+### NFR-COMP-1: Standalone and MSA interoperability
 
-- **Requirement**: All API access requires valid JWT token
-- **Implementation**: Spring Security with JWT filter
-- **Priority**: P0
-
-#### NFR-SEC-2: Authorization
-
-- **Requirement**: Role-based access control for sensitive operations
-- **Roles**: USER, ADMIN
-- **Priority**: P0
-
-#### NFR-SEC-3: Password Security
-
-- **Requirement**: Strong password hashing
-- **Implementation**: BCrypt with salt
-- **Priority**: P0
-
-#### NFR-SEC-4: Secrets Management
-
-- **Requirement**: No hardcoded credentials
-- **Implementation**: Environment variables for database credentials
-- **Priority**: P0
-
-### 5.5 Observability Requirements
-
-#### NFR-OBS-1: Distributed Tracing
-
-- **Requirement**: Trace requests across all microservices
-- **Implementation**: Spring Cloud Sleuth + Zipkin
-- **Priority**: P1
-
-#### NFR-OBS-2: Logging
-
-- **Requirement**: Structured logging with correlation IDs
-- **Log Levels**: INFO for operations, DEBUG for troubleshooting
-- **Priority**: P1
-
-#### NFR-OBS-3: Metrics
-
-- **Requirement**: Expose metrics for monitoring
-- **Implementation**: Micrometer with custom business metrics
-- **Priority**: P1
-
-### 5.6 Maintainability Requirements
-
-#### NFR-MAINT-1: Code Quality
-
-- **Requirement**: Unit test coverage > 80%
-- **Current Status**: Tests exist for controllers and services
-- **Priority**: P1
-
-#### NFR-MAINT-2: Documentation
-
-- **Requirement**: API documentation and deployment guides
-- **Priority**: P1
+Each service remains independently operable through documented configuration while composed deployments preserve stable APIs/event/connector contracts.
 
 ## 6. Data Model
 
-### 6.1 Security Schema
+The authoritative logical and physical overview is `docs/ERD.md`. Protected develop persists or bootstraps the following structures.
 
-#### Users Table
+### 6.1 Primary ETL target / local compose bootstrap
+
+The local compose schema retains these actual objects. `users`, `roles`, and `user_roles` are legacy bootstrap state, not proof of a shipped authentication API.
 
 ```sql
-CREATE TABLE users (
-    id BIGSERIAL PRIMARY KEY,
-    username VARCHAR(50) UNIQUE NOT NULL,
-    password VARCHAR(100) NOT NULL
+-- legacy compose bootstrap: CREATE TABLE roles
+CREATE TABLE roles (...);
+
+-- legacy compose bootstrap: CREATE TABLE users
+CREATE TABLE users (...);
+
+CREATE TABLE user_roles (...);
+CREATE TABLE processed_data (...);
+```
+
+### 6.2 Idempotency ledger — `implemented_on_develop`
+
+```sql
+CREATE TABLE etl_idempotency_records (
+    idempotency_key_hash CHAR(64) PRIMARY KEY,
+    request_digest CHAR(64) NOT NULL,
+    response_body TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL
 );
 ```
 
-#### Roles Table
+### 6.3 Durable job intake — `implemented_on_develop` schema, `known_gap` runtime retention
 
 ```sql
-CREATE TABLE roles (
-    id BIGSERIAL PRIMARY KEY,
-    name VARCHAR(20) UNIQUE NOT NULL
+CREATE TABLE etl_job_records (
+    job_record_id UUID PRIMARY KEY,
+    principal_scope_hash CHAR(64) NOT NULL,
+    submission_key_hash CHAR(64) NOT NULL,
+    request_digest CHAR(64) NOT NULL,
+    request_payload TEXT,
+    job_status VARCHAR(32) NOT NULL,
+    attempt_count INTEGER NOT NULL,
+    failure_code VARCHAR(128),
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL
 );
 ```
 
-#### User-Roles Association
-
-```sql
-CREATE TABLE user_roles (
-    user_id BIGINT NOT NULL,
-    role_id BIGINT NOT NULL,
-    PRIMARY KEY (user_id, role_id),
-    FOREIGN KEY (user_id) REFERENCES users(id),
-    FOREIGN KEY (role_id) REFERENCES roles(id)
-);
-```
-
-### 6.2 ETL Schema
-
-#### Processed Data Table
-
-```sql
-CREATE TABLE processed_data (
-    id BIGSERIAL PRIMARY KEY,
-    data TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
+Protected-develop lifecycle values are `PENDING`, `RUNNING`, `SUCCEEDED`, and `FAILED`. V2 enforces payload presence for active rows and null payload for terminal rows, but protected `develop` does not integrate the worker transition that realizes terminal clearing. Thus bounded runtime retention remains a `known_gap` and durable intake remains disabled by default. Lease, pagination, cancellation, and replay fields live only on active stack PRs and are not part of this baseline DDL.
 
 ## 7. API Specifications
 
-### 7.1 Authentication APIs
+`docs/API_CONTRACT.md` is the canonical detailed contract.
 
-#### POST /auth/signup
+### 7.1 Synchronous ETL
 
-**Request**:
-
-```json
-{
-  "username": "string",
-  "password": "string"
-}
-```
-
-**Response** (200):
-
-```json
-{
-  "message": "User registered successfully"
-}
-```
-
-#### POST /auth/signin
-
-**Request**:
-
-```json
-{
-  "username": "string",
-  "password": "string"
-}
-```
-
-**Response** (200):
-
-```json
-{
-  "token": "EXAMPLE_JWT_TOKEN_TRUNCATED"  // Example token for illustration
-}
-```
-
-### 7.2 CDC APIs
-
-#### POST /api/cdc/start
-
-**Headers**: `Authorization: Bearer {token}`  
-**Response** (200):
-
-```json
-{
-  "message": "CDC process started"
-}
-```
-
-#### POST /api/cdc/stop
-
-**Headers**: `Authorization: Bearer {token}`  
-**Response** (200):
-
-```json
-{
-  "message": "CDC process stopped"
-}
-```
-
-### 7.3 ETL APIs
-
-#### POST /api/etl/process
-
-**Headers**: `Authorization: Bearer {token}`  
-**Request**:
+`POST /api/etl/process`
 
 ```json
 [
-  {
-    "id": "1",
-    "name": "John Doe",
-    "email": "JOHN@EXAMPLE.COM",
-    "amount": "1234.5"
-  }
+  {"id":"record_001","name":"Example","email":"USER@EXAMPLE.COM","amount":"12.50"}
 ]
 ```
 
-**Response** (200):
+Optional request field: `Idempotency-Key`. Keyed requests require an authenticated principal. Success remains the legacy newline-delimited text representation plus `Idempotency-Replayed` when keyed. Errors use the stable RFC 9457 problem contract.
 
-```text
-Processed: 1
-Processed: 2
-...
+### 7.2 Connector catalog
+
+`GET /api/etl/connectors`
+
+Returns product name, primary load path, connector support/runtime metadata, and a documentation pointer without credentials.
+
+### 7.3 Durable job intake — feature-gated
+
+`POST /api/etl/jobs`
+
+```json
+[
+  {"id":"record_001","name":"Example"}
+]
 ```
+
+Returns `202 Accepted` with a job identifier, status, status URL, `Location`, and replay metadata.
+
+`GET /api/etl/jobs/{job_record_id}`
+
+Returns the owner-scoped status representation. The path notation in this document uses `job_record_id`; the current Spring route variable is `jobRecordId` and is treated as the same opaque resource identifier.
+
+### 7.4 CDC
+
+- `POST /api/cdc/start`
+- `POST /api/cdc/stop`
+- `GET /api/cdc/status`
+- `GET /api/cdc/sources`
+- `GET /api/cdc/targets`
+
+The current stop response does not prove asynchronous Debezium task termination; see `known_gap` issue #141.
 
 ## 8. Deployment Architecture
 
-### 8.1 Service Ports
+The services remain independently runnable and compose into a microservice deployment:
 
-- **Zuul Gateway**: 8080 (public-facing)
-- **ETL Service**: 8000 (internal)
-- **CDC Service**: 8001 (internal)
-- **Eureka Server**: 8761 (internal)
-- **Config Server**: 8888 (internal)
-- **Zipkin**: 9412 (internal)
+| Service | Default port | Responsibility |
+| --- | ---: | --- |
+| Zuul Gateway / Spring Cloud Gateway | 8080 | routing and security boundary |
+| ETL Service | 8000 | bounded ETL, idempotency, durable intake, connector catalog |
+| CDC Service | 8001 | Debezium capture, Kafka publication, CDC control/status |
+| Eureka Server | 8761 | service discovery |
+| Config Server | 8888 | optional configuration service |
+| Zipkin | 9412 | tracing backend when enabled |
 
-### 8.2 External Dependencies
+PostgreSQL and Kafka are external runtime dependencies for the relevant paths. Standalone operation must remain possible without forcing unused services into a deployment.
 
-- **PostgreSQL**: Source and target databases
-- **Apache Kafka**: Message streaming (port 9092)
-- **Zipkin**: Distributed tracing (port 9412)
+## 9. Success Metrics and Acceptance KPIs
 
-### 8.3 Environment Variables
+The following are release/operations targets, not claims of already measured production attainment:
 
-#### Required for CDC Service
+- **100%** configured owned-production statement/branch coverage before protected merge.
+- **100%** public owned-production API documentation coverage.
+- **0** accepted releases with unresolved critical/high actionable security findings.
+- **0** target-row delta for successful bounded atomic synchronous requests (`expected rows == committed rows`).
+- **0** duplicate target effects for committed same-principal/same-key/same-payload idempotent retries within the transactional boundary.
+- **100%** release artifacts with SBOM/provenance evidence required by repository policy.
+- CDC acknowledged-delivery and graceful-stop SLOs remain **not yet claimed** until PR #139 / issue #141 integrate and production-like measurements exist.
+- Durable asynchronous intake has no production-retention SLO claim until pending payload lifetime is operationally bounded and recovery-tested.
 
-- `PGHOST`: PostgreSQL host
-- `PGPORT`: PostgreSQL port (default: 5432)
-- `PGUSER`: PostgreSQL username
-- `PGPASSWORD`: PostgreSQL password
-- `PGDATABASE`: PostgreSQL database name
+## 10. Risk Assessment and Mitigation
 
-#### Required for ETL Service
+| Risk | Impact | Mitigation |
+| --- | --- | --- |
+| Placeholder gateway token logic mistaken for production auth | unauthorized access / diligence failure | explicit `known_gap`; fail-closed deployment; PR #142; threat-model/test gates |
+| Batch partial commit | data corruption | whole-batch prevalidation + transaction + rollback tests |
+| Duplicate idempotent retry | duplicate target effects | principal/key hash, request digest, try-lock, atomic ledger/target transaction |
+| Durable pending payload retained without worker/TTL | privacy/retention and storage growth risk | keep intake disabled by default; mark `known_gap`; integrate worker/retention lifecycle with restart/recovery tests before production promotion |
+| CDC publish before broker acknowledgement | offset/data-loss ambiguity | PR #139 acknowledged-delivery path; retain at-least-once/replay-tolerant claim until integrated |
+| CDC stop reports early | false operator state | issue #141 bounded completion wait contract |
+| Active PR documented as shipped | procurement/operations error | status taxonomy + machine-checked traceability |
+| Synthetic-merge CI mistaken for literal-head proof | stale/wrong-source acceptance | PR #121 exact-source controls; exact-head gate language in TRD/test strategy |
+| Autonomous agent gains excessive authority | supply-chain compromise | separate model/read and deterministic writer/review/merge authorities; writer lease; non-forced CAS publication |
+| PII removed by blanket masking | product unusability | purpose-bound authorization/encryption/retention/audit instead of blanket removal |
 
-- `PGHOST`: PostgreSQL host
-- `PGPORT`: PostgreSQL port
-- `PGUSER`: PostgreSQL username
-- `PGPASSWORD`: PostgreSQL password
-- `PGDATABASE`: PostgreSQL database name
+## 11. Roadmap Boundary
 
-## 9. Use Cases
+The immediate integration order for durable jobs remains governed by stack ancestry and protected merge evidence, not this document's narrative order. After the active durable stack integrates, canonical PRD/TRD/UML/ERD/ADRs must be updated in the same integration sequence before any capability is relabeled `implemented_on_develop`.
 
-### 9.1 Real-time Data Synchronization
+## 12. References
 
-**Actors**: Data Engineer, Source System, Target System  
-**Goal**: Synchronize data changes from source to target in real-time
+Fielding, R., Nottingham, M., & Reschke, J. (2022). *HTTP Semantics* (RFC 9110). RFC Editor. https://www.rfc-editor.org/info/rfc9110
 
-**Flow**:
+Nottingham, M., & Kamp, P.-H. (2024). *Structured Field Values for HTTP* (RFC 9651). RFC Editor. https://www.rfc-editor.org/info/rfc9651
 
-1. Source application updates record in PostgreSQL
-2. CDC Service detects change via Debezium
-3. Change event published to Kafka topic
-4. Downstream consumer processes change
-5. Target system updated within 1 second
-
-### 9.2 Batch Data Transformation
-
-**Actors**: Data Engineer, External System  
-**Goal**: Transform and load batch data
-
-**Flow**:
-
-1. External system authenticates via JWT
-2. POST JSON array to `/api/etl/process`
-3. ETL Service validates and parses data
-4. Applies transformation rules in parallel
-5. Loads transformed data to database
-6. Returns processing results
-
-### 9.3 User Access Management
-
-**Actors**: Administrator, End User  
-**Goal**: Control access to platform APIs
-
-**Flow**:
-
-1. Administrator creates user account
-2. User authenticates with credentials
-3. System validates and issues JWT token
-4. User includes token in subsequent API calls
-5. System validates token and permissions
-6. Grants or denies access based on role
-
-## 10. Future Enhancements
-
-### 10.1 Planned Features (v2.0)
-
-- **Multi-database Support**: MySQL, Oracle, SQL Server CDC
-- **Custom Transformations**: User-defined transformation functions
-- **Data Quality Rules**: Validation and data quality checks
-- **Web UI**: Configuration and monitoring dashboard
-- **Schema Registry**: Centralized schema management
-- **Dead Letter Queue**: Failed message handling
-- **Metrics Dashboard**: Real-time monitoring UI
-
-#### 10.1.1 Web UI / Admin Console (Management Screen)
-
-**Goal**: Provide a secure, self-service console to configure pipelines and monitor operations without requiring direct database/Kafka access.
-
-**Primary users**:
-
-- **Data Engineers**: Manage CDC/ETL pipelines and view processing status
-- **System Administrators**: Monitor platform health, manage users/roles, and review operational events
-
-**MVP (v2.0)**:
-
-- Authentication + RBAC (ADMIN-only for management actions)
-- Pipeline control: start/stop CDC, toggle replica apply, view current configuration
-- Observability dashboard: service health, CDC lag, error rates, links to logs/traces
-- Operational audit: record who changed what and when for state-changing actions
-
-**Non-goals (initially)**:
-
-- Visual drag-and-drop pipeline builder
-- Multi-tenant organization management
-
-### 10.2 Technical Debt
-
-- **Common Module**: Referenced in documentation but not implemented
-- **MyBatis Integration**: Mentioned but not used
-- **Redis Integration**: Dependency present but not utilized
-- **Config Server**: Implemented but not actively used
-
-## 11. Success Metrics
-
-### 11.1 Technical Metrics
-
-- **CDC Lag**: < 1 second average
-- **ETL Throughput**: > 1000 records/second
-- **API Response Time**: < 500ms (p95)
-- **Error Rate**: < 0.1%
-- **Test Coverage**: > 80%
-
-### 11.2 Business Metrics
-
-- **Data Accuracy**: 100% (zero data loss)
-- **System Uptime**: 99.9%
-- **Processing Cost**: Measured per million records
-- **Time to Sync**: < 5 seconds for critical data
-
-## 12. Risks and Mitigations
-
-### 12.1 Technical Risks
-
-| Risk | Impact | Probability | Mitigation |
-| ------ | -------- | ------------- | ------------ |
-| Kafka message loss | High | Low | Enable acknowledgments, configure retention |
-| Database connection pool exhaustion | High | Medium | Configure connection limits, implement circuit breaker |
-| Memory leaks in long-running processes | Medium | Medium | Regular monitoring, automated restarts |
-| Debezium version compatibility | Medium | Low | Pin versions, test upgrades thoroughly |
-| JWT token compromise | High | Low | Short expiration, token rotation, HTTPS only |
-
-### 12.2 Operational Risks
-
-| Risk | Impact | Probability | Mitigation |
-| ------ | -------- | ------------- | ------------ |
-| Service discovery failure | High | Low | Eureka clustering, health checks |
-| Configuration drift | Medium | Medium | Infrastructure as Code, Config Server |
-| Insufficient monitoring | Medium | High | Implement comprehensive observability |
-| Data volume growth | High | High | Capacity planning, horizontal scaling |
-
-## 13. Glossary
-
-- **CDC**: Change Data Capture - Technology to capture database changes
-- **ETL**: Extract, Transform, Load - Data processing pattern
-- **Debezium**: Open-source CDC platform
-- **JWT**: JSON Web Token - Token-based authentication standard
-- **Eureka**: Netflix service discovery server
-- **Zuul**: Netflix API Gateway
-- **Kafka**: Distributed streaming platform
-- **RBAC**: Role-Based Access Control
-- **pgoutput**: PostgreSQL logical replication output plugin
-
-## 14. References
-
-### 14.1 Technology Documentation
-
-- [Debezium Documentation](https://debezium.io/documentation/)
-- [Spring Cloud Documentation](https://spring.io/projects/spring-cloud)
-- [Apache Kafka Documentation](https://kafka.apache.org/documentation/)
-- [PostgreSQL Logical Replication](https://www.postgresql.org/docs/current/logical-replication.html)
-
-### 14.2 Internal Documentation
-
-- See `xtrmETL-common-initial-design-notes.txt` for initial design notes (Korean)
-- Service-specific READMEs (to be created)
-
----
-
-**Document Version**: 1.0  
-**Last Updated**: 2026-01-08  
-**Status**: Draft for Review  
-**Author**: Product Engineering Team  
-**Approvers**: TBD
+Nottingham, M., Wilde, E., & Dalal, S. (2023). *Problem Details for HTTP APIs* (RFC 9457). RFC Editor. https://www.rfc-editor.org/info/rfc9457
