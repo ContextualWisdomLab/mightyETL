@@ -3,6 +3,7 @@ package com.xtrmetl.cdc.spi;
 import com.xtrmetl.cdc.service.CdcService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Map;
@@ -41,6 +42,11 @@ class CdcSourceRegistryTest {
 
         verify(service).start();
         verify(service).stop();
+    }
+
+    @Test
+    void sqlServerScaffoldIsNotAutoDiscoveredAsAProductionSource() {
+        assertFalse(SqlServerDebeziumCdcSource.class.isAnnotationPresent(Component.class));
     }
 
     @Test
