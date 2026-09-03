@@ -8,7 +8,7 @@ spring:
     config:
       server:
         git:
-          uri: ${CONFIG_REPO_URI:https://github.com/your-repo/config-repo.git}
+          uri: ${CONFIG_REPO_URI}
 
 eureka:
   client:
