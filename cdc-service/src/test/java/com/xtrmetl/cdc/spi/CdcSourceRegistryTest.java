@@ -3,6 +3,7 @@ package com.xtrmetl.cdc.spi;
 import com.xtrmetl.cdc.service.CdcService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Map;
@@ -44,7 +45,12 @@ class CdcSourceRegistryTest {
     }
 
     @Test
-    void registersScaffoldSourcesWhenProvided() {
+    void mysqlScaffoldIsNotAutoDiscoveredAsAProductionSource() {
+        assertFalse(MysqlDebeziumCdcSource.class.isAnnotationPresent(Component.class));
+    }
+
+    @Test
+    void registersScaffoldSourcesWhenProvidedExplicitly() {
         CdcSourceRegistry registry = new CdcSourceRegistry(List.of(
                 new PostgresDebeziumCdcSource(),
                 new MysqlDebeziumCdcSource(),
