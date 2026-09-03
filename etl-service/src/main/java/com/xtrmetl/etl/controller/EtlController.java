@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.nio.charset.StandardCharsets;
 import java.security.Principal;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -34,6 +35,12 @@ public class EtlController {
 
     /** Response header that tells a keyed client whether a prior success was replayed. */
     public static final String IDEMPOTENCY_REPLAYED_HEADER = "Idempotency-Replayed";
+
+    private static final MediaType UTF8_TEXT_PLAIN = new MediaType(
+            "text",
+            "plain",
+            StandardCharsets.UTF_8
+    );
 
     private final EtlService etlService;
     private final TargetConnectorDispatcher connectorDispatcher;
@@ -62,14 +69,14 @@ public class EtlController {
      *
      * <p>The mapping does not constrain response negotiation to the successful representation.
      * This allows callers that accept only {@code application/problem+json} to receive typed
-     * failure responses before a successful text body is selected. Typed request and data-access
-     * failures retain their dedicated handlers; only an unexpected runtime failure raised during
-     * the service invocation is wrapped as an ETL internal failure.</p>
+     * failure responses before a successful UTF-8 text body is selected. Typed request and
+     * data-access failures retain their dedicated handlers; only an unexpected runtime failure
+     * raised during the service invocation is wrapped as an ETL internal failure.</p>
      *
      * @param jsonInput UTF-8 JSON array request body
      * @param idempotencyKey optional bounded client-generated retry key
      * @param principal authenticated caller namespace for keyed requests
-     * @return existing newline-delimited plain-text success response, plus replay metadata when keyed
+     * @return newline-delimited UTF-8 plain-text success response, plus replay metadata when keyed
      */
     @PostMapping("/process")
     @Observed(name = "etl.process", contextualName = "etl-processing")
@@ -104,7 +111,7 @@ public class EtlController {
         }
 
         ResponseEntity.BodyBuilder response = ResponseEntity.ok()
-                .contentType(MediaType.TEXT_PLAIN);
+                .contentType(UTF8_TEXT_PLAIN);
         if (idempotencyKey != null) {
             response.header(IDEMPOTENCY_REPLAYED_HEADER, Boolean.toString(replayed));
         }
@@ -118,7 +125,7 @@ public class EtlController {
      * direct controller tests and embedded integrations while delegating to the mapped method.</p>
      *
      * @param jsonInput UTF-8 JSON array request body
-     * @return existing newline-delimited plain-text success response
+     * @return newline-delimited UTF-8 plain-text success response
      */
     public ResponseEntity<String> processData(String jsonInput) {
         return processData(jsonInput, null, null);
