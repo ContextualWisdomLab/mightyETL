@@ -8,6 +8,26 @@ import java.util.Map;
  */
 public interface CdcSourceConnector extends AutoCloseable {
 
+    /**
+     * Returns the bounded-context-specific CDC source identifier.
+     *
+     * <p>New organization-owned callers must use this semantic accessor. The generic
+     * {@link #id()} method remains only as an SPI compatibility boundary for existing
+     * external connector implementations and callers.</p>
+     *
+     * @return exact CDC source identifier
+     */
+    default String sourceId() {
+        return id();
+    }
+
+    /**
+     * Legacy compatibility accessor for the historical generic connector identifier.
+     *
+     * @return exact CDC source identifier
+     * @deprecated organization-owned callers must use {@link #sourceId()}
+     */
+    @Deprecated(forRemoval = false)
     String id();
 
     String displayName();
@@ -17,12 +37,12 @@ public interface CdcSourceConnector extends AutoCloseable {
     /**
      * Validate source configuration (host, slot, credentials, include lists).
      */
-    void validate(Map<String, String> config);
+    void validate(Map<String, String> sourceConfig);
 
     /**
      * Begin capturing changes. Implementations publish through the service pipeline.
      */
-    void start(Map<String, String> config);
+    void start(Map<String, String> sourceConfig);
 
     /**
      * Stop capture gracefully.

@@ -14,15 +14,15 @@ class CdcTargetRegistryTest {
 
     @Test
     void registersKafkaAndJdbcReplicaTargets() {
-        CdcTargetRegistry registry = new CdcTargetRegistry();
+        CdcTargetRegistry targetRegistry = new CdcTargetRegistry();
 
-        assertEquals(2, registry.all().size());
-        assertTrue(registry.find(KafkaCdcTargetConnector.ID).isPresent());
-        assertTrue(registry.find(JdbcReplicaCdcTargetConnector.ID).isPresent());
+        assertEquals(2, targetRegistry.all().size());
+        assertTrue(targetRegistry.find(KafkaCdcTargetConnector.TARGET_ID).isPresent());
+        assertTrue(targetRegistry.find(JdbcReplicaCdcTargetConnector.TARGET_ID).isPresent());
 
-        CdcTargetConnector kafka = registry.find(KafkaCdcTargetConnector.ID).orElseThrow();
-        assertFalse(kafka.scaffoldOnly());
-        kafka.validate(Map.of());
-        assertThrows(UnsupportedOperationException.class, () -> kafka.write(List.of()));
+        CdcTargetConnector kafkaTargetConnector = targetRegistry.find(KafkaCdcTargetConnector.TARGET_ID).orElseThrow();
+        assertFalse(kafkaTargetConnector.scaffoldOnly());
+        kafkaTargetConnector.validate(Map.of());
+        assertThrows(UnsupportedOperationException.class, () -> kafkaTargetConnector.write(List.of()));
     }
 }

@@ -25,32 +25,32 @@ class CdcRegistryIdentityTest {
 
     @Test
     void duplicateSourceConnectorIdsFailClosedInsteadOfReplacingRegistration() {
-        CdcSourceConnector first = source("duplicate-source");
-        CdcSourceConnector second = source("duplicate-source");
-        CdcSourceRegistry registry = new CdcSourceRegistry(List.of(first));
+        CdcSourceConnector firstSourceConnector = sourceConnector("duplicate-source");
+        CdcSourceConnector secondSourceConnector = sourceConnector("duplicate-source");
+        CdcSourceRegistry sourceRegistry = new CdcSourceRegistry(List.of(firstSourceConnector));
 
-        IllegalArgumentException failure = assertThrows(
+        IllegalArgumentException registrationFailure = assertThrows(
                 IllegalArgumentException.class,
-                () -> registry.register(second)
+                () -> sourceRegistry.register(secondSourceConnector)
         );
 
-        assertEquals("Duplicate CDC source connector id: duplicate-source", failure.getMessage());
-        assertSame(first, registry.find("duplicate-source").orElseThrow());
+        assertEquals("Duplicate CDC source connector id: duplicate-source", registrationFailure.getMessage());
+        assertSame(firstSourceConnector, sourceRegistry.find("duplicate-source").orElseThrow());
     }
 
     @Test
     void duplicateTargetConnectorIdsFailClosedInsteadOfReplacingRegistration() {
-        CdcTargetRegistry registry = new CdcTargetRegistry();
-        CdcTargetConnector originalKafka = registry.find(KafkaCdcTargetConnector.ID).orElseThrow();
-        CdcTargetConnector duplicateKafka = target(KafkaCdcTargetConnector.ID);
+        CdcTargetRegistry targetRegistry = new CdcTargetRegistry();
+        CdcTargetConnector originalKafkaTarget = targetRegistry.find(KafkaCdcTargetConnector.TARGET_ID).orElseThrow();
+        CdcTargetConnector duplicateKafkaTarget = targetConnector(KafkaCdcTargetConnector.TARGET_ID);
 
-        IllegalArgumentException failure = assertThrows(
+        IllegalArgumentException registrationFailure = assertThrows(
                 IllegalArgumentException.class,
-                () -> registry.register(duplicateKafka)
+                () -> targetRegistry.register(duplicateKafkaTarget)
         );
 
-        assertEquals("Duplicate CDC target connector id: kafka", failure.getMessage());
-        assertSame(originalKafka, registry.find(KafkaCdcTargetConnector.ID).orElseThrow());
+        assertEquals("Duplicate CDC target connector id: kafka", registrationFailure.getMessage());
+        assertSame(originalKafkaTarget, targetRegistry.find(KafkaCdcTargetConnector.TARGET_ID).orElseThrow());
     }
 
     @Test
@@ -69,60 +69,69 @@ class CdcRegistryIdentityTest {
 
     @Test
     void nullSourceConnectorFailsBeforeRegistryMutation() {
-        CdcSourceRegistry registry = new CdcSourceRegistry();
-        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class, () -> registry.register(null));
-        assertEquals("CDC source connector must not be null", failure.getMessage());
+        CdcSourceRegistry sourceRegistry = new CdcSourceRegistry();
+        IllegalArgumentException registrationFailure = assertThrows(
+                IllegalArgumentException.class,
+                () -> sourceRegistry.register(null)
+        );
+        assertEquals("CDC source connector must not be null", registrationFailure.getMessage());
     }
 
     @Test
     void nullTargetConnectorFailsBeforeRegistryMutation() {
-        CdcTargetRegistry registry = new CdcTargetRegistry();
-        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class, () -> registry.register(null));
-        assertEquals("CDC target connector must not be null", failure.getMessage());
+        CdcTargetRegistry targetRegistry = new CdcTargetRegistry();
+        IllegalArgumentException registrationFailure = assertThrows(
+                IllegalArgumentException.class,
+                () -> targetRegistry.register(null)
+        );
+        assertEquals("CDC target connector must not be null", registrationFailure.getMessage());
     }
 
     @Test
     void blankSourceConnectorIdFailsBeforeRegistryMutation() {
-        CdcSourceConnector blank = source("   ");
-        IllegalArgumentException failure = assertThrows(
+        CdcSourceConnector blankSourceConnector = sourceConnector("   ");
+        IllegalArgumentException registrationFailure = assertThrows(
                 IllegalArgumentException.class,
-                () -> new CdcSourceRegistry(List.of(blank))
+                () -> new CdcSourceRegistry(List.of(blankSourceConnector))
         );
-        assertEquals("CDC source connector id must not be blank", failure.getMessage());
+        assertEquals("CDC source connector id must not be blank", registrationFailure.getMessage());
     }
 
     @Test
     void blankTargetConnectorIdFailsBeforeRegistryMutation() {
-        CdcTargetRegistry registry = new CdcTargetRegistry();
-        CdcTargetConnector blank = target("");
-        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class, () -> registry.register(blank));
-        assertEquals("CDC target connector id must not be blank", failure.getMessage());
+        CdcTargetRegistry targetRegistry = new CdcTargetRegistry();
+        CdcTargetConnector blankTargetConnector = targetConnector("");
+        IllegalArgumentException registrationFailure = assertThrows(
+                IllegalArgumentException.class,
+                () -> targetRegistry.register(blankTargetConnector)
+        );
+        assertEquals("CDC target connector id must not be blank", registrationFailure.getMessage());
     }
 
     @Test
     void sourceConnectorCollectionCannotDeleteRegistrationAuthority() {
-        CdcSourceRegistry registry = new CdcSourceRegistry(List.of(source("immutable-source")));
-        assertThrows(UnsupportedOperationException.class, () -> registry.all().clear());
-        assertTrue(registry.find("immutable-source").isPresent());
+        CdcSourceRegistry sourceRegistry = new CdcSourceRegistry(List.of(sourceConnector("immutable-source")));
+        assertThrows(UnsupportedOperationException.class, () -> sourceRegistry.all().clear());
+        assertTrue(sourceRegistry.find("immutable-source").isPresent());
     }
 
     @Test
     void targetConnectorCollectionCannotDeleteRegistrationAuthority() {
-        CdcTargetRegistry registry = new CdcTargetRegistry();
-        assertThrows(UnsupportedOperationException.class, () -> registry.all().clear());
-        assertTrue(registry.find(KafkaCdcTargetConnector.ID).isPresent());
-        assertTrue(registry.find(JdbcReplicaCdcTargetConnector.ID).isPresent());
+        CdcTargetRegistry targetRegistry = new CdcTargetRegistry();
+        assertThrows(UnsupportedOperationException.class, () -> targetRegistry.all().clear());
+        assertTrue(targetRegistry.find(KafkaCdcTargetConnector.TARGET_ID).isPresent());
+        assertTrue(targetRegistry.find(JdbcReplicaCdcTargetConnector.TARGET_ID).isPresent());
     }
 
-    private static CdcSourceConnector source(String id) {
-        CdcSourceConnector connector = mock(CdcSourceConnector.class);
-        when(connector.id()).thenReturn(id);
-        return connector;
+    private static CdcSourceConnector sourceConnector(String sourceId) {
+        CdcSourceConnector sourceConnector = mock(CdcSourceConnector.class);
+        when(sourceConnector.sourceId()).thenReturn(sourceId);
+        return sourceConnector;
     }
 
-    private static CdcTargetConnector target(String id) {
-        CdcTargetConnector connector = mock(CdcTargetConnector.class);
-        when(connector.id()).thenReturn(id);
-        return connector;
+    private static CdcTargetConnector targetConnector(String targetId) {
+        CdcTargetConnector targetConnector = mock(CdcTargetConnector.class);
+        when(targetConnector.targetId()).thenReturn(targetId);
+        return targetConnector;
     }
 }

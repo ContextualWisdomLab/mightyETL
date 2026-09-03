@@ -12,29 +12,38 @@ import java.util.Objects;
  */
 public abstract class AbstractScaffoldTargetConnector implements TargetConnector {
 
-    private final String id;
+    private final String targetId;
     private final String displayName;
     private final List<String> requiredConfigKeys;
     private final List<String> optionalConfigKeys;
-    private final Map<String, Object> integration;
+    private final Map<String, Object> integrationMetadata;
 
     protected AbstractScaffoldTargetConnector(
-            String id,
+            String targetId,
             String displayName,
             List<String> requiredConfigKeys,
             List<String> optionalConfigKeys,
-            Map<String, Object> integration
+            Map<String, Object> integrationMetadata
     ) {
-        this.id = Objects.requireNonNull(id, "id");
+        this.targetId = Objects.requireNonNull(targetId, "id");
         this.displayName = Objects.requireNonNull(displayName, "displayName");
         this.requiredConfigKeys = List.copyOf(Objects.requireNonNull(requiredConfigKeys, "requiredConfigKeys"));
         this.optionalConfigKeys = List.copyOf(Objects.requireNonNull(optionalConfigKeys, "optionalConfigKeys"));
-        this.integration = Map.copyOf(Objects.requireNonNull(integration, "integration"));
+        this.integrationMetadata = Map.copyOf(Objects.requireNonNull(integrationMetadata, "integration"));
     }
 
     @Override
+    public final String targetId() {
+        return targetId;
+    }
+
+    /**
+     * @deprecated compatibility alias; organization-owned callers use {@link #targetId()}
+     */
+    @Override
+    @Deprecated(forRemoval = false)
     public final String id() {
-        return id;
+        return targetId();
     }
 
     @Override
@@ -65,25 +74,25 @@ public abstract class AbstractScaffoldTargetConnector implements TargetConnector
 
     @Override
     public final Map<String, Object> describeIntegration() {
-        Map<String, Object> copy = new LinkedHashMap<>(integration);
-        copy.putIfAbsent("mode", "scaffold");
-        copy.putIfAbsent("networkIo", false);
-        return Map.copyOf(copy);
+        Map<String, Object> integrationDescription = new LinkedHashMap<>(integrationMetadata);
+        integrationDescription.putIfAbsent("mode", "scaffold");
+        integrationDescription.putIfAbsent("networkIo", false);
+        return Map.copyOf(integrationDescription);
     }
 
     @Override
-    public void validate(Map<String, String> config) {
-        Objects.requireNonNull(config, "config");
-        List<String> missing = new ArrayList<>();
-        for (String key : requiredConfigKeys) {
-            String value = config.get(key);
-            if (value == null || value.isBlank()) {
-                missing.add(key);
+    public void validate(Map<String, String> targetConfig) {
+        Objects.requireNonNull(targetConfig, "config");
+        List<String> missingConfigKeys = new ArrayList<>();
+        for (String configKey : requiredConfigKeys) {
+            String configValue = targetConfig.get(configKey);
+            if (configValue == null || configValue.isBlank()) {
+                missingConfigKeys.add(configKey);
             }
         }
-        if (!missing.isEmpty()) {
+        if (!missingConfigKeys.isEmpty()) {
             throw new IllegalArgumentException(
-                    displayName + " config missing required keys: " + missing
+                    displayName + " config missing required keys: " + missingConfigKeys
                             + " (status=SCAFFOLD; live write still refused after validation)"
             );
         }
@@ -93,13 +102,13 @@ public abstract class AbstractScaffoldTargetConnector implements TargetConnector
      * Scaffold open: validate only — no client, no network.
      */
     @Override
-    public final void open(Map<String, String> config) {
-        validate(config);
+    public final void open(Map<String, String> targetConfig) {
+        validate(targetConfig);
     }
 
     @Override
-    public final void write(List<ChangeRecord> batch) {
-        Objects.requireNonNull(batch, "batch");
+    public final void write(List<ChangeRecord> changeBatch) {
+        Objects.requireNonNull(changeBatch, "batch");
         throw new UnsupportedOperationException(writeRefusalReason());
     }
 }
