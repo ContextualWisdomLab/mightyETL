@@ -34,8 +34,8 @@ class EtlBatchDocsAlignmentTest {
         String runbook = read("docs/etl/bounded-atomic-batches.md");
         String normalizedRunbook = runbook.toLowerCase(Locale.ROOT);
 
-        assertTrue(runbook.contains("A rejected request performs no database writes"));
-        assertTrue(runbook.contains("rolls back earlier writes"));
+        assertTrue(runbook.contains("A rejected request performs no `processed_data` target writes"));
+        assertTrue(runbook.contains("rolls back earlier target writes"));
         assertTrue(runbook.contains("not a substitute for edge enforcement"));
         assertTrue(normalizedRunbook.contains("numeric json identifier types are rejected"));
         assertTrue(runbook.contains("no more than 256 Unicode code points"));
@@ -43,6 +43,22 @@ class EtlBatchDocsAlignmentTest {
         assertTrue(runbook.contains("Unicode line-separator"));
         assertTrue(runbook.contains("no duplicate object-field names"));
         assertTrue(runbook.contains("Duplicate field names are rejected"));
+    }
+
+    @Test
+    void runbookRejectsInvalidAmountsInsteadOfManufacturingZero() throws IOException {
+        String runbook = read("docs/etl/bounded-atomic-batches.md");
+
+        assertTrue(runbook.contains(
+                "Malformed, blank, excessive-precision, or extreme-scale `AMOUNT` values are rejected"
+        ));
+        assertTrue(runbook.contains("before any target-table write"));
+        assertTrue(runbook.contains(
+                "Idempotent requests may acquire the request lock and read the replay ledger before batch validation"
+        ));
+        assertTrue(runbook.contains("creates no successful idempotency replay record"));
+        assertFalse(runbook.contains("before the first JDBC call"));
+        assertFalse(runbook.contains("legacy fallback `0.00`"));
     }
 
     @Test
@@ -54,6 +70,15 @@ class EtlBatchDocsAlignmentTest {
         assertTrue(application.contains("max-batch-records: ${ETL_MAX_BATCH_RECORDS:1000}"));
         assertTrue(changelog.contains("docs/etl/bounded-atomic-batches.md"));
         assertTrue(changelog.contains("retry only transient Spring data-access failures"));
+    }
+
+    @Test
+    void changelogRecordsFailClosedAmountIntegrity() throws IOException {
+        String changelog = read("CHANGELOG.md");
+
+        assertTrue(changelog.contains("invalid `AMOUNT` values fail closed"));
+        assertTrue(changelog.contains("genuine zero"));
+        assertFalse(changelog.contains("invalid `AMOUNT` values to `0.00`"));
     }
 
     private static String read(String relativePath) throws IOException {

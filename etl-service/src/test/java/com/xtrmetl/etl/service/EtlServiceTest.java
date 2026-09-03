@@ -129,12 +129,16 @@ class EtlServiceTest {
         }
 
         @Test
-        void fallsBackToZeroForInvalidAmount() {
-            etlService.processData(
-                    "[{\"id\":\"record_alpha\",\"amount\":\"not-a-number\"}]"
+        void rejectsInvalidAmountInsteadOfManufacturingZero() {
+            EtlRequestException exception = assertThrows(
+                    EtlRequestException.class,
+                    () -> etlService.processData(
+                            "[{\"id\":\"record_alpha\",\"amount\":\"not-a-number\"}]"
+                    )
             );
 
-            verify(jdbcTemplate).update(anyString(), contains("AMOUNT:0.00"));
+            assertSame(EtlRequestError.INVALID_RECORD, exception.error());
+            verifyNoInteractions(jdbcTemplate);
         }
 
         @Test
@@ -154,19 +158,18 @@ class EtlServiceTest {
         }
 
         @Test
-        void preservesEmptyOptionalValues() {
+        void preservesEmptyOptionalNameAndEmailValues() {
             etlService.processData("""
                     [{
                       "id":"record_alpha",
                       "name":"",
-                      "email":"",
-                      "amount":""
+                      "email":""
                     }]
                     """);
 
             verify(jdbcTemplate).update(
                     anyString(),
-                    eq("ID:record_alpha,NAME:,EMAIL:,AMOUNT:0.00,")
+                    eq("ID:record_alpha,NAME:,EMAIL:,")
             );
         }
     }
