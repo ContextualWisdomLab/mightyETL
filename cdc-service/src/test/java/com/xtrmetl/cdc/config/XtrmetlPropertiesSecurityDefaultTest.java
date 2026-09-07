@@ -51,7 +51,7 @@ class XtrmetlPropertiesSecurityDefaultTest {
 
         XtrmetlProperties xtrmetlProperties = new Binder(configurationSource)
                 .bind("xtrmetl", Bindable.of(XtrmetlProperties.class))
-                .orElseThrow();
+                .orElseThrow(() -> new IllegalStateException("xtrmetl properties binding failed"));
         XtrmetlProperties.Source sourceConfiguration =
                 xtrmetlProperties.getCdc().getSources().getFirst();
 
