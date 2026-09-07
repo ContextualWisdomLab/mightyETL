@@ -12,13 +12,13 @@ import java.util.Optional;
 /**
  * Registry of CDC target connector types such as Kafka and JDBC replica targets.
  *
- * <p>Connector identifiers are configuration authority. Invalid registration is rejected so
+ * <p>Target connector identifiers are configuration authority. Invalid registration is rejected so
  * registration order cannot silently replace a selected connector implementation.</p>
  */
 @Component
 public class CdcTargetRegistry {
 
-    private final Map<String, CdcTargetConnector> byId = new LinkedHashMap<>();
+    private final Map<String, CdcTargetConnector> targetConnectorsById = new LinkedHashMap<>();
 
     /** Creates a registry containing the built-in Kafka and JDBC replica target connectors. */
     public CdcTargetRegistry() {
@@ -27,33 +27,33 @@ public class CdcTargetRegistry {
     }
 
     /**
-     * Registers one target connector without replacing an existing connector with the same id.
+     * Registers one target connector without replacing an existing connector with the same target id.
      *
-     * @param connector target connector to register
-     * @throws IllegalArgumentException when the connector is null, its id is blank, or its id is already registered
+     * @param targetConnector target connector to register
+     * @throws IllegalArgumentException when the connector is null, its target id is blank, or its target id is already registered
      */
-    public final void register(CdcTargetConnector connector) {
-        if (connector == null) {
+    public final void register(CdcTargetConnector targetConnector) {
+        if (targetConnector == null) {
             throw new IllegalArgumentException("CDC target connector must not be null");
         }
-        String id = Objects.requireNonNullElse(connector.id(), "");
-        if (id.isBlank()) {
+        String targetId = Objects.requireNonNullElse(targetConnector.targetId(), "");
+        if (targetId.isBlank()) {
             throw new IllegalArgumentException("CDC target connector id must not be blank");
         }
-        CdcTargetConnector previous = byId.putIfAbsent(id, connector);
-        if (previous != null) {
-            throw new IllegalArgumentException("Duplicate CDC target connector id: " + id);
+        CdcTargetConnector previousConnector = targetConnectorsById.putIfAbsent(targetId, targetConnector);
+        if (previousConnector != null) {
+            throw new IllegalArgumentException("Duplicate CDC target connector id: " + targetId);
         }
     }
 
     /**
      * Finds a target connector by its exact configuration identifier.
      *
-     * @param id exact connector identifier
+     * @param targetId exact target connector identifier
      * @return the registered connector, or empty when the identifier is unknown
      */
-    public Optional<CdcTargetConnector> find(String id) {
-        return Optional.ofNullable(byId.get(id));
+    public Optional<CdcTargetConnector> find(String targetId) {
+        return Optional.ofNullable(targetConnectorsById.get(targetId));
     }
 
     /**
@@ -62,6 +62,6 @@ public class CdcTargetRegistry {
      * @return immutable connector collection detached from registry mutation authority
      */
     public Collection<CdcTargetConnector> all() {
-        return List.copyOf(byId.values());
+        return List.copyOf(targetConnectorsById.values());
     }
 }

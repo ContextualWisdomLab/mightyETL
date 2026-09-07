@@ -9,21 +9,35 @@ import java.util.Set;
  */
 public abstract class AbstractScaffoldCdcSource implements CdcSourceConnector {
 
-    private final String id;
+    private final String sourceId;
     private final String displayName;
-    private final String engine;
-    private final Set<String> databases;
+    private final String sourceEngine;
+    private final Set<String> supportedDatabases;
 
-    protected AbstractScaffoldCdcSource(String id, String displayName, String engine, Set<String> databases) {
-        this.id = Objects.requireNonNull(id, "id");
+    protected AbstractScaffoldCdcSource(
+            String sourceId,
+            String displayName,
+            String sourceEngine,
+            Set<String> supportedDatabases
+    ) {
+        this.sourceId = Objects.requireNonNull(sourceId, "sourceId");
         this.displayName = Objects.requireNonNull(displayName, "displayName");
-        this.engine = Objects.requireNonNull(engine, "engine");
-        this.databases = Set.copyOf(databases);
+        this.sourceEngine = Objects.requireNonNull(sourceEngine, "sourceEngine");
+        this.supportedDatabases = Set.copyOf(supportedDatabases);
     }
 
     @Override
+    public final String sourceId() {
+        return sourceId;
+    }
+
+    /**
+     * @deprecated compatibility alias; organization-owned callers use {@link #sourceId()}
+     */
+    @Override
+    @Deprecated(forRemoval = false)
     public final String id() {
-        return id;
+        return sourceId();
     }
 
     @Override
@@ -33,16 +47,16 @@ public abstract class AbstractScaffoldCdcSource implements CdcSourceConnector {
 
     @Override
     public final SourceCapabilities capabilities() {
-        return new SourceCapabilities(engine, databases, true);
+        return new SourceCapabilities(sourceEngine, supportedDatabases, true);
     }
 
     @Override
-    public void validate(Map<String, String> config) {
-        Objects.requireNonNull(config, "config");
+    public void validate(Map<String, String> sourceConfig) {
+        Objects.requireNonNull(sourceConfig, "sourceConfig");
     }
 
     @Override
-    public final void start(Map<String, String> config) {
+    public final void start(Map<String, String> sourceConfig) {
         throw new UnsupportedOperationException(
                 displayName + " is a scaffold source only (no connector dependency wired). "
                         + "See docs/cdc/any-to-any-cdc.md"

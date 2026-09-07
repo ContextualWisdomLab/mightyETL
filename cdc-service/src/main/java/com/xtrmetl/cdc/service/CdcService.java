@@ -269,7 +269,7 @@ public class CdcService implements DisposableBean {
         }
         try {
             boolean ok = changeRecordMapper
-                    .map(PostgresDebeziumCdcSource.ID, topic, key, value)
+                    .map(PostgresDebeziumCdcSource.SOURCE_ID, topic, key, value)
                     .isPresent();
             if (ok) {
                 canonicalMapSuccess.incrementAndGet();

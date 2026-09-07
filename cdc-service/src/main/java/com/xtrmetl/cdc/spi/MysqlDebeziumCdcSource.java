@@ -10,9 +10,15 @@ import java.util.Set;
 @Component
 public final class MysqlDebeziumCdcSource extends AbstractScaffoldCdcSource {
 
-    public static final String ID = "mysql-debezium";
+    public static final String SOURCE_ID = "mysql-debezium";
+
+    /**
+     * @deprecated compatibility alias; organization-owned callers use {@link #SOURCE_ID}
+     */
+    @Deprecated(forRemoval = false)
+    public static final String ID = SOURCE_ID;
 
     public MysqlDebeziumCdcSource() {
-        super(ID, "MySQL (Debezium scaffold)", "debezium-embedded", Set.of("mysql"));
+        super(SOURCE_ID, "MySQL (Debezium scaffold)", "debezium-embedded", Set.of("mysql"));
     }
 }

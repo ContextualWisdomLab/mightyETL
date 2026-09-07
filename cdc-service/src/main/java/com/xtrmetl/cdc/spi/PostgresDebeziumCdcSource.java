@@ -21,17 +21,23 @@ import java.util.Set;
 @Component
 public final class PostgresDebeziumCdcSource implements CdcSourceConnector {
 
-    public static final String ID = "postgres-debezium";
+    public static final String SOURCE_ID = "postgres-debezium";
 
-    private final ObjectProvider<CdcService> cdcService;
+    /**
+     * @deprecated compatibility alias; organization-owned callers use {@link #SOURCE_ID}
+     */
+    @Deprecated(forRemoval = false)
+    public static final String ID = SOURCE_ID;
+
+    private final ObjectProvider<CdcService> cdcServiceProvider;
 
     /**
      * Creates the PostgreSQL CDC adapter backed by the deployment-configured live service.
      *
-     * @param cdcService provider for the live CDC service
+     * @param cdcServiceProvider provider for the live CDC service
      */
-    public PostgresDebeziumCdcSource(ObjectProvider<CdcService> cdcService) {
-        this.cdcService = cdcService;
+    public PostgresDebeziumCdcSource(ObjectProvider<CdcService> cdcServiceProvider) {
+        this.cdcServiceProvider = cdcServiceProvider;
     }
 
     /**
@@ -62,8 +68,17 @@ public final class PostgresDebeziumCdcSource implements CdcSourceConnector {
     }
 
     @Override
+    public String sourceId() {
+        return SOURCE_ID;
+    }
+
+    /**
+     * @deprecated compatibility alias; organization-owned callers use {@link #sourceId()}
+     */
+    @Override
+    @Deprecated(forRemoval = false)
     public String id() {
-        return ID;
+        return sourceId();
     }
 
     @Override
@@ -82,15 +97,15 @@ public final class PostgresDebeziumCdcSource implements CdcSourceConnector {
      * <p>The live PostgreSQL capture service is configured by the deployment, not by this SPI call.
      * An empty map is therefore the only valid value.</p>
      *
-     * @param config per-call settings; must be non-null and empty
-     * @throws IllegalArgumentException when {@code config} is null or contains any entry
+     * @param sourceConfig per-call settings; must be non-null and empty
+     * @throws IllegalArgumentException when {@code sourceConfig} is null or contains any entry
      */
     @Override
-    public void validate(Map<String, String> config) {
-        if (config == null) {
+    public void validate(Map<String, String> sourceConfig) {
+        if (sourceConfig == null) {
             throw new IllegalArgumentException("config must not be null");
         }
-        if (!config.isEmpty()) {
+        if (!sourceConfig.isEmpty()) {
             throw new IllegalArgumentException(
                     "postgres-debezium uses deployment-owned configuration; per-call config must be empty"
             );
@@ -100,32 +115,32 @@ public final class PostgresDebeziumCdcSource implements CdcSourceConnector {
     /**
      * Starts the deployment-configured PostgreSQL CDC service.
      *
-     * @param config per-call settings; must be non-null and empty
-     * @throws IllegalArgumentException when {@code config} is null or contains any entry
+     * @param sourceConfig per-call settings; must be non-null and empty
+     * @throws IllegalArgumentException when {@code sourceConfig} is null or contains any entry
      * @throws IllegalStateException when the live {@link CdcService} is unavailable
      */
     @Override
-    public void start(Map<String, String> config) {
-        validate(config);
-        CdcService service = cdcService.getIfAvailable();
-        if (service == null) {
+    public void start(Map<String, String> sourceConfig) {
+        validate(sourceConfig);
+        CdcService liveCdcService = cdcServiceProvider.getIfAvailable();
+        if (liveCdcService == null) {
             throw new IllegalStateException(
                     "CdcService is not available; cannot start postgres-debezium via SPI"
             );
         }
-        service.start();
+        liveCdcService.start();
     }
 
     @Override
     public void stop() {
-        CdcService service = cdcService.getIfAvailable();
-        if (service == null) {
+        CdcService liveCdcService = cdcServiceProvider.getIfAvailable();
+        if (liveCdcService == null) {
             return;
         }
         try {
-            service.stop();
-        } catch (IOException e) {
-            throw new IllegalStateException("Error stopping CDC via SPI", e);
+            liveCdcService.stop();
+        } catch (IOException stopFailure) {
+            throw new IllegalStateException("Error stopping CDC via SPI", stopFailure);
         }
     }
 }

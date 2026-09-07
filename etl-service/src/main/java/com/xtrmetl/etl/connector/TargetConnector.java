@@ -11,6 +11,26 @@ import java.util.Map;
  */
 public interface TargetConnector extends AutoCloseable {
 
+    /**
+     * Returns the bounded-context-specific ETL target identifier.
+     *
+     * <p>Organization-owned callers use this semantic accessor. The historical
+     * {@link #id()} method remains only as a compatibility seam for existing connector
+     * implementations and callers.</p>
+     *
+     * @return exact ETL target identifier
+     */
+    default String targetId() {
+        return id();
+    }
+
+    /**
+     * Historical compatibility accessor for the generic connector identifier.
+     *
+     * @return exact ETL target identifier
+     * @deprecated organization-owned callers must use {@link #targetId()}
+     */
+    @Deprecated(forRemoval = false)
     String id();
 
     String displayName();
@@ -55,20 +75,20 @@ public interface TargetConnector extends AutoCloseable {
     /**
      * Validate configuration before open. Implementations should fail fast on missing secrets.
      */
-    void validate(Map<String, String> config);
+    void validate(Map<String, String> targetConfig);
 
     /**
      * Establish client resources (connections, tokens). No-op allowed for pure scaffolds.
      */
-    default void open(Map<String, String> config) {
-        validate(config);
+    default void open(Map<String, String> targetConfig) {
+        validate(targetConfig);
     }
 
     /**
      * Write a batch of change records. Scaffold implementations must throw
      * {@link UnsupportedOperationException}.
      */
-    void write(List<ChangeRecord> batch);
+    void write(List<ChangeRecord> changeBatch);
 
     @Override
     default void close() {

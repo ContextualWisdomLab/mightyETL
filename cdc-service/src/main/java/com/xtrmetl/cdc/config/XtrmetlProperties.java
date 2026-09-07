@@ -57,33 +57,84 @@ public class XtrmetlProperties {
         }
 
         private static Source defaultPostgresSource() {
-            Source source = new Source();
-            source.setId("pg-main");
-            source.setType("postgres-debezium");
-            source.setEnabled(true);
-            return source;
+            Source sourceConfiguration = new Source();
+            sourceConfiguration.setSourceId("pg-main");
+            sourceConfiguration.setSourceType("postgres-debezium");
+            sourceConfiguration.setEnabled(true);
+            return sourceConfiguration;
         }
     }
 
+    /**
+     * Spring configuration adapter for one CDC source declaration.
+     *
+     * <p>The authoritative Java names are {@code sourceId}/{@code sourceType}. Legacy
+     * {@code id}/{@code type} bean accessors remain only so existing YAML continues to bind
+     * without a breaking configuration migration.</p>
+     */
     public static class Source {
-        private String id = "pg-main";
-        private String type = "postgres-debezium";
+        private String sourceId = "pg-main";
+        private String sourceType = "postgres-debezium";
         private boolean enabled = true;
 
+        public String getSourceId() {
+            return sourceId;
+        }
+
+        public void setSourceId(String sourceId) {
+            this.sourceId = sourceId;
+        }
+
+        public String getSourceType() {
+            return sourceType;
+        }
+
+        public void setSourceType(String sourceType) {
+            this.sourceType = sourceType;
+        }
+
+        /**
+         * Legacy Spring/YAML compatibility accessor for the historical {@code id} key.
+         *
+         * @return the configured CDC source identifier
+         * @deprecated internal callers must use {@link #getSourceId()}
+         */
+        @Deprecated(forRemoval = false)
         public String getId() {
-            return id;
+            return sourceId;
         }
 
-        public void setId(String id) {
-            this.id = id;
+        /**
+         * Legacy Spring/YAML compatibility mutator for the historical {@code id} key.
+         *
+         * @param legacySourceId configured CDC source identifier
+         * @deprecated internal callers must use {@link #setSourceId(String)}
+         */
+        @Deprecated(forRemoval = false)
+        public void setId(String legacySourceId) {
+            this.sourceId = legacySourceId;
         }
 
+        /**
+         * Legacy Spring/YAML compatibility accessor for the historical {@code type} key.
+         *
+         * @return the configured CDC source connector type
+         * @deprecated internal callers must use {@link #getSourceType()}
+         */
+        @Deprecated(forRemoval = false)
         public String getType() {
-            return type;
+            return sourceType;
         }
 
-        public void setType(String type) {
-            this.type = type;
+        /**
+         * Legacy Spring/YAML compatibility mutator for the historical {@code type} key.
+         *
+         * @param legacySourceType configured CDC source connector type
+         * @deprecated internal callers must use {@link #setSourceType(String)}
+         */
+        @Deprecated(forRemoval = false)
+        public void setType(String legacySourceType) {
+            this.sourceType = legacySourceType;
         }
 
         public boolean isEnabled() {

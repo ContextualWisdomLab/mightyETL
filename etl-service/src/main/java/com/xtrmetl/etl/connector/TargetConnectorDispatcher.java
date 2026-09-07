@@ -33,35 +33,38 @@ public class TargetConnectorDispatcher {
 
     private static final Logger log = LoggerFactory.getLogger(TargetConnectorDispatcher.class);
 
-    private final TargetConnectorRegistry registry;
-    private final ConnectorProperties properties;
+    private final TargetConnectorRegistry targetRegistry;
+    private final ConnectorProperties connectorProperties;
     private final ConcurrentMap<String, TargetConnector> openedConnectors = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, Object> lifecycleLocks = new ConcurrentHashMap<>();
     private final ReentrantReadWriteLock lifecycleGate = new ReentrantReadWriteLock(true);
-    private boolean closed;
+    private boolean dispatcherClosed;
 
-    public TargetConnectorDispatcher(TargetConnectorRegistry registry, ConnectorProperties properties) {
-        this.registry = Objects.requireNonNull(registry, "registry must not be null");
-        this.properties = Objects.requireNonNull(properties, "properties must not be null");
+    public TargetConnectorDispatcher(
+            TargetConnectorRegistry targetRegistry,
+            ConnectorProperties connectorProperties
+    ) {
+        this.targetRegistry = Objects.requireNonNull(targetRegistry, "registry must not be null");
+        this.connectorProperties = Objects.requireNonNull(connectorProperties, "properties must not be null");
     }
 
     @PostConstruct
     void logConnectorCatalog() {
-        for (TargetConnector connector : registry.all()) {
-            boolean enabled = properties.isEnabled(connector.id());
+        for (TargetConnector targetConnector : targetRegistry.all()) {
+            boolean connectorEnabled = connectorProperties.isEnabled(targetConnector.targetId());
             log.info(
                     "Target connector id={} status={} enabled={} requiredKeys={}",
-                    connector.id(),
-                    connector.status(),
-                    enabled,
-                    connector.requiredConfigKeys()
+                    targetConnector.targetId(),
+                    targetConnector.status(),
+                    connectorEnabled,
+                    targetConnector.requiredConfigKeys()
             );
-            if (enabled && connector.status() != ConnectorStatus.SUPPORTED) {
+            if (connectorEnabled && targetConnector.status() != ConnectorStatus.SUPPORTED) {
                 log.warn(
                         "Connector '{}' is enabled but status={} — write() will be refused. "
                                 + "See docs/connectors/",
-                        connector.id(),
-                        connector.status()
+                        targetConnector.targetId(),
+                        targetConnector.status()
                 );
             }
         }
@@ -78,26 +81,26 @@ public class TargetConnectorDispatcher {
      * after shutdown begins.</p>
      *
      * @param connectorId registered connector identifier
-     * @param batch normalized change records to write
-     * @throws NullPointerException when {@code connectorId} or {@code batch} is null
+     * @param changeBatch normalized change records to write
+     * @throws NullPointerException when {@code connectorId} or {@code changeBatch} is null
      * @throws IllegalArgumentException when the connector identifier is unknown
      * @throws IllegalStateException when the connector is disabled or the dispatcher is closed
      * @throws UnsupportedOperationException when the connector is not production-supported
      */
-    public void dispatch(String connectorId, List<ChangeRecord> batch) {
+    public void dispatch(String connectorId, List<ChangeRecord> changeBatch) {
         Objects.requireNonNull(connectorId, "connectorId must not be null");
-        Objects.requireNonNull(batch, "batch must not be null");
+        Objects.requireNonNull(changeBatch, "batch must not be null");
 
         Lock dispatchLock = lifecycleGate.readLock();
         dispatchLock.lock();
         try {
-            if (closed) {
+            if (dispatcherClosed) {
                 throw new IllegalStateException("Target connector dispatcher is closed");
             }
 
-            TargetConnector connector = registry.find(connectorId)
+            TargetConnector targetConnector = targetRegistry.find(connectorId)
                     .orElseThrow(() -> new IllegalArgumentException("Unknown connector: " + connectorId));
-            if (!properties.isEnabled(connectorId)) {
+            if (!connectorProperties.isEnabled(connectorId)) {
                 throw new IllegalStateException(
                         "Connector '" + connectorId + "' is disabled. Set xtrmetl.connectors."
                                 + connectorId.replace("-", ".")
@@ -105,19 +108,19 @@ public class TargetConnectorDispatcher {
                 );
             }
 
-            Map<String, String> config = properties.configMap(connectorId);
-            if (connector.status() != ConnectorStatus.SUPPORTED) {
-                connector.validate(config);
-                throw new UnsupportedOperationException(connector.writeRefusalReason());
+            Map<String, String> targetConfig = connectorProperties.configMap(connectorId);
+            if (targetConnector.status() != ConnectorStatus.SUPPORTED) {
+                targetConnector.validate(targetConfig);
+                throw new UnsupportedOperationException(targetConnector.writeRefusalReason());
             }
 
-            Object connectorLock = lifecycleLocks.computeIfAbsent(
+            Object targetLock = lifecycleLocks.computeIfAbsent(
                     connectorId,
                     ignored -> new Object()
             );
-            synchronized (connectorLock) {
-                ensureOpen(connectorId, connector, config);
-                connector.write(batch);
+            synchronized (targetLock) {
+                ensureOpen(connectorId, targetConnector, targetConfig);
+                targetConnector.write(changeBatch);
             }
         } finally {
             dispatchLock.unlock();
@@ -133,24 +136,24 @@ public class TargetConnectorDispatcher {
         Lock catalogLock = lifecycleGate.readLock();
         catalogLock.lock();
         try {
-            List<Map<String, Object>> rows = new ArrayList<>();
-            for (TargetConnector connector : registry.all()) {
-                Map<String, Object> row = new LinkedHashMap<>();
-                row.put("id", connector.id());
-                row.put("displayName", connector.displayName());
-                row.put("status", connector.status().name());
-                row.put("enabled", properties.isEnabled(connector.id()));
-                row.put("writable", !closed
-                        && connector.status() == ConnectorStatus.SUPPORTED
-                        && properties.isEnabled(connector.id()));
-                row.put("opened", openedConnectors.get(connector.id()) == connector);
-                row.put("requiredConfigKeys", connector.requiredConfigKeys());
-                row.put("optionalConfigKeys", connector.optionalConfigKeys());
-                row.put("writeRefusalReason", connector.writeRefusalReason());
-                row.put("integration", connector.describeIntegration());
-                rows.add(row);
+            List<Map<String, Object>> catalogRows = new ArrayList<>();
+            for (TargetConnector targetConnector : targetRegistry.all()) {
+                Map<String, Object> catalogRow = new LinkedHashMap<>();
+                catalogRow.put("id", targetConnector.targetId());
+                catalogRow.put("displayName", targetConnector.displayName());
+                catalogRow.put("status", targetConnector.status().name());
+                catalogRow.put("enabled", connectorProperties.isEnabled(targetConnector.targetId()));
+                catalogRow.put("writable", !dispatcherClosed
+                        && targetConnector.status() == ConnectorStatus.SUPPORTED
+                        && connectorProperties.isEnabled(targetConnector.targetId()));
+                catalogRow.put("opened", openedConnectors.get(targetConnector.targetId()) == targetConnector);
+                catalogRow.put("requiredConfigKeys", targetConnector.requiredConfigKeys());
+                catalogRow.put("optionalConfigKeys", targetConnector.optionalConfigKeys());
+                catalogRow.put("writeRefusalReason", targetConnector.writeRefusalReason());
+                catalogRow.put("integration", targetConnector.describeIntegration());
+                catalogRows.add(catalogRow);
             }
-            return rows;
+            return catalogRows;
         } finally {
             catalogLock.unlock();
         }
@@ -165,25 +168,25 @@ public class TargetConnectorDispatcher {
      */
     private void ensureOpen(
             String connectorId,
-            TargetConnector connector,
-            Map<String, String> config
+            TargetConnector targetConnector,
+            Map<String, String> targetConfig
     ) {
-        TargetConnector active = openedConnectors.get(connectorId);
-        if (active == connector) {
+        TargetConnector activeConnector = openedConnectors.get(connectorId);
+        if (activeConnector == targetConnector) {
             return;
         }
-        if (active != null) {
+        if (activeConnector != null) {
             throw new IllegalStateException(
                     "Connector registry entry changed after open: " + connectorId
             );
         }
 
-        connector.validate(config);
+        targetConnector.validate(targetConfig);
         try {
-            connector.open(config);
+            targetConnector.open(targetConfig);
         } catch (RuntimeException openFailure) {
             try {
-                connector.close();
+                targetConnector.close();
             } catch (RuntimeException cleanupFailure) {
                 openFailure.addSuppressed(cleanupFailure);
                 log.warn("Failed to clean up target connector after open failure id={}", connectorId);
@@ -191,7 +194,7 @@ public class TargetConnectorDispatcher {
             throw openFailure;
         }
 
-        openedConnectors.put(connectorId, connector);
+        openedConnectors.put(connectorId, targetConnector);
         log.info("Opened target connector id={}", connectorId);
     }
 
@@ -207,27 +210,27 @@ public class TargetConnectorDispatcher {
         Lock shutdownLock = lifecycleGate.writeLock();
         shutdownLock.lock();
         try {
-            if (closed) {
+            if (dispatcherClosed) {
                 return;
             }
-            closed = true;
+            dispatcherClosed = true;
 
-            for (Map.Entry<String, TargetConnector> entry
+            for (Map.Entry<String, TargetConnector> connectorEntry
                     : new ArrayList<>(openedConnectors.entrySet())) {
-                String connectorId = entry.getKey();
-                TargetConnector connector = entry.getValue();
-                Object connectorLock = lifecycleLocks.computeIfAbsent(
+                String connectorId = connectorEntry.getKey();
+                TargetConnector targetConnector = connectorEntry.getValue();
+                Object targetLock = lifecycleLocks.computeIfAbsent(
                         connectorId,
                         ignored -> new Object()
                 );
-                synchronized (connectorLock) {
-                    if (!openedConnectors.remove(connectorId, connector)) {
+                synchronized (targetLock) {
+                    if (!openedConnectors.remove(connectorId, targetConnector)) {
                         continue;
                     }
                     try {
-                        connector.close();
+                        targetConnector.close();
                         log.info("Closed target connector id={}", connectorId);
-                    } catch (RuntimeException exception) {
+                    } catch (RuntimeException closeFailure) {
                         log.error("Failed to close target connector id={}", connectorId);
                     }
                 }

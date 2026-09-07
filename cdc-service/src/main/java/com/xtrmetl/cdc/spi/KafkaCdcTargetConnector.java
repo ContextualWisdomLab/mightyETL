@@ -9,11 +9,26 @@ import java.util.Map;
  */
 public final class KafkaCdcTargetConnector implements CdcTargetConnector {
 
-    public static final String ID = "kafka";
+    public static final String TARGET_ID = "kafka";
+
+    /**
+     * @deprecated compatibility alias; organization-owned callers use {@link #TARGET_ID}
+     */
+    @Deprecated(forRemoval = false)
+    public static final String ID = TARGET_ID;
 
     @Override
+    public String targetId() {
+        return TARGET_ID;
+    }
+
+    /**
+     * @deprecated compatibility alias; organization-owned callers use {@link #targetId()}
+     */
+    @Override
+    @Deprecated(forRemoval = false)
     public String id() {
-        return ID;
+        return targetId();
     }
 
     @Override
@@ -37,14 +52,14 @@ public final class KafkaCdcTargetConnector implements CdcTargetConnector {
     }
 
     @Override
-    public void validate(Map<String, String> config) {
-        if (config == null) {
+    public void validate(Map<String, String> targetConfig) {
+        if (targetConfig == null) {
             throw new IllegalArgumentException("config must not be null");
         }
     }
 
     @Override
-    public void write(List<CanonicalChangeRecord> batch) {
+    public void write(List<CanonicalChangeRecord> changeBatch) {
         throw new UnsupportedOperationException(
                 "Live Kafka publish still uses raw Debezium envelopes via CdcService; "
                         + "canonical-record routing is not wired yet. See docs/cdc/any-to-any-cdc.md"

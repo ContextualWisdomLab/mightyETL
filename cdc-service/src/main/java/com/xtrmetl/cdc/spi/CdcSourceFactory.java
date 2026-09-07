@@ -19,62 +19,66 @@ import java.util.Set;
 @Component
 public class CdcSourceFactory {
 
-    private final CdcSourceRegistry registry;
+    private final CdcSourceRegistry sourceRegistry;
 
-    public CdcSourceFactory(CdcSourceRegistry registry) {
-        this.registry = registry;
+    public CdcSourceFactory(CdcSourceRegistry sourceRegistry) {
+        this.sourceRegistry = sourceRegistry;
     }
 
-    public Optional<CdcSourceConnector> resolve(String type) {
-        if (type == null || type.isBlank()) {
+    public Optional<CdcSourceConnector> resolve(String sourceType) {
+        if (sourceType == null || sourceType.isBlank()) {
             return Optional.empty();
         }
-        String normalized = type.trim().toLowerCase(Locale.ROOT);
-        return registry.find(normalized);
+        String normalizedSourceType = sourceType.trim().toLowerCase(Locale.ROOT);
+        return sourceRegistry.find(normalizedSourceType);
     }
 
     /**
      * Validates and describes a multi-source configuration list without starting engines.
      * Live capture remains single-source in {@code CdcService}.
      *
-     * @param specs configured source entries; {@code null} is treated as an empty list
+     * @param sourceSpecs configured source entries; {@code null} is treated as an empty list
      * @return one descriptive row for each configured source
      * @throws IllegalArgumentException when two entries declare the same source id
      */
-    public List<Map<String, Object>> describeConfigured(List<SourceSpec> specs) {
-        List<Map<String, Object>> out = new ArrayList<>();
-        if (specs == null) {
-            return out;
+    public List<Map<String, Object>> describeConfigured(List<SourceSpec> sourceSpecs) {
+        List<Map<String, Object>> sourceDescriptions = new ArrayList<>();
+        if (sourceSpecs == null) {
+            return sourceDescriptions;
         }
         Set<String> sourceIds = new HashSet<>();
-        for (SourceSpec spec : specs) {
-            if (!sourceIds.add(spec.id())) {
-                throw new IllegalArgumentException("duplicate source id: " + spec.id());
+        for (SourceSpec sourceSpec : sourceSpecs) {
+            if (!sourceIds.add(sourceSpec.sourceId())) {
+                throw new IllegalArgumentException("duplicate source id: " + sourceSpec.sourceId());
             }
-            Map<String, Object> row = new java.util.LinkedHashMap<>();
-            row.put("id", spec.id());
-            row.put("type", spec.type());
-            row.put("enabled", spec.enabled());
-            Optional<CdcSourceConnector> connector = resolve(spec.type());
-            row.put("registered", connector.isPresent());
-            row.put("scaffoldOnly", connector.map(c -> c.capabilities().scaffoldOnly()).orElse(true));
-            if (connector.isEmpty()) {
-                row.put("error", "unknown_source_type");
+            Map<String, Object> sourceDescription = new java.util.LinkedHashMap<>();
+            // Compatibility boundary: the existing HTTP response still publishes legacy id/type keys.
+            sourceDescription.put("id", sourceSpec.sourceId());
+            sourceDescription.put("type", sourceSpec.sourceType());
+            sourceDescription.put("enabled", sourceSpec.enabled());
+            Optional<CdcSourceConnector> sourceConnector = resolve(sourceSpec.sourceType());
+            sourceDescription.put("registered", sourceConnector.isPresent());
+            sourceDescription.put(
+                    "scaffoldOnly",
+                    sourceConnector.map(connector -> connector.capabilities().scaffoldOnly()).orElse(true)
+            );
+            if (sourceConnector.isEmpty()) {
+                sourceDescription.put("error", "unknown_source_type");
             }
-            out.add(row);
+            sourceDescriptions.add(sourceDescription);
         }
-        return out;
+        return sourceDescriptions;
     }
 
     /**
      * Immutable source config entry (YAML list item).
      */
-    public record SourceSpec(String id, String type, boolean enabled) {
+    public record SourceSpec(String sourceId, String sourceType, boolean enabled) {
         public SourceSpec {
-            if (id == null || id.isBlank()) {
+            if (sourceId == null || sourceId.isBlank()) {
                 throw new IllegalArgumentException("source id required");
             }
-            if (type == null || type.isBlank()) {
+            if (sourceType == null || sourceType.isBlank()) {
                 throw new IllegalArgumentException("source type required");
             }
         }

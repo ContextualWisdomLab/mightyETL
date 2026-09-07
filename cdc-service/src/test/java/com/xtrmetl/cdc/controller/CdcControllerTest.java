@@ -28,7 +28,7 @@ import static org.mockito.Mockito.when;
 class CdcControllerTest {
 
     private CdcService cdcService;
-    private XtrmetlProperties properties;
+    private XtrmetlProperties xtrmetlProperties;
     private CdcSourceRegistry sourceRegistry;
     private CdcTargetRegistry targetRegistry;
     private CdcSourceFactory sourceFactory;
@@ -38,7 +38,7 @@ class CdcControllerTest {
     @BeforeEach
     void setUp() {
         cdcService = mock(CdcService.class);
-        properties = new XtrmetlProperties();
+        xtrmetlProperties = new XtrmetlProperties();
         sourceRegistry = new CdcSourceRegistry();
         targetRegistry = new CdcTargetRegistry();
         sourceFactory = new CdcSourceFactory(sourceRegistry);
@@ -52,7 +52,7 @@ class CdcControllerTest {
         ));
         cdcController = new CdcController(
                 cdcService,
-                properties,
+                xtrmetlProperties,
                 sourceRegistry,
                 targetRegistry,
                 sourceFactory,
@@ -96,44 +96,52 @@ class CdcControllerTest {
         serviceStatus.put("product", "mightyETL");
         when(cdcService.getStatus()).thenReturn(serviceStatus);
 
-        ResponseEntity<Map<String, Object>> response = cdcController.status();
+        ResponseEntity<Map<String, Object>> response = cdcController.cdcStatus();
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        Map<String, Object> body = response.getBody();
-        assertEquals(false, body.get("running"));
-        assertEquals("mightyETL", body.get("product"));
-        assertEquals(false, body.get("replicaEnabled"));
-        assertTrue(body.containsKey("registeredSources"));
-        assertTrue(body.containsKey("registeredTargets"));
-        assertTrue(body.containsKey("configuredSources"));
-        assertTrue(body.containsKey("replicationSlot"));
+        Map<String, Object> statusBody = response.getBody();
+        assertEquals(false, statusBody.get("running"));
+        assertEquals("mightyETL", statusBody.get("product"));
+        assertEquals(false, statusBody.get("replicaEnabled"));
+        assertTrue(statusBody.containsKey("registeredSources"));
+        assertTrue(statusBody.containsKey("registeredTargets"));
+        assertTrue(statusBody.containsKey("configuredSources"));
+        assertTrue(statusBody.containsKey("replicationSlot"));
         @SuppressWarnings("unchecked")
-        Map<String, Object> slot = (Map<String, Object>) body.get("replicationSlot");
-        assertEquals(true, slot.get("found"));
+        Map<String, Object> replicationSlot =
+                (Map<String, Object>) statusBody.get("replicationSlot");
+        assertEquals(true, replicationSlot.get("found"));
         @SuppressWarnings("unchecked")
-        List<Map<String, Object>> sources = (List<Map<String, Object>>) body.get("registeredSources");
-        assertFalse(sources.isEmpty());
-        assertEquals("postgres-debezium", sources.get(0).get("id"));
+        List<Map<String, Object>> sourceEntries =
+                (List<Map<String, Object>>) statusBody.get("registeredSources");
+        assertFalse(sourceEntries.isEmpty());
+        assertEquals("postgres-debezium", sourceEntries.get(0).get("id"));
     }
 
     @Test
     void testSourcesListsPostgresDebezium() {
-        ResponseEntity<List<Map<String, Object>>> response = cdcController.sources();
+        ResponseEntity<List<Map<String, Object>>> response = cdcController.cdcSources();
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        List<Map<String, Object>> body = response.getBody();
-        assertFalse(body.isEmpty());
-        assertTrue(body.stream().anyMatch(s -> "postgres-debezium".equals(s.get("id"))));
+        List<Map<String, Object>> sourceEntries = response.getBody();
+        assertFalse(sourceEntries.isEmpty());
+        assertTrue(sourceEntries.stream().anyMatch(
+                sourceEntry -> "postgres-debezium".equals(sourceEntry.get("id"))
+        ));
     }
 
     @Test
     void testTargetsListsKafkaAndJdbcReplica() {
-        ResponseEntity<List<Map<String, Object>>> response = cdcController.targets();
+        ResponseEntity<List<Map<String, Object>>> response = cdcController.cdcTargets();
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        List<Map<String, Object>> body = response.getBody();
-        assertEquals(2, body.size());
-        assertTrue(body.stream().anyMatch(t -> "kafka".equals(t.get("id"))));
-        assertTrue(body.stream().anyMatch(t -> "jdbc-replica".equals(t.get("id"))));
+        List<Map<String, Object>> targetEntries = response.getBody();
+        assertEquals(2, targetEntries.size());
+        assertTrue(targetEntries.stream().anyMatch(
+                targetEntry -> "kafka".equals(targetEntry.get("id"))
+        ));
+        assertTrue(targetEntries.stream().anyMatch(
+                targetEntry -> "jdbc-replica".equals(targetEntry.get("id"))
+        ));
     }
 }
