@@ -16,14 +16,15 @@ import java.lang.reflect.Type;
 import java.util.Objects;
 
 /**
- * Enforces the synchronous ETL payload byte limit before Spring MVC materializes a request body.
+ * Enforces the ETL payload byte limit before Spring MVC materializes a request body.
  *
- * <p>Known oversized bodies are rejected from their {@code Content-Length} metadata without reading
+ * <p>The guard covers the synchronous process endpoint and the durable job-intake endpoint.
+ * Known oversized bodies are rejected from their {@code Content-Length} metadata without reading
  * the entity. Unknown-length or understated bodies are wrapped in a byte-counting stream that reads
  * at most one byte beyond the configured limit before raising the existing typed payload error. The
  * service-level admission check remains in place as defense in depth.</p>
  */
-@ControllerAdvice(assignableTypes = EtlController.class)
+@ControllerAdvice(assignableTypes = {EtlController.class, EtlJobController.class})
 public final class EtlPayloadAdmissionAdvice extends RequestBodyAdviceAdapter {
 
     private final EtlBatchProperties batchProperties;
@@ -41,12 +42,12 @@ public final class EtlPayloadAdmissionAdvice extends RequestBodyAdviceAdapter {
     }
 
     /**
-     * Applies admission control to string request bodies handled by {@link EtlController}.
+     * Applies admission control to string request bodies handled by the ETL HTTP adapters.
      *
      * @param methodParameter controller method parameter receiving the request body
      * @param targetType declared request-body target type
      * @param converterType selected HTTP message converter type
-     * @return {@code true} only for the synchronous ETL string body
+     * @return {@code true} only for ETL string request bodies
      */
     @Override
     public boolean supports(

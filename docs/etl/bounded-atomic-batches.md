@@ -70,7 +70,7 @@ Values outside the supported range fail configuration binding instead of silentl
 
 ## Operational guidance
 
-- Keep the payload limit aligned with gateway and ingress body-size limits. The service-level check occurs after the MVC stack has materialized the request string and is not a substitute for edge enforcement.
+- Keep the payload limit aligned with gateway and ingress body-size limits. The MVC transport guard rejects known oversized `Content-Length` values without reading the entity and bounds unknown-length reads before String conversion for both `POST /api/etl/process` and `POST /api/etl/jobs`. The service-level UTF-8 check remains defense in depth and is not a substitute for edge enforcement.
 - Keep the record limit below the transaction size that the target database can commit within the request timeout and lock budget.
 - Monitor request latency, transaction duration, rollback rate, database pool wait time, and rejected payload/record-limit errors before raising either limit.
 - Use descriptive string identifiers. Numeric JSON identifier types are rejected to keep identifier contracts explicit and stable across systems.

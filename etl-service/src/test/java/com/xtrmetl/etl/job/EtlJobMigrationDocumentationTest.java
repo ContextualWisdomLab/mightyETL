@@ -66,6 +66,8 @@ class EtlJobMigrationDocumentationTest {
         assertTrue(runbook.contains("disabled by default"));
         assertTrue(runbook.contains("mightyetl.etl.jobs.intake-enabled=true"));
         assertTrue(runbook.contains("xtrmetl.etl.jobs.intake-enabled=true"));
+        assertTrue(runbook.contains("max-payload-bytes"));
+        assertTrue(runbook.contains("without reading the entity"));
     }
 
     private static String read(String relativePath) throws IOException {

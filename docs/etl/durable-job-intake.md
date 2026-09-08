@@ -14,7 +14,11 @@ are supplied, `mightyetl.*` wins. Enabling intake accepts the temporary boundary
 payloads remain retained in `PENDING` jobs until the worker and terminal payload-clearing slice is
 implemented. Deployments that cannot accept that retention boundary must leave the setting false.
 
-The existing synchronous `POST /api/etl/process` endpoint remains unchanged.
+The existing synchronous `POST /api/etl/process` endpoint remains unchanged. Enabled job intake
+shares that endpoint's `max-payload-bytes` ceiling at the HTTP transport: known oversized
+`Content-Length` values are rejected without reading the entity, and unknown-length or understated
+bodies are bounded before MVC converts the request to a String. Service-level UTF-8 admission stays
+in place as defense in depth.
 
 ## Submit a job
 
