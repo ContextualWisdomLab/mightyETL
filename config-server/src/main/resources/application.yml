@@ -8,7 +8,8 @@ spring:
     config:
       server:
         git:
-          uri: ${CONFIG_REPO_URI:https://github.com/your-repo/config-repo.git}
+          # Set CONFIG_REPO_URI to a reviewed Git URI before starting the default profile.
+          uri: ${CONFIG_REPO_URI}
 
 eureka:
   client:
