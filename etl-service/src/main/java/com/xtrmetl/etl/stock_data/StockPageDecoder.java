@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilderFactory;
 import org.w3c.dom.Element;
@@ -30,19 +31,23 @@ final class StockPageDecoder {
     static DecodedPage decodePage(byte[] rawBody, FscStockDataSource.StockQuery sourceQuery, int pageNumber) {
         Element rootElement = readDocument(rawBody);
         requireName(rootElement, "response");
-        Element headerElement = onlyChild(rootElement, "header");
-        if (!"00".equals(textValue(onlyChild(headerElement, "resultCode")))) {
+        Map<String, Element> responseChildren = requireChildren(rootElement, Set.of("header", "body"), Set.of());
+        Element headerElement = responseChildren.get("header");
+        Map<String, Element> headerChildren = requireChildren(headerElement, Set.of("resultCode"), Set.of("resultMsg"));
+        if (!"00".equals(textValue(headerChildren.get("resultCode")))) {
             throw new StockDataException("provider_rejected");
         }
-        Element bodyElement = onlyChild(rootElement, "body");
-        int responsePage = integerValue(textValue(onlyChild(bodyElement, "pageNo")));
-        int responseSize = integerValue(textValue(onlyChild(bodyElement, "numOfRows")));
-        int totalCount = integerValue(textValue(onlyChild(bodyElement, "totalCount")));
+        Element bodyElement = responseChildren.get("body");
+        Map<String, Element> bodyChildren = requireChildren(
+                bodyElement, Set.of("pageNo", "numOfRows", "totalCount", "items"), Set.of());
+        int responsePage = integerValue(textValue(bodyChildren.get("pageNo")));
+        int responseSize = integerValue(textValue(bodyChildren.get("numOfRows")));
+        int totalCount = integerValue(textValue(bodyChildren.get("totalCount")));
         if (responsePage != pageNumber || responseSize != sourceQuery.pageSize()) {
             throw new StockDataException("invalid_page");
         }
         List<StockPriceRecord> priceRecords = new ArrayList<>();
-        Element itemsElement = onlyChild(bodyElement, "items");
+        Element itemsElement = bodyChildren.get("items");
         for (Element itemElement : elementChildren(itemsElement)) {
             requireName(itemElement, "item");
             if (priceRecords.size() >= sourceQuery.pageSize()) {
@@ -169,21 +174,25 @@ final class StockPageDecoder {
         }
     }
 
-    private static Element onlyChild(Element parentElement, String childName) {
-        Element selectedElement = null;
+    private static Map<String, Element> requireChildren(
+            Element parentElement, Set<String> requiredNames, Set<String> optionalNames) {
+        Map<String, Element> selectedChildren = new LinkedHashMap<>();
         for (Element childElement : elementChildren(parentElement)) {
-            if (childName.equals(childElement.getTagName())) {
-                requirePlainElement(childElement);
-                if (selectedElement != null) {
-                    throw new StockDataException("invalid_xml");
-                }
-                selectedElement = childElement;
+            requirePlainElement(childElement);
+            String childName = childElement.getTagName();
+            if (!requiredNames.contains(childName) && !optionalNames.contains(childName)) {
+                throw new StockDataException("invalid_xml");
+            }
+            if (selectedChildren.putIfAbsent(childName, childElement) != null) {
+                throw new StockDataException("invalid_xml");
             }
         }
-        if (selectedElement == null) {
-            throw new StockDataException("invalid_xml");
+        for (String requiredName : requiredNames) {
+            if (!selectedChildren.containsKey(requiredName)) {
+                throw new StockDataException("invalid_xml");
+            }
         }
-        return selectedElement;
+        return selectedChildren;
     }
 
     private static List<Element> elementChildren(Element parentElement) {

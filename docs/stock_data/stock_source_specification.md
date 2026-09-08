@@ -40,7 +40,7 @@ Public page parameters use `basDt` for one day or `beginBasDt`/`endBasDt` for a 
 | `trqu`, `trPrc` | `BigInteger` volume/value | exact integers, including values above 2^53 |
 | remaining row fields | immutable `sourceFields` | bounded XML text with surrounding whitespace stripped; exact bytes remain in raw pages |
 
-Every batch retains the request, immutable observations and raw pages. Each raw page has `pageNumber`, `collectedAt`, exact bytes and their SHA-256. Preserve those bytes in an authorized archive before discarding the batch when durable replay is required. Returning a digest does not itself create durable storage or lineage publication. No request URL with `serviceKey` enters this evidence.
+Every batch retains the request, immutable observations and raw pages. Each raw page has `pageNumber`, `collectedAt`, exact bytes and their SHA-256. Preserve those bytes in an authorized archive before discarding the batch when durable replay is required. Returning a digest does not itself create durable storage or lineage publication. No request URL with `serviceKey` enters this evidence. Undeclared or duplicate children in `response`, `header`, or `body` fail the page; `item` fields may still carry provider-defined names. Cancellation after body read, after decode, or immediately before returning a batch yields `cancelled` rather than a completed result.
 
 ## Failure and operating behavior
 

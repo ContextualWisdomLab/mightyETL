@@ -25,7 +25,7 @@ A complete batch is returned only after every page passes. Raw transfer-decoded 
 
 Bounds are consumer safety budgets, not claimed provider quotas: 366 inclusive calendar days, 1,000 rows/page, 100 pages, 10,000 records, 2 MiB/page and 16 MiB raw bytes/batch. Exceeding a budget fails the request instead of silently truncating. Large backfills must be partitioned explicitly by the host and retain separate collection receipts.
 
-XML processing denies DTDs, external entities, schemas and XInclude, limits element depth, and suppresses provider/parser diagnostics. Transport errors, including close/suppressed failures, do not expose URLs, keys or payloads. Cancellation is checked before acquisition and after body delivery/read; response ownership is closed on every outcome.
+XML processing denies DTDs, external entities, schemas and XInclude, limits element depth, and suppresses provider/parser diagnostics. Structural `response`, `header`, and `body` children must match the declared envelope; unknown or duplicate structural elements fail the page. Provider-defined fields remain allowed only inside `item`. Transport errors, including close/suppressed failures, do not expose URLs, keys or payloads. Cancellation is checked before acquisition, after body delivery/read, after XML decode/validation, and immediately before a completed batch can escape; response ownership is closed on every outcome.
 
 ## Ownership and interoperability
 

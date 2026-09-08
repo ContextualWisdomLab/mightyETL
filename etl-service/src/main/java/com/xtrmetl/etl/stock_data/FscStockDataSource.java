@@ -73,6 +73,7 @@ public final class FscStockDataSource {
             }
             Instant collectedAt = observationClock.instant();
             var decodedPage = StockPageDecoder.decodePage(rawBody, sourceQuery, pageNumber);
+            requireNotCancelled();
             if (expectedTotal == -1) {
                 expectedTotal = decodedPage.totalCount();
                 if (expectedTotal > sourceQuery.maximumRecords()
@@ -93,6 +94,7 @@ public final class FscStockDataSource {
             }
             rawPages.add(new RawStockPage(pageNumber, collectedAt, rawBody));
             if (priceRecords.size() == expectedTotal) {
+                requireNotCancelled();
                 return new StockBatch(sourceQuery, priceRecords, rawPages);
             }
         }
@@ -116,10 +118,14 @@ public final class FscStockDataSource {
         return new StockDataTransport.PageRequest(SOURCE_ENDPOINT, publicParameters, credentialReference, pageNumber);
     }
 
-    private byte[] fetchBody(StockDataTransport.PageRequest pageRequest) {
+    private static void requireNotCancelled() {
         if (Thread.currentThread().isInterrupted()) {
             throw new StockDataException("cancelled");
         }
+    }
+
+    private byte[] fetchBody(StockDataTransport.PageRequest pageRequest) {
+        requireNotCancelled();
         StockDataTransport.PageResponse pageResponse;
         try {
             pageResponse = sourceTransport.fetchPage(pageRequest);
@@ -133,9 +139,7 @@ public final class FscStockDataSource {
             throw new StockDataException("transport_failure");
         }
         try (pageResponse) {
-            if (Thread.currentThread().isInterrupted()) {
-                throw new StockDataException("cancelled");
-            }
+            requireNotCancelled();
             if (pageResponse.statusCode() == 429) {
                 throw new StockDataException("rate_limited");
             }
@@ -147,9 +151,7 @@ public final class FscStockDataSource {
             if (rawBody.length > MAX_PAGE_BYTES) {
                 throw new StockDataException("body_too_large");
             }
-            if (Thread.currentThread().isInterrupted()) {
-                throw new StockDataException("cancelled");
-            }
+            requireNotCancelled();
             return rawBody;
         } catch (StockDataException failureValue) {
             // Try-with-resources can attach a credential-bearing close failure.

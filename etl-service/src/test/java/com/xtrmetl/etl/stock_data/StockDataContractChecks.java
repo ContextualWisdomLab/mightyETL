@@ -5,11 +5,14 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 
@@ -66,6 +69,7 @@ public final class StockDataContractChecks {
         requireEqual(FIXED_CLOCK.instant(), sourceBatch.rawPages().get(0).collectedAt(), "observation time preserved");
         requireEqual(firstBody, new String(sourceBatch.rawPages().get(0).rawBody(), StandardCharsets.UTF_8), "raw body preserved");
         requireEqual(64, sourceBatch.rawPages().get(0).sha256Digest().length(), "digest exists");
+        requireEqual(knownSha256(firstBody), sourceBatch.rawPages().get(0).sha256Digest(), "digest matches known bytes");
         requireEqual("provider_unspecified", sourceBatch.adjustmentBasis(), "adjustment not invented");
         requireEqual("delayed_daily", sourceBatch.freshnessClass(), "not realtime");
         requireEqual("xml", observedRequests.get(0).publicParameters().get("resultType"), "XML selected");
@@ -127,7 +131,7 @@ public final class StockDataContractChecks {
         expectCode("duplicate_record", () -> sourceFor(List.of(pageXml(1, 1, 2, validItem), pageXml(2, 1, 2, validItem)), new ArrayList<>()).collectStockData(sourceQuery(1)));
         expectCode("incomplete_result", () -> sourceFor(List.of(pageXml(1, 1, 2, validItem)), new ArrayList<>()).collectStockData(new FscStockDataSource.StockQuery(SOURCE_DATE, SOURCE_DATE, null, 1, 1, 2)));
         expectCode("incomplete_result", () -> sourceFor(List.of(pageXml(1, 1, 2, validItem)), new ArrayList<>()).collectStockData(new FscStockDataSource.StockQuery(SOURCE_DATE, SOURCE_DATE, null, 1, 2, 1)));
-        expectCode("provider_rejected", () -> sourceFor(List.of("<response><header><resultCode>30</resultCode><resultMsg>secret</resultMsg></header></response>"), new ArrayList<>()).collectStockData(sourceQuery(10)));
+        expectCode("provider_rejected", () -> sourceFor(List.of("<response><header><resultCode>30</resultCode><resultMsg>secret</resultMsg></header><body><numOfRows>10</numOfRows><pageNo>1</pageNo><totalCount>0</totalCount><items></items></body></response>"), new ArrayList<>()).collectStockData(sourceQuery(10)));
     }
 
     private static void verifyInvalidRecords() {
@@ -149,11 +153,18 @@ public final class StockDataContractChecks {
     }
 
     private static void verifyHostileXml() {
+        String validPage = pageXml(1, 10, 0, "");
         for (String hostileBody : List.of("<html>login</html>", "<response>",
                 "<!DOCTYPE response [<!ENTITY payload SYSTEM 'file:///etc/passwd'>]><response>&payload;</response>",
                 "<response xmlns='https://attacker.invalid'><header/></response>",
-                "<response>" + "<nest>".repeat(40) + "</nest>".repeat(40) + "</response>")) {
-            expectFailure(() -> sourceFor(List.of(hostileBody), new ArrayList<>()).collectStockData(sourceQuery(10)));
+                "<response>" + "<nest>".repeat(40) + "</nest>".repeat(40) + "</response>",
+                validPage.replace("</response>", "<extra/></response>"),
+                validPage.replace("</header>", "<debug>x</debug></header>"),
+                validPage.replace("</body>", "<extra/></body>"),
+                validPage.replace("<header>", "<header></header><header>"),
+                validPage.replace("<body>", "<body></body><body>"),
+                validPage.replace("<items></items>", "<items></items><items></items>"))) {
+            expectCode("invalid_xml", () -> sourceFor(List.of(hostileBody), new ArrayList<>()).collectStockData(sourceQuery(10)));
         }
     }
 
@@ -188,18 +199,98 @@ public final class StockDataContractChecks {
             requireEqual(true, Thread.interrupted(), "late cancellation remains signalled");
         }
         requireEqual(true, closedBody[0], "late cancelled body closed");
+        boolean[] closedAfterRead = {false};
+        try {
+            expectCode("cancelled", () -> new FscStockDataSource(
+                    pageRequest -> new StockDataTransport.PageResponse(
+                            200, "application/xml", trackedBody(pageXml(1, 10, 0, ""), closedAfterRead)),
+                    "fsc_stock_key",
+                    interruptingClock()).collectStockData(sourceQuery(10)));
+        } finally {
+            requireEqual(true, Thread.interrupted(), "post-read cancellation remains signalled");
+        }
+        requireEqual(true, closedAfterRead[0], "post-read cancelled body closed");
     }
 
     private static void verifyResourceBounds() {
         boolean[] closedBody = {false};
         expectCode("body_too_large", () -> new FscStockDataSource(requestValue -> new StockDataTransport.PageResponse(200, "application/xml", trackedBody(" ".repeat(2 * 1024 * 1024 + 1), closedBody)), "fsc_stock_key", FIXED_CLOCK).collectStockData(sourceQuery(10)));
         requireEqual(true, closedBody[0], "oversized body closed");
+        List<String> cumulativePages = new ArrayList<>();
+        int pageBytes = 2 * 1024 * 1024;
+        for (int pageNumber = 1; pageNumber <= 8; pageNumber++) {
+            cumulativePages.add(paddedPageXml(pageNumber, 1, 9, uniqueItem(pageNumber), pageBytes));
+        }
+        cumulativePages.add(paddedPageXml(9, 1, 9, uniqueItem(9), 16));
+        expectCode("body_too_large", () -> sourceFor(cumulativePages, new ArrayList<>())
+                .collectStockData(new FscStockDataSource.StockQuery(SOURCE_DATE, SOURCE_DATE, null, 1, 100, 10000)));
+        boolean[] closedRead = {false};
+        expectCode("transport_failure", () -> new FscStockDataSource(requestValue -> new StockDataTransport.PageResponse(200, "application/xml", new InputStream() {
+            @Override public int read() throws IOException { throw new IOException("secret"); }
+            @Override public void close() { closedRead[0] = true; }
+        }), "fsc_stock_key", FIXED_CLOCK).collectStockData(sourceQuery(10)));
+        requireEqual(true, closedRead[0], "failed read body closed");
+        expectCode("transport_failure", () -> new FscStockDataSource(requestValue -> new StockDataTransport.PageResponse(
+                200, "application/xml", throwingCloseBody(pageXml(1, 10, 0, ""))),
+                "fsc_stock_key", FIXED_CLOCK).collectStockData(sourceQuery(10)));
+        boolean[] closedBoth = {false};
+        expectCode("provider_rejected", () -> new FscStockDataSource(requestValue -> new StockDataTransport.PageResponse(
+                401, "application/xml", throwingCloseBody("secret", closedBoth)),
+                "fsc_stock_key", FIXED_CLOCK).collectStockData(sourceQuery(10)));
+        requireEqual(true, closedBoth[0], "primary and close failures still close");
     }
 
     private static InputStream trackedBody(String bodyText, boolean[] closedBody) {
         return new ByteArrayInputStream(bodyText.getBytes(StandardCharsets.UTF_8)) {
             @Override public void close() throws IOException { closedBody[0] = true; super.close(); }
         };
+    }
+
+    private static InputStream throwingCloseBody(String bodyText) {
+        return throwingCloseBody(bodyText, null);
+    }
+
+    private static InputStream throwingCloseBody(String bodyText, boolean[] closedBody) {
+        return new ByteArrayInputStream(bodyText.getBytes(StandardCharsets.UTF_8)) {
+            @Override public void close() throws IOException {
+                if (closedBody != null) {
+                    closedBody[0] = true;
+                }
+                throw new IOException("secret");
+            }
+        };
+    }
+
+    private static Clock interruptingClock() {
+        return new Clock() {
+            @Override public ZoneId getZone() { return ZoneOffset.UTC; }
+            @Override public Clock withZone(ZoneId zone) { return Clock.fixed(FIXED_CLOCK.instant(), zone); }
+            @Override public Instant instant() {
+                Thread.currentThread().interrupt();
+                return FIXED_CLOCK.instant();
+            }
+        };
+    }
+
+    private static String uniqueItem(int itemIndex) {
+        return itemXml("005930", String.format("KR7%08d0", itemIndex), "20260904");
+    }
+
+    private static String paddedPageXml(int pageNumber, int pageSize, int totalCount, String itemContent, int minimumBytes) {
+        String xml = pageXml(pageNumber, pageSize, totalCount, itemContent);
+        if (xml.length() >= minimumBytes) {
+            return xml;
+        }
+        return "<response>" + " ".repeat(minimumBytes - xml.length()) + xml.substring("<response>".length());
+    }
+
+    private static String knownSha256(String bodyText) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(bodyText.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception failureValue) {
+            throw new AssertionError("SHA-256 unavailable", failureValue);
+        }
     }
 
     private static String pageXml(int pageNumber, int pageSize, int totalCount, String itemContent) {

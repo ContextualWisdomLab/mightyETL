@@ -26,7 +26,9 @@ BigDecimal supports exact decimal representation. The adapter constructs from va
 | Query/pagination integrity | `collectStockData`, `StockPageDecoder.decodePage` | `verifyInvalidPages`, `verifyQueryRejection` |
 | Exact source values | `StockPriceRecord`, decoder numeric functions | `verifyCompleteCollection`, `verifyInvalidRecords` |
 | JAXP external resource limits | `StockPageDecoder.readDocument` | `verifyHostileXml`, `verifyTransportFailures` |
+| Declared envelope cardinality | `StockPageDecoder.requireChildren` | extra/duplicate `response`/`header`/`body`/`items` cases in `verifyHostileXml` |
 | No key/diagnostic export | `fetchBody`, request/response formatting, finite exception | `verifyTransportFailures`, `verifyLateCancellationAndSafeFormatting` |
-| Response lifecycle | `PageResponse.close`, `fetchBody` | rejected/oversized/cancelled-body close assertions |
+| Response lifecycle | `PageResponse.close`, `fetchBody` | rejected/oversized/cancelled-body close assertions; read/close and close-with-primary failures |
+| Late cancellation | `requireNotCancelled` after decode and before batch return | Clock.instant() interrupt in `verifyLateCancellationAndSafeFormatting` |
 
-The local compiler is OpenJDK 21.0.11. The focused suite reached 245 passing assertions, and warning-as-error compilation and Javadoc passed. This is not 245 independent JUnit test methods and not a 100% coverage measurement. The repository's Java 25 Maven reactor was not run locally; its full CI and security/review gates remain mandatory.
+The local compiler is OpenJDK 21.0.11. After the 2026-09-08 review repairs, `sh scripts/verify_stock_data_source.sh` passed 299 synthetic assertions plus `javac -Xlint:all -Werror` and `javadoc -Werror -Xdoclint:all`. This is not 299 independent JUnit methods and not a 100% coverage measurement. The repository's Java 25 Maven reactor, security checks, independent review and immutable release remain mandatory.
