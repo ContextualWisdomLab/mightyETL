@@ -49,6 +49,16 @@ class ConfigServerRepositoryConfigurationTest {
     }
 
     @Test
+    void processorDoesNotCarryUnsupportedAlternateRegistration() {
+        assertFalse(
+                Files.exists(Path.of(
+                        "src/main/resources/META-INF/spring/org.springframework.boot.env.EnvironmentPostProcessor"
+                )),
+                "EnvironmentPostProcessor registration is owned by META-INF/spring.factories"
+        );
+    }
+
+    @Test
     void repositoryAuthorityHasSourceBackedDoctoring() throws IOException {
         Path doctoringPath = Path.of(
                 "..",
