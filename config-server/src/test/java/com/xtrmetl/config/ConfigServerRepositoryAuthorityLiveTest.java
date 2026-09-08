@@ -4,83 +4,89 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.core.env.StandardEnvironment;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 /**
- * Starts the default Git-backed Config Server and proves blank or demo
- * repository authority cannot become a running process, including when
- * {@code cloneOnStart} is true.
+ * Starts the Config Server and proves repository/profile authority fails closed
+ * before a Git backend can become active, including when {@code cloneOnStart}
+ * is true.
  *
  * <p>Operators: set {@code CONFIG_REPO_URI} to a deployment-owned Git URI
- * before starting the default profile. Use {@code native} only for reviewed
- * local fixtures that do not need a remote.</p>
+ * before starting the default profile. Use {@code native} only as the sole
+ * active profile for reviewed local fixtures that do not need a remote.</p>
  */
 class ConfigServerRepositoryAuthorityLiveTest {
 
     @Test
     void blankRepositoryUriFailsClosedWithAuthorityMessage() {
-        assertStartupFailure(
-                ConfigServerRepositoryAuthority.MISSING_AUTHORITY_MESSAGE,
-                "--spring.cloud.config.server.git.uri=",
-                "--spring.cloud.config.server.git.clone-on-start=true"
+        assertTrue(
+                containsAuthorityFailure(runExpectingFailure(
+                        "--spring.cloud.config.server.git.uri=",
+                        "--spring.cloud.config.server.git.clone-on-start=true"
+                )),
+                "Blank CONFIG_REPO_URI must fail with the repository-authority message"
         );
     }
 
     @Test
     void demoRepositoryUriFailsClosedBeforeCloneOnStart() {
-        assertStartupFailure(
-                ConfigServerRepositoryAuthority.MISSING_AUTHORITY_MESSAGE,
-                "--spring.cloud.config.server.git.uri=https://github.com/your-repo/config-repo.git",
-                "--spring.cloud.config.server.git.clone-on-start=true"
+        assertTrue(
+                containsAuthorityFailure(runExpectingFailure(
+                        "--spring.cloud.config.server.git.uri=https://github.com/your-repo/config-repo.git",
+                        "--spring.cloud.config.server.git.clone-on-start=true"
+                )),
+                "Retired demo URI must be rejected before JGit clone-on-start"
         );
     }
 
     @Test
-    void unsetRepositoryUriFailsClosedBeforeGitAccess() {
-        SpringApplication application = new SpringApplication(ConfigServerApplication.class);
-        application.setWebApplicationType(WebApplicationType.SERVLET);
-        ConfigurableApplicationContext context = null;
-        try {
-            context = application.run(commonArgs());
-            fail("Unset CONFIG_REPO_URI must stop Config Server before Git access");
-        } catch (Exception ex) {
-            assertTrue(
-                    containsAuthorityFailure(ex) || containsUnresolvedPlaceholder(ex),
-                    () -> "Startup must fail closed without a repository URI, but failed with: " + ex
-            );
-        } finally {
-            closeQuietly(context);
-        }
+    void unsetRepositoryUriFailsClosedWithoutInheritedEnvironmentAuthority() {
+        assertTrue(
+                containsAuthorityFailure(runExpectingFailure()),
+                "Unset CONFIG_REPO_URI must fail with the repository-authority message"
+        );
     }
 
     @Test
-    void nativeCombinedWithProductionFailsClosed() {
-        assertStartupFailure(
-                ConfigServerRepositoryAuthorityEnvironmentPostProcessor.NATIVE_PRODUCTION_MESSAGE,
-                "--spring.profiles.active=native,prod",
+    void nativeProfileCannotBeCombinedWithAnotherActiveProfile() {
+        Exception failure = runExpectingFailure(
+                "--spring.profiles.active=native,default",
                 "--spring.cloud.config.server.native.search-locations=classpath:/",
                 "--spring.cloud.config.server.git.uri=https://git.example.internal/config-repo.git"
         );
+        assertTrue(
+                messageChain(failure).contains(ConfigServerRepositoryAuthority.MIXED_NATIVE_PROFILE_MESSAGE),
+                () -> "Mixed native profile startup must fail closed: " + failure
+        );
     }
 
-    private static void assertStartupFailure(String expectedMessage, String... extraArgs) {
-        SpringApplication application = new SpringApplication(ConfigServerApplication.class);
-        application.setWebApplicationType(WebApplicationType.SERVLET);
+    private static Exception runExpectingFailure(String... extraArgs) {
+        SpringApplication application = applicationWithoutInheritedConfigRepoUri();
         ConfigurableApplicationContext context = null;
         try {
             context = application.run(concat(commonArgs(), extraArgs));
-            fail("Config Server must stop before Git access: " + expectedMessage);
+            fail("Config Server startup was expected to fail closed");
+            throw new AssertionError("unreachable");
         } catch (Exception ex) {
-            assertTrue(
-                    messageChain(ex).contains(expectedMessage),
-                    () -> "Startup must name the missing repository authority, but failed with: " + ex
-            );
+            return ex;
         } finally {
-            closeQuietly(context);
+            if (context != null) {
+                context.close();
+            }
         }
+    }
+
+    private static SpringApplication applicationWithoutInheritedConfigRepoUri() {
+        SpringApplication application = new SpringApplication(ConfigServerApplication.class);
+        application.setWebApplicationType(WebApplicationType.SERVLET);
+        StandardEnvironment environment = new StandardEnvironment();
+        environment.getPropertySources().remove(StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME);
+        application.setEnvironment(environment);
+        return application;
     }
 
     private static String[] commonArgs() {
@@ -103,12 +109,6 @@ class ConfigServerRepositoryAuthorityLiveTest {
         return messageChain(thrown).contains(ConfigServerRepositoryAuthority.MISSING_AUTHORITY_MESSAGE);
     }
 
-    private static boolean containsUnresolvedPlaceholder(Throwable thrown) {
-        String messages = messageChain(thrown);
-        return messages.contains("Could not resolve placeholder 'CONFIG_REPO_URI'")
-                || messages.contains("Could not resolve placeholder 'spring.cloud.config.server.git.uri'");
-    }
-
     private static String messageChain(Throwable thrown) {
         assertNotNull(thrown);
         StringBuilder messages = new StringBuilder();
@@ -118,11 +118,5 @@ class ConfigServerRepositoryAuthorityLiveTest {
             }
         }
         return messages.toString();
-    }
-
-    private static void closeQuietly(ConfigurableApplicationContext context) {
-        if (context != null) {
-            context.close();
-        }
     }
 }

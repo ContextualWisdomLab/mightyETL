@@ -62,24 +62,39 @@ class ConfigServerRepositoryAuthorityEnvironmentPostProcessorTest {
     }
 
     @Test
-    void nativeCombinedWithProductionFailsUnlessExplicitlyAllowed() {
-        MockEnvironment blocked = new MockEnvironment();
-        blocked.setActiveProfiles("native", "prod");
-        blocked.setProperty(
+    void nativeCombinedWithAnotherProfileFailsClosed() {
+        MockEnvironment mixed = new MockEnvironment();
+        mixed.setActiveProfiles("native", "default");
+        mixed.setProperty(
                 "spring.cloud.config.server.git.uri",
                 "https://git.example.internal/config-repo.git"
         );
         assertEquals(
-                ConfigServerRepositoryAuthorityEnvironmentPostProcessor.NATIVE_PRODUCTION_MESSAGE,
+                ConfigServerRepositoryAuthority.MIXED_NATIVE_PROFILE_MESSAGE,
                 assertThrows(
                         IllegalStateException.class,
-                        () -> processor.postProcessEnvironment(blocked, application)
+                        () -> processor.postProcessEnvironment(mixed, application)
                 ).getMessage()
         );
+    }
 
-        MockEnvironment allowed = new MockEnvironment();
-        allowed.setActiveProfiles("native", "production");
-        allowed.setProperty("xtrmetl.config.allow-native", "true");
-        assertDoesNotThrow(() -> processor.postProcessEnvironment(allowed, application));
+    @Test
+    void unresolvedPlaceholderIsRewrittenToAuthorityFailure() {
+        MockEnvironment environment = new MockEnvironment() {
+            @Override
+            public String getProperty(String key) {
+                if ("spring.cloud.config.server.git.uri".equals(key)) {
+                    throw new IllegalArgumentException("Could not resolve placeholder 'CONFIG_REPO_URI'");
+                }
+                return super.getProperty(key);
+            }
+        };
+        assertEquals(
+                ConfigServerRepositoryAuthority.MISSING_AUTHORITY_MESSAGE,
+                assertThrows(
+                        IllegalStateException.class,
+                        () -> processor.postProcessEnvironment(environment, application)
+                ).getMessage()
+        );
     }
 }

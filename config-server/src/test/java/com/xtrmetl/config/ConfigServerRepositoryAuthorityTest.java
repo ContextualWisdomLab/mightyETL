@@ -70,6 +70,38 @@ class ConfigServerRepositoryAuthorityTest {
                         "git@github.com:your-repo/config-repo.git"
                 )
         );
+        assertThrows(
+                IllegalStateException.class,
+                () -> ConfigServerRepositoryAuthority.requireExplicitRepository(
+                        "ssh://git@github.com/your-repo/config-repo.git"
+                )
+        );
+    }
+
+    @Test
+    void nativeMustBeTheSoleActiveProfile() {
+        assertEquals(
+                true,
+                ConfigServerRepositoryAuthority.requireSafeProfileComposition("native")
+        );
+        assertEquals(
+                false,
+                ConfigServerRepositoryAuthority.requireSafeProfileComposition()
+        );
+        assertEquals(
+                ConfigServerRepositoryAuthority.MIXED_NATIVE_PROFILE_MESSAGE,
+                assertThrows(
+                        IllegalStateException.class,
+                        () -> ConfigServerRepositoryAuthority.requireSafeProfileComposition("native", "default")
+                ).getMessage()
+        );
+        assertEquals(
+                ConfigServerRepositoryAuthority.MIXED_NATIVE_PROFILE_MESSAGE,
+                assertThrows(
+                        IllegalStateException.class,
+                        () -> ConfigServerRepositoryAuthority.requireSafeProfileComposition("native", "prod")
+                ).getMessage()
+        );
     }
 
     @Test

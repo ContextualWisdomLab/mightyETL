@@ -15,16 +15,17 @@ import java.util.regex.Pattern;
  * default-profile startup, before JGit {@code afterPropertiesSet}.</p>
  *
  * <p>Operators: set {@code CONFIG_REPO_URI} to the reviewed Git URI, then start
- * the default profile. Use the {@code native} profile only for local fixtures
- * that must not depend on a remote. Do not combine {@code native} with
- * {@code prod} or {@code production} unless {@code xtrmetl.config.allow-native=true}
- * is an approved fixture exception.</p>
+ * the default profile. Use the {@code native} profile only as the sole active
+ * profile for local fixtures that must not depend on a remote.</p>
  */
 public final class ConfigServerRepositoryAuthority {
 
     static final String MISSING_AUTHORITY_MESSAGE =
             "CONFIG_REPO_URI must name a deployment-owned Git repository; "
                     + "blank, unresolved, or demo authority is rejected before remote Git access";
+
+    static final String MIXED_NATIVE_PROFILE_MESSAGE =
+            "native profile must be the only active profile when Config Server uses local fixtures";
 
     static final String REQUEST_TEMPLATE_MESSAGE =
             "CONFIG_REPO_URI must be a concrete repository destination; "
@@ -63,6 +64,32 @@ public final class ConfigServerRepositoryAuthority {
         if (REQUEST_TEMPLATE.matcher(trimmed).find()) {
             throw new IllegalStateException(REQUEST_TEMPLATE_MESSAGE);
         }
+    }
+
+    /**
+     * Ensures the local-fixture {@code native} profile cannot be composed with
+     * another active profile to skip Git repository authority validation.
+     *
+     * @param activeProfiles explicitly active Spring profiles
+     * @return {@code true} when standalone native mode is active
+     * @throws IllegalStateException when native is combined with another profile
+     */
+    public static boolean requireSafeProfileComposition(String... activeProfiles) {
+        boolean nativeActive = false;
+        int activeCount = 0;
+        for (String profile : activeProfiles) {
+            if (profile == null || profile.isBlank()) {
+                continue;
+            }
+            activeCount++;
+            if ("native".equalsIgnoreCase(profile.trim())) {
+                nativeActive = true;
+            }
+        }
+        if (nativeActive && activeCount != 1) {
+            throw new IllegalStateException(MIXED_NATIVE_PROFILE_MESSAGE);
+        }
+        return nativeActive;
     }
 
     /**

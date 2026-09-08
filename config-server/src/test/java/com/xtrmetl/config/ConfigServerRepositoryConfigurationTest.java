@@ -36,6 +36,19 @@ class ConfigServerRepositoryConfigurationTest {
     }
 
     @Test
+    void boot35DiscoversTheProcessorThroughSpringFactories() throws IOException {
+        String factories = Files.readString(Path.of(
+                "src/main/resources/META-INF/spring.factories"
+        ));
+        assertTrue(
+                factories.contains(
+                        "com.xtrmetl.config.ConfigServerRepositoryAuthorityEnvironmentPostProcessor"
+                ),
+                "Boot 3.5.16 EnvironmentPostProcessor discovery uses META-INF/spring.factories"
+        );
+    }
+
+    @Test
     void repositoryAuthorityHasSourceBackedDoctoring() throws IOException {
         Path doctoringPath = Path.of(
                 "..",
@@ -53,7 +66,9 @@ class ConfigServerRepositoryConfigurationTest {
         assertTrue(doctoring.contains("skipSslValidation"));
         assertTrue(doctoring.contains("ConfigServerRepositoryAuthorityValidator"));
         assertTrue(doctoring.contains("ConfigServerRepositoryAuthorityEnvironmentPostProcessor"));
-        assertTrue(doctoring.contains("xtrmetl.config.allow-native"));
+        assertTrue(doctoring.contains("META-INF/spring.factories"));
+        assertTrue(doctoring.contains("native profile must be the only active profile"));
+        assertTrue(doctoring.contains("unset or blank CONFIG_REPO_URI"));
         assertTrue(doctoring.contains("blank"));
         assertTrue(doctoring.contains("https://docs.spring.io/spring-cloud-config/reference/server/environment-repository/git-backend.html"));
         assertTrue(doctoring.contains("https://docs.spring.io/spring-cloud-config/reference/server/security.html"));
