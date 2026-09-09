@@ -8,5 +8,7 @@ Contributor and agent guidance for this repository.
 - Never commit secrets, credentials, `.env` files, or private keys.
 - Do not commit or push unless a human explicitly asks.
 - For workflow edits, run local YAML parsing and `actionlint` on edited files.
+- Java 25 is required; when Surefire reports `class file version 69.0`, export
+  `JAVA_HOME` to the mise Temurin-25 install (see `AGENTS.md` Know-how).
 
 If any guidance here conflicts with `AGENTS.md`, `AGENTS.md` wins.
