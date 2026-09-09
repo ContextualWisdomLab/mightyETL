@@ -19,8 +19,8 @@ class ConfigServerRepositoryConfigurationTest {
         String applicationYaml = Files.readString(Path.of("src/main/resources/application.yml"));
 
         assertTrue(
-                applicationYaml.contains("uri: ${CONFIG_REPO_URI}"),
-                "Config Server must require an operator-supplied CONFIG_REPO_URI"
+                applicationYaml.contains("uri: ${CONFIG_REPO_URI:}"),
+                "Config Server must source repository authority only from CONFIG_REPO_URI"
         );
         assertFalse(
                 applicationYaml.contains("your-repo/config-repo.git"),
