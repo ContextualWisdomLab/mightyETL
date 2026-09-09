@@ -48,3 +48,22 @@ protection, `require_code_owner_review` in rulesets) are disabled across the Con
 org: there is a single maintainer (solo developer), so a code-owner approval gate can never be
 satisfied. This is ON HOLD until the org has multiple maintainers — do NOT re-enable these
 settings or add CODEOWNERS-based merge gates before then.
+
+## Know-how (summaries; detail in owner runbook)
+
+- Java 25 is required (class file v69). The default `java` on dev machines may be
+  Temurin-21, which fails Surefire with `class file version 69.0`. Export
+  `JAVA_HOME` to the mise Temurin-25 install before `./mvnw` and re-check
+  `java -version`. Detail: `docs/product-technical-gap-baseline.md` §8.
+- When `gh run rerun <run-id> --failed` returns
+  `404 .../actions/workflows/<id>`, rerun via
+  `gh api -X POST repos/{owner}/{repo}/actions/runs/{run_id}/rerun-failed-jobs`.
+  Detail: `docs/product-technical-gap-baseline.md` §8.
+- `noema-review` HTTP 429, `opencode-review` missing exact-head verdict, CodeQL
+  `pending`, and `strix` infra timeouts are orchestration/transient when core CI
+  (test ubuntu/macos/windows, Analyze, dependency-review, sbom, Semgrep, Trivy,
+  Scorecard) is green. Rerun failed jobs; do not change product code for them.
+  Detail: `docs/product-technical-gap-baseline.md` §8.
+- Keep fix branches minimal: docs/baseline updates go on separate `docs/*`
+  branches from `origin/develop`, never on top of `repair/*` branches, so the
+  hourly disposition expected-head SHA stays valid.
