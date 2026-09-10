@@ -18,6 +18,7 @@ workflows, and service-level maintenance.
 
 - Root Maven aggregator: `pom.xml`
 - Services: `etl-service/`, `cdc-service/`, `zuul-gateway/`, `eureka-server/`, `config-server/`
+- Config Server is independently runnable and is not a default production dependency. The default Git profile must fail closed without an operator-supplied `CONFIG_REPO_URI`; see `docs/doctoring/config-server-repository-authority.md`.
 - Shared code: `META-INF/`, common build config in root `pom.xml`
 - Operations/docs: `docker/`, `docs/`, `.github/`, `scripts/`
 
