@@ -42,7 +42,7 @@ class ConfigServerRepositoryConfigurationTest {
     void environmentPostProcessorIsRegisteredBeforeConfigServerBeans() throws IOException {
         Path factoriesPath = Path.of("src/main/resources/META-INF/spring.factories");
         assertTrue(Files.exists(factoriesPath), "Repository authority must run as an EnvironmentPostProcessor");
-        String factories = Files.readString(factoriesPath);
+        String factories = Files.readString(factoriesPath).replace("\r\n", "\n");
         assertTrue(
                 factories.contains("org.springframework.boot.env.EnvironmentPostProcessor=\\\n"
                         + "com.xtrmetl.config.ConfigServerRepositoryAuthorityEnvironmentPostProcessor"),
