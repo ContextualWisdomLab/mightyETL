@@ -11,12 +11,17 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.listener.ContainerProperties;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
+import org.springframework.kafka.listener.DeadLetterPublishingRecoverer.HeaderNames.HeadersToAdd;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.lang.NonNull;
 import org.springframework.util.backoff.FixedBackOff;
 
 /**
  * Kafka-related configuration for {@code cdc-service}.
+ *
+ * <p>Dead-letter records retain the failed record and bounded origin/classification metadata needed
+ * for authorized recovery, while raw exception messages and stack traces are excluded because they
+ * can contain database, provider, credential-adjacent, or other deployment-sensitive diagnostics.</p>
  */
 @Configuration
 public class KafkaConfig {
@@ -53,6 +58,7 @@ public class KafkaConfig {
                 kafkaTemplate,
                 (record, ex) -> new TopicPartition(record.topic() + ".DLT", record.partition())
         );
+        recoverer.excludeHeader(HeadersToAdd.EX_MSG, HeadersToAdd.EX_STACKTRACE);
 
         DefaultErrorHandler errorHandler = new DefaultErrorHandler(
                 recoverer,
