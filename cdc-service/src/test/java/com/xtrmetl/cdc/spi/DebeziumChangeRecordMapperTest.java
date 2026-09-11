@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DebeziumChangeRecordMapperTest {
@@ -78,6 +79,51 @@ class DebeziumChangeRecordMapperTest {
         assertEquals("public", record.getSchema());
         assertEquals("orders", record.getTable());
         assertEquals(7, ((Number) record.getPk().get("id")).intValue());
+    }
+
+    @Test
+    void doesNotThrowWhenValuePrimaryKeyIsExplicitlyJsonNull() {
+        String value = """
+                {
+                  "payload": {
+                    "op": "c",
+                    "after": {"id": null, "data": "hello"}
+                  }
+                }
+                """;
+
+        Optional<CanonicalChangeRecord> result = assertDoesNotThrow(() -> mapper.map(
+                "postgres-debezium",
+                "xtrmetl-cdc.public.processed_data",
+                null,
+                value
+        ));
+
+        assertTrue(result.isPresent());
+        assertTrue(result.orElseThrow().getPk().isEmpty());
+    }
+
+    @Test
+    void doesNotThrowWhenBeforePrimaryKeyIsExplicitlyJsonNull() {
+        String value = """
+                {
+                  "payload": {
+                    "op": "d",
+                    "before": {"id": null, "data": "deleted"},
+                    "after": null
+                  }
+                }
+                """;
+
+        Optional<CanonicalChangeRecord> result = assertDoesNotThrow(() -> mapper.map(
+                "postgres-debezium",
+                "xtrmetl-cdc.public.processed_data",
+                null,
+                value
+        ));
+
+        assertTrue(result.isPresent());
+        assertTrue(result.orElseThrow().getPk().isEmpty());
     }
 
     @Test

@@ -97,9 +97,9 @@ public class DebeziumChangeRecordMapper {
             Map<String, Object> afterMap = toMap(after);
             Map<String, Object> beforeMap = toMap(before);
             Map<String, Object> pk = extractOptionalPk(keyJson);
-            if (pk.isEmpty() && afterMap.containsKey("id")) {
+            if (pk.isEmpty() && afterMap.get("id") != null) {
                 pk = Map.of("id", afterMap.get("id"));
-            } else if (pk.isEmpty() && beforeMap.containsKey("id")) {
+            } else if (pk.isEmpty() && beforeMap.get("id") != null) {
                 pk = Map.of("id", beforeMap.get("id"));
             }
 
