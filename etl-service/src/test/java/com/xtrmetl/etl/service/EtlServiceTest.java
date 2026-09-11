@@ -128,13 +128,40 @@ class EtlServiceTest {
             verify(jdbcTemplate).update(anyString(), contains("AMOUNT:" + expected));
         }
 
-        @Test
-        void fallsBackToZeroForInvalidAmount() {
-            etlService.processData(
-                    "[{\"id\":\"record_alpha\",\"amount\":\"not-a-number\"}]"
+        @ParameterizedTest
+        @CsvSource({
+                "not-a-number",
+                "''",
+                "1.1234567890123456789",
+                "1E+1000000"
+        })
+        void rejectsInvalidAmountBeforeWriting(String invalidAmount) {
+            EtlRequestException exception = assertThrows(
+                    EtlRequestException.class,
+                    () -> etlService.processData(
+                            "[{\"id\":\"record_alpha\",\"amount\":\""
+                                    + invalidAmount + "\"}]"
+                    )
             );
 
-            verify(jdbcTemplate).update(anyString(), contains("AMOUNT:0.00"));
+            assertSame(EtlRequestError.INVALID_RECORD, exception.error());
+            verifyNoInteractions(jdbcTemplate);
+        }
+
+        @Test
+        void rejectsWholeBatchWhenOneAmountIsInvalid() {
+            EtlRequestException exception = assertThrows(
+                    EtlRequestException.class,
+                    () -> etlService.processData("""
+                            [
+                              {"id":"record_alpha","amount":"10.00"},
+                              {"id":"record_beta","amount":"not-a-number"}
+                            ]
+                            """)
+            );
+
+            assertSame(EtlRequestError.INVALID_RECORD, exception.error());
+            verifyNoInteractions(jdbcTemplate);
         }
 
         @Test
@@ -155,19 +182,16 @@ class EtlServiceTest {
 
         @Test
         void preservesEmptyOptionalValues() {
-            etlService.processData("""
+            assertThrows(EtlRequestException.class, () -> etlService.processData("""
                     [{
                       "id":"record_alpha",
                       "name":"",
                       "email":"",
                       "amount":""
                     }]
-                    """);
+                    """));
 
-            verify(jdbcTemplate).update(
-                    anyString(),
-                    eq("ID:record_alpha,NAME:,EMAIL:,AMOUNT:0.00,")
-            );
+            verifyNoInteractions(jdbcTemplate);
         }
     }
 

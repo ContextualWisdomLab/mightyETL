@@ -383,6 +383,12 @@ public class EtlService {
     }
 
     private String transformValue(String key, @Nullable JsonNode valueNode) {
+        if ("AMOUNT".equals(key)) {
+            if (valueNode == null || (!valueNode.isTextual() && !valueNode.isNumber())) {
+                throw invalidRecord();
+            }
+            return formatAmount(valueNode.asText());
+        }
         if (valueNode == null || valueNode.isNull()) {
             return "null";
         }
@@ -394,7 +400,6 @@ public class EtlService {
         return switch (key) {
             case "NAME" -> value.toUpperCase(Locale.ROOT);
             case "EMAIL" -> value.toLowerCase(Locale.ROOT);
-            case "AMOUNT" -> formatAmount(value);
             default -> value;
         };
     }
@@ -406,11 +411,11 @@ public class EtlService {
             if (amount.precision() > MAX_AMOUNT_PRECISION
                     || scale < -MAX_AMOUNT_ABSOLUTE_SCALE
                     || scale > MAX_AMOUNT_ABSOLUTE_SCALE) {
-                return "0.00";
+                throw invalidRecord();
             }
             return amount.setScale(2, RoundingMode.HALF_UP).toPlainString();
         } catch (NumberFormatException exception) {
-            return "0.00";
+            throw invalidRecord();
         }
     }
 
