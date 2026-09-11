@@ -77,4 +77,4 @@ Values outside the supported range fail configuration binding instead of silentl
 
 ## Remaining boundary
 
-The current API is synchronous and stores a text representation in `processed_data.data`. High-volume ingestion, asynchronous job state, idempotency keys, durable retry queues, and typed target schemas remain separate product milestones; this change does not claim those capabilities.
+`POST /api/etl/process` remains synchronous and stores a text representation in `processed_data.data`. Durable intake and owner-scoped status resources exist for `POST /api/etl/jobs`, but worker execution is not implemented yet. High-volume ingestion, durable retry queues, and typed target schemas remain separate product milestones; this change does not claim those capabilities.
