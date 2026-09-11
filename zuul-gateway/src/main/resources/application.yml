@@ -20,6 +20,12 @@ spring:
           filters:
             - StripPrefix=1
 
+mightyetl:
+  gateway:
+    security:
+      # Fail closed until an operator explicitly enables JWT mode and supplies a trusted decoder.
+      mode: ${MIGHTYETL_GATEWAY_SECURITY_MODE:deny}
+
 management:
   tracing:
     sampling:

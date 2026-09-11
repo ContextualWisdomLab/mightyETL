@@ -2,52 +2,31 @@ package com.xtrmetl.gateway.security;
 
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
-import org.springframework.http.HttpHeaders;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.authority.AuthorityUtils;
-import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 /**
- * A very small, gateway-level JWT-like authentication filter.
+ * Legacy compatibility type retained temporarily so existing binary or source references fail safe
+ * during the gateway authentication migration.
  *
- * <p>This module uses Spring Cloud Gateway (WebFlux), so this filter is implemented using the reactive APIs and
- * propagates authentication through the Reactor context.
+ * <p>This class no longer parses bearer tokens, validates credentials, or creates an authenticated
+ * principal. Authentication and authorization are owned exclusively by Spring Security's reactive
+ * resource-server {@link org.springframework.security.web.server.SecurityWebFilterChain}. The
+ * class is not registered as a Spring bean and should be removed once downstream source references
+ * have migrated.</p>
  */
+@Deprecated(forRemoval = true)
 public class JwtAuthenticationFilter implements GlobalFilter {
 
     /**
-     * Extracts a token from the {@code Authorization} header and, when valid, attaches an {@link Authentication}
-     * to the Reactor context before continuing the filter chain.
+     * Continues the gateway chain without modifying the Reactor security context.
+     *
+     * @param exchange current reactive HTTP exchange
+     * @param chain remaining Spring Cloud Gateway filter chain
+     * @return completion signal for the unchanged downstream filter chain
      */
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-        String token = extractToken(exchange);
-        if (token == null || !validateToken(token)) {
-            return chain.filter(exchange);
-        }
-
-        Authentication authentication = createAuthentication(token);
-        return chain.filter(exchange).contextWrite(ReactiveSecurityContextHolder.withAuthentication(authentication));
-    }
-
-    private String extractToken(ServerWebExchange exchange) {
-        String bearerToken = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
-        if (bearerToken != null && bearerToken.startsWith("Bearer ")) {
-            return bearerToken.substring(7);
-        }
-        return null;
-    }
-
-    private boolean validateToken(String token) {
-        // Implement proper token validation logic
-        // For this example, we'll consider "valid_token" as the only valid token
-        return "valid_token".equals(token);
-    }
-
-    private Authentication createAuthentication(String token) {
-        return new UsernamePasswordAuthenticationToken("user", token, AuthorityUtils.NO_AUTHORITIES);
+        return chain.filter(exchange);
     }
 }
