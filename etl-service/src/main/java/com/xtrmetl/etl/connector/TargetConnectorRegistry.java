@@ -19,7 +19,6 @@ public class TargetConnectorRegistry {
     public TargetConnectorRegistry() {
         register(new DatabricksTargetConnector());
         register(new SnowflakeTargetConnector());
-        register(new QlikSenseTargetConnector());
     }
 
     public final void register(TargetConnector connector) {

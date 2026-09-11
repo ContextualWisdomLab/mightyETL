@@ -46,12 +46,7 @@ class MightyEtlConfigAliasEnvironmentPostProcessorTest {
             Map.entry("connectors.snowflake.private-key", "test-private-key"),
             Map.entry("connectors.snowflake.role", "ETL_ROLE"),
             Map.entry("connectors.snowflake.table", "EVENTS"),
-            Map.entry("connectors.snowflake.merge-keys", "id"),
-            Map.entry("connectors.qlik-sense.enabled", "true"),
-            Map.entry("connectors.qlik-sense.tenant-url", "https://tenant.example"),
-            Map.entry("connectors.qlik-sense.api-key", "test-qlik-api-key"),
-            Map.entry("connectors.qlik-sense.app-id", "test-app-id"),
-            Map.entry("connectors.qlik-sense.mode", "reload-only")
+            Map.entry("connectors.snowflake.merge-keys", "id")
     );
 
     @Test
@@ -59,7 +54,6 @@ class MightyEtlConfigAliasEnvironmentPostProcessorTest {
         Set<String> expected = new TreeSet<>();
         expected.addAll(writableConnectorKeys("databricks", ConnectorProperties.DatabricksProps.class));
         expected.addAll(writableConnectorKeys("snowflake", ConnectorProperties.SnowflakeProps.class));
-        expected.addAll(writableConnectorKeys("qlik-sense", ConnectorProperties.QlikSenseProps.class));
 
         Set<String> actual = new TreeSet<>();
         MightyEtlConfigAliasEnvironmentPostProcessor.RELATIVE_KEYS.stream()

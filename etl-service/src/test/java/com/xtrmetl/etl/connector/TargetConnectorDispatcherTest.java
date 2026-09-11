@@ -58,11 +58,12 @@ class TargetConnectorDispatcherTest {
     }
 
     @Test
-    void catalogShowsAllConnectorsDisabledByDefault() {
+    void catalogShowsAdvertisedConnectorsDisabledByDefault() {
         TargetConnectorDispatcher dispatcher =
                 new TargetConnectorDispatcher(new TargetConnectorRegistry(), new ConnectorProperties());
 
-        assertEquals(3, dispatcher.catalog().size());
+        assertEquals(2, dispatcher.catalog().size());
+        assertTrue(dispatcher.catalog().stream().noneMatch(row -> "qlik-sense".equals(row.get("id"))));
         assertTrue(dispatcher.catalog().stream().noneMatch(row -> Boolean.TRUE.equals(row.get("writable"))));
         assertTrue(dispatcher.catalog().stream().noneMatch(row -> Boolean.TRUE.equals(row.get("opened"))));
     }

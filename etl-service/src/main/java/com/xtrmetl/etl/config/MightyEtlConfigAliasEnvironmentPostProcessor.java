@@ -15,7 +15,8 @@ import java.util.Map;
  * Dual-read configuration bridge: {@code mightyetl.*} is preferred and mirrored to the legacy
  * {@code xtrmetl.*} namespace used by existing configuration-property consumers.
  *
- * <p>Only explicitly supported product keys are mirrored. See
+ * <p>Only explicitly supported product keys are mirrored. Qlik Sense keys are deliberately absent:
+ * Qlik is not a published production row-write connector. See
  * {@code docs/rebrand-name-matrix.md} for compatibility boundaries.</p>
  */
 @Order(ConfigDataEnvironmentPostProcessor.ORDER + 1)
@@ -46,12 +47,7 @@ public class MightyEtlConfigAliasEnvironmentPostProcessor implements Environment
             "connectors.snowflake.private-key",
             "connectors.snowflake.role",
             "connectors.snowflake.table",
-            "connectors.snowflake.merge-keys",
-            "connectors.qlik-sense.enabled",
-            "connectors.qlik-sense.tenant-url",
-            "connectors.qlik-sense.api-key",
-            "connectors.qlik-sense.app-id",
-            "connectors.qlik-sense.mode"
+            "connectors.snowflake.merge-keys"
     );
 
     /**
