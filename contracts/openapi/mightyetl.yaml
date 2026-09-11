@@ -263,8 +263,7 @@ paths:
 components:
   securitySchemes:
     basicAuth:
-      # nosemgrep: yaml.openapi.security.use-of-basic-authentication.use-of-basic-authentication
-      type: http  # source-backed: protected develop ships Spring Security HTTP Basic (SecurityConfig); documenting it is required by MachineReadableApiContractTest
+      type: http
       scheme: basic
       description: ETL service protected /api/** baseline uses Spring Security HTTP Basic authentication.
   parameters:
