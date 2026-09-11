@@ -196,6 +196,22 @@ class CdcRegistryIdentityTest {
         assertSame(second, registry.find("snapshot-second").orElseThrow());
     }
 
+    @Test
+    void targetConnectorDiscoveryPreservesRegistrationOrderAndIdentity() {
+        CdcTargetRegistry registry = new CdcTargetRegistry();
+
+        List<String> ids = registry.all().stream().map(CdcTargetConnector::id).toList();
+
+        assertEquals(List.of(KafkaCdcTargetConnector.ID, JdbcReplicaCdcTargetConnector.ID), ids);
+        assertSame(
+                registry.find(KafkaCdcTargetConnector.ID).orElseThrow(),
+                registry.all().stream()
+                        .filter(connector -> connector.id().equals(KafkaCdcTargetConnector.ID))
+                        .findFirst()
+                        .orElseThrow()
+        );
+    }
+
     private static CdcSourceConnector source(String id) {
         CdcSourceConnector connector = mock(CdcSourceConnector.class);
         when(connector.id()).thenReturn(id);
