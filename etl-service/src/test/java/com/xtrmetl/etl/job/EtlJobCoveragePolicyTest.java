@@ -8,10 +8,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Keeps the durable-job production slice bound to an executable 100% coverage policy.
+ * Keeps the durable-job production slice bound to an executable, non-vacuous 100% coverage policy.
  *
  * <p>The policy is intentionally scoped to the production classes introduced by the durable-job
  * intake slice. It requires current Java-compatible JaCoCo instrumentation, a non-empty selected
@@ -21,8 +22,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class EtlJobCoveragePolicyTest {
 
     /**
-     * Requires the ETL module build to fail when the durable-job production slice is empty or any
-     * selected production path is untested.
+     * Requires the ETL module build to fail when the selected durable-job bundle is empty or any
+     * selected durable-job production path is untested.
      *
      * @throws IOException when the module build descriptor cannot be read
      */
@@ -41,6 +42,10 @@ class EtlJobCoveragePolicyTest {
         assertTrue(modulePom.contains("<include>com/xtrmetl/etl/job/*.class</include>"));
         assertTrue(modulePom.contains(
                 "<include>com/xtrmetl/etl/controller/EtlJobController*.class</include>"
+        ));
+        assertFalse(modulePom.contains("<include>com.xtrmetl.etl.job.*</include>"));
+        assertFalse(modulePom.contains(
+                "<include>com.xtrmetl.etl.controller.EtlJobController*</include>"
         ));
         assertTrue(modulePom.contains("<element>BUNDLE</element>"));
         assertTrue(modulePom.contains("<counter>CLASS</counter>"));
