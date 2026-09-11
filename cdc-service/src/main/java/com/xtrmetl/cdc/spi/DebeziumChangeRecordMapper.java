@@ -22,15 +22,28 @@ public class DebeziumChangeRecordMapper {
 
     private final ObjectMapper objectMapper;
 
+    /**
+     * Creates a mapper using the caller-provided JSON codec.
+     *
+     * @param objectMapper mapper used for Debezium key and value envelopes
+     */
     public DebeziumChangeRecordMapper(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
     }
 
     /**
+     * Maps one Debezium value envelope and its optional key metadata.
+     *
+     * <p>The value envelope is authoritative and must be valid JSON. The key envelope is optional
+     * metadata: when it is malformed, mapping continues and derives a primary key from the value's
+     * {@code after.id} or {@code before.id} field when available. This prevents malformed optional
+     * metadata from discarding an otherwise valid change event.</p>
+     *
      * @param sourceId logical source id (e.g. {@code postgres-debezium})
-     * @param topic    Kafka / Debezium destination topic ({@code prefix.schema.table})
-     * @param keyJson  optional Debezium key JSON
+     * @param topic Kafka / Debezium destination topic ({@code prefix.schema.table})
+     * @param keyJson optional Debezium key JSON
      * @param valueJson Debezium value JSON
+     * @return mapped canonical record, or empty when the required value envelope is blank or malformed
      */
     public Optional<CanonicalChangeRecord> map(
             String sourceId,
@@ -83,7 +96,7 @@ public class DebeziumChangeRecordMapper {
 
             Map<String, Object> afterMap = toMap(after);
             Map<String, Object> beforeMap = toMap(before);
-            Map<String, Object> pk = extractPk(keyJson);
+            Map<String, Object> pk = extractOptionalPk(keyJson);
             if (pk.isEmpty() && afterMap.containsKey("id")) {
                 pk = Map.of("id", afterMap.get("id"));
             } else if (pk.isEmpty() && beforeMap.containsKey("id")) {
@@ -105,13 +118,17 @@ public class DebeziumChangeRecordMapper {
         }
     }
 
-    private Map<String, Object> extractPk(String keyJson) throws IOException {
+    private Map<String, Object> extractOptionalPk(String keyJson) {
         if (keyJson == null || keyJson.isBlank()) {
             return Map.of();
         }
-        JsonNode root = objectMapper.readTree(keyJson);
-        JsonNode payload = root.has("payload") ? root.get("payload") : root;
-        return toMap(payload);
+        try {
+            JsonNode root = objectMapper.readTree(keyJson);
+            JsonNode payload = root.has("payload") ? root.get("payload") : root;
+            return toMap(payload);
+        } catch (IOException ignored) {
+            return Map.of();
+        }
     }
 
     private static String[] schemaTableFromTopic(String topic) {
