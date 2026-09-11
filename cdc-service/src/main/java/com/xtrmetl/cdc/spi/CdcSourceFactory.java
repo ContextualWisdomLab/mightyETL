@@ -3,10 +3,12 @@ package com.xtrmetl.cdc.spi;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Resolves configured CDC source type ids to {@link CdcSourceConnector} instances.
@@ -32,15 +34,23 @@ public class CdcSourceFactory {
     }
 
     /**
-     * Validate a multi-source config list. Does not start engines — live capture
-     * remains single-source in {@code CdcService}.
+     * Validates and describes a multi-source configuration list without starting engines.
+     * Live capture remains single-source in {@code CdcService}.
+     *
+     * @param specs configured source entries; {@code null} is treated as an empty list
+     * @return one descriptive row for each configured source
+     * @throws IllegalArgumentException when two entries declare the same source id
      */
     public List<Map<String, Object>> describeConfigured(List<SourceSpec> specs) {
         List<Map<String, Object>> out = new ArrayList<>();
         if (specs == null) {
             return out;
         }
+        Set<String> sourceIds = new HashSet<>();
         for (SourceSpec spec : specs) {
+            if (!sourceIds.add(spec.id())) {
+                throw new IllegalArgumentException("duplicate source id: " + spec.id());
+            }
             Map<String, Object> row = new java.util.LinkedHashMap<>();
             row.put("id", spec.id());
             row.put("type", spec.type());

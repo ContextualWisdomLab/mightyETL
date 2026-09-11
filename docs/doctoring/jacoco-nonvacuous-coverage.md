@@ -1,8 +1,17 @@
 # Non-vacuous JaCoCo Coverage Evidence
 
-**Status:** `active_pr` #164  
-**Protected baseline assessed:** `develop@622e5e6c3d534f230c390f10e3832efadfc01825`  
-**Assessment date:** 2026-08-09
+**Status:** merged on `develop` via #284; this lane carries the doctoring contract and the rule co-location guard
+**Protected baseline assessed:** `develop@622e5e6c3d534f230c390f10e3832efadfc01825`
+**Integrated remediation:** `develop@e550688c` (non-vacuous selector + `CLASS TOTALCOUNT >= 1` invariant)
+**Assessment date:** 2026-08-09 (revalidated 2026-09-11)
+
+## Control-failure semantics
+
+`Analyzed bundle 'etl-service' with 0 classes` is a **coverage control failure**, not 100%
+coverage. A zero-class bundle satisfies every zero-missed limit vacuously, so it must never be
+cited as acquisition, release, or gate evidence for owned production coverage. The durable-job
+gate now fails closed on that condition: when the class-file selector matches nothing, the check
+reports `classes total count is 0, but expected minimum is 1` and the build fails.
 
 ## Incident evidence
 
@@ -74,6 +83,22 @@ The final exact head is not accepted until a fresh hosted run proves all of the 
 - any real coverage deficits revealed by the repaired selector are fixed test-first;
 - Dependency Review, SBOM, SAST/security and review gates pass;
 - current protected synthetic-merge execution is not mislabeled literal-source proof.
+
+## Integrated revalidation (2026-09-11)
+
+The selector and non-empty invariant are already merged onto `develop` via #284, so this lane now
+carries the doctoring contract and the rule co-location guard rather than the POM change. The
+fail-closed behavior was revalidated directly against `develop@e550688c`:
+
+1. Stock run — `mvn -pl etl-service test`: `Analyzed bundle 'etl-service' with 8 classes`,
+   `All coverage checks have been met.`, `BUILD SUCCESS`.
+2. Falsification run — the same tree with both `report`/`check` `includes` retargeted to a
+   non-existent package yields `Analyzed bundle 'etl-service' with 0 classes`,
+   `Rule violated for bundle etl-service: classes total count is 0, but expected minimum is 1`,
+   `BUILD FAILURE` (exit 1).
+
+The second run proves the causal boundary: an empty selection can no longer report success, and
+the guard is the `BUNDLE`/`CLASS`/`TOTALCOUNT`/`minimum 1` limit rather than the percentage rules.
 
 ## Rollback
 

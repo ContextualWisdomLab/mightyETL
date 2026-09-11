@@ -38,6 +38,11 @@ package-lock.json
 *.bak
 .~*
 
+# Local environment credentials
+.env
+.env.*
+!.env.example
+
 # OpenCode (local CLI artifacts)
 registered_agents.json
 task_agent_mapping.json
