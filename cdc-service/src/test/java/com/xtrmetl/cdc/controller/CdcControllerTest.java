@@ -114,6 +114,10 @@ class CdcControllerTest {
         List<Map<String, Object>> sources = (List<Map<String, Object>>) body.get("registeredSources");
         assertFalse(sources.isEmpty());
         assertEquals("postgres-debezium", sources.get(0).get("id"));
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> targets = (List<Map<String, Object>>) body.get("registeredTargets");
+        assertTargetCapabilities(targets);
     }
 
     @Test
@@ -135,5 +139,24 @@ class CdcControllerTest {
         assertEquals(2, body.size());
         assertTrue(body.stream().anyMatch(t -> "kafka".equals(t.get("id"))));
         assertTrue(body.stream().anyMatch(t -> "jdbc-replica".equals(t.get("id"))));
+        assertTargetCapabilities(body);
+    }
+
+    private static void assertTargetCapabilities(List<Map<String, Object>> targets) {
+        Map<String, Object> kafka = targets.stream()
+                .filter(target -> "kafka".equals(target.get("id")))
+                .findFirst()
+                .orElseThrow();
+        assertEquals(true, kafka.get("productPathLive"));
+        assertEquals(false, kafka.get("canonicalWriteSupported"));
+        assertEquals("RAW_DEBEZIUM_KAFKA", kafka.get("deliveryMode"));
+
+        Map<String, Object> jdbcReplica = targets.stream()
+                .filter(target -> "jdbc-replica".equals(target.get("id")))
+                .findFirst()
+                .orElseThrow();
+        assertEquals(true, jdbcReplica.get("productPathLive"));
+        assertEquals(false, jdbcReplica.get("canonicalWriteSupported"));
+        assertEquals("PROCESSED_DATA_JDBC_REPLICA", jdbcReplica.get("deliveryMode"));
     }
 }

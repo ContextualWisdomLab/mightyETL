@@ -5,6 +5,7 @@ import com.xtrmetl.cdc.service.CdcService;
 import com.xtrmetl.cdc.service.ReplicationSlotProbe;
 import com.xtrmetl.cdc.spi.CdcSourceFactory;
 import com.xtrmetl.cdc.spi.CdcSourceRegistry;
+import com.xtrmetl.cdc.spi.CdcTargetConnector;
 import com.xtrmetl.cdc.spi.CdcTargetRegistry;
 import io.micrometer.observation.annotation.Observed;
 import org.springframework.http.ResponseEntity;
@@ -64,13 +65,7 @@ public class CdcController {
                 .map(this::sourceEntry)
                 .collect(Collectors.toList()));
         body.put("registeredTargets", targetRegistry.all().stream()
-                .map(target -> {
-                    Map<String, Object> entry = new LinkedHashMap<>();
-                    entry.put("id", target.id());
-                    entry.put("displayName", target.displayName());
-                    entry.put("scaffoldOnly", target.scaffoldOnly());
-                    return entry;
-                })
+                .map(this::targetEntry)
                 .collect(Collectors.toList()));
         return ResponseEntity.ok(body);
     }
@@ -87,15 +82,20 @@ public class CdcController {
     @Observed(name = "cdc.targets", contextualName = "cdc-targets")
     public ResponseEntity<List<Map<String, Object>>> targets() {
         List<Map<String, Object>> body = targetRegistry.all().stream()
-                .map(target -> {
-                    Map<String, Object> entry = new LinkedHashMap<>();
-                    entry.put("id", target.id());
-                    entry.put("displayName", target.displayName());
-                    entry.put("scaffoldOnly", target.scaffoldOnly());
-                    return entry;
-                })
+                .map(this::targetEntry)
                 .collect(Collectors.toList());
         return ResponseEntity.ok(body);
+    }
+
+    private Map<String, Object> targetEntry(CdcTargetConnector target) {
+        Map<String, Object> entry = new LinkedHashMap<>();
+        entry.put("id", target.id());
+        entry.put("displayName", target.displayName());
+        entry.put("scaffoldOnly", target.scaffoldOnly());
+        entry.put("productPathLive", target.capabilities().productPathLive());
+        entry.put("canonicalWriteSupported", target.capabilities().canonicalWriteSupported());
+        entry.put("deliveryMode", target.capabilities().deliveryMode().name());
+        return entry;
     }
 
     private Map<String, Object> sourceEntry(com.xtrmetl.cdc.spi.CdcSourceConnector source) {
