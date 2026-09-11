@@ -6,9 +6,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 import java.lang.reflect.Constructor;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.Iterator;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -112,6 +115,85 @@ class CdcRegistryIdentityTest {
         assertThrows(UnsupportedOperationException.class, () -> registry.all().clear());
         assertTrue(registry.find(KafkaCdcTargetConnector.ID).isPresent());
         assertTrue(registry.find(JdbcReplicaCdcTargetConnector.ID).isPresent());
+    }
+
+    @Test
+    void sourceConnectorCollectionCannotRemoveRegisteredConnector() {
+        CdcSourceRegistry registry = new CdcSourceRegistry(List.of(source("immutable-source")));
+        int registeredBefore = registry.all().size();
+        CdcSourceConnector retained = registry.find("immutable-source").orElseThrow();
+
+        assertThrows(UnsupportedOperationException.class, () -> registry.all().remove(retained));
+
+        assertSame(retained, registry.find("immutable-source").orElseThrow());
+        assertEquals(registeredBefore, registry.all().size());
+    }
+
+    @Test
+    void targetConnectorCollectionCannotRemoveRegisteredConnector() {
+        CdcTargetRegistry registry = new CdcTargetRegistry();
+        int registeredBefore = registry.all().size();
+        CdcTargetConnector kafka = registry.find(KafkaCdcTargetConnector.ID).orElseThrow();
+
+        assertThrows(UnsupportedOperationException.class, () -> registry.all().remove(kafka));
+
+        assertSame(kafka, registry.find(KafkaCdcTargetConnector.ID).orElseThrow());
+        assertEquals(registeredBefore, registry.all().size());
+    }
+
+    @Test
+    void sourceConnectorIteratorCannotRemoveRegisteredConnector() {
+        CdcSourceRegistry registry = new CdcSourceRegistry(List.of(source("immutable-source")));
+        int registeredBefore = registry.all().size();
+        Iterator<CdcSourceConnector> iterator = registry.all().iterator();
+        assertTrue(iterator.hasNext());
+        iterator.next();
+
+        assertThrows(UnsupportedOperationException.class, iterator::remove);
+
+        assertEquals(registeredBefore, registry.all().size());
+        assertTrue(registry.find("immutable-source").isPresent());
+    }
+
+    @Test
+    void targetConnectorIteratorCannotRemoveRegisteredConnector() {
+        CdcTargetRegistry registry = new CdcTargetRegistry();
+        int registeredBefore = registry.all().size();
+        Iterator<CdcTargetConnector> iterator = registry.all().iterator();
+        assertTrue(iterator.hasNext());
+        iterator.next();
+
+        assertThrows(UnsupportedOperationException.class, iterator::remove);
+
+        assertEquals(registeredBefore, registry.all().size());
+        assertTrue(registry.find(KafkaCdcTargetConnector.ID).isPresent());
+    }
+
+    @Test
+    void returnedSourceConnectorSnapshotDoesNotChangeAfterLaterRegistration() {
+        CdcSourceRegistry registry = new CdcSourceRegistry(List.of(source("immutable-source")));
+        Collection<CdcSourceConnector> snapshot = registry.all();
+        int snapshotSize = snapshot.size();
+
+        CdcSourceConnector laterConnector = source("later-source");
+        registry.register(laterConnector);
+
+        assertEquals(snapshotSize, snapshot.size());
+        assertTrue(registry.find("later-source").isPresent());
+        assertFalse(snapshot.contains(laterConnector));
+    }
+
+    @Test
+    void sourceConnectorSnapshotPreservesRegistrationOrderAndIdentity() {
+        CdcSourceConnector first = source("snapshot-first");
+        CdcSourceConnector second = source("snapshot-second");
+        CdcSourceRegistry registry = new CdcSourceRegistry(List.of(first, second));
+
+        List<String> ids = registry.all().stream().map(CdcSourceConnector::id).toList();
+
+        assertEquals(List.of("snapshot-first", "snapshot-second"), ids);
+        assertSame(first, registry.find("snapshot-first").orElseThrow());
+        assertSame(second, registry.find("snapshot-second").orElseThrow());
     }
 
     private static CdcSourceConnector source(String id) {
