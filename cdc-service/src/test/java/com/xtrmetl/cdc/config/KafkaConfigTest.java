@@ -1,5 +1,7 @@
 package com.xtrmetl.cdc.config;
 
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.common.TopicPartition;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.classify.BinaryExceptionClassifier;
@@ -13,6 +15,8 @@ import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.util.backoff.FixedBackOff;
+
+import java.util.function.BiFunction;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -52,6 +56,48 @@ class KafkaConfigTest {
         assertNotNull(classifier);
         assertFalse(classifier.classify(new IllegalArgumentException("test")));
         assertFalse(classifier.classify(new IllegalStateException("test")));
+    }
+
+    @Test
+    void routesUnrecoverableReplicaApplyFailuresToDeadLetterTopicWithoutStallingPartition() {
+        KafkaConfig config = new KafkaConfig();
+        KafkaTemplate<String, String> kafkaTemplate = mock(KafkaTemplate.class);
+        DefaultErrorHandler errorHandler = config.kafkaListenerErrorHandler(kafkaTemplate, 1000L, 30L);
+
+        Object failureTracker = ReflectionTestUtils.getField(errorHandler, "failureTracker");
+        assertNotNull(failureTracker);
+        Object recoverer = ReflectionTestUtils.getField(failureTracker, "recoverer");
+        assertNotNull(recoverer);
+
+        BiFunction<ConsumerRecord<?, ?>, Exception, TopicPartition> destinationResolver =
+                (BiFunction<ConsumerRecord<?, ?>, Exception, TopicPartition>)
+                        ReflectionTestUtils.getField(recoverer, "destinationResolver");
+        assertNotNull(destinationResolver);
+
+        ConsumerRecord<String, String> record = new ConsumerRecord<>(
+                "xtrmetl-cdc.public.processed_data", 3, 0L, "{\"payload\":{\"id\":1}}",
+                "{\"payload\":{\"op\":\"u\",\"after\":{\"id\":1}}}"
+        );
+        TopicPartition destination = destinationResolver.apply(
+                record,
+                new IllegalStateException("Missing data field in CDC event for id=1")
+        );
+
+        assertEquals("xtrmetl-cdc.public.processed_data.DLT", destination.topic());
+        assertEquals(3, destination.partition());
+    }
+
+    @Test
+    void classifiesReplicaApplyFailuresAsNonRetryableSoTheyDoNotBlockLaterRecords() {
+        KafkaConfig config = new KafkaConfig();
+        KafkaTemplate<String, String> kafkaTemplate = mock(KafkaTemplate.class);
+        DefaultErrorHandler errorHandler = config.kafkaListenerErrorHandler(kafkaTemplate, 1000L, 30L);
+
+        BinaryExceptionClassifier classifier =
+                (BinaryExceptionClassifier) ReflectionTestUtils.invokeMethod(errorHandler, "getClassifier");
+        assertNotNull(classifier);
+        assertFalse(classifier.classify(new IllegalStateException("Missing data field in CDC event for id=1")));
+        assertFalse(classifier.classify(new IllegalStateException("data is null in CDC event for id=1")));
     }
 
     @Test

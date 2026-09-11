@@ -148,4 +148,84 @@ class ProcessedDataReplicaApplierTest {
         verify(jdbcTemplate).update(eq("DELETE FROM processed_data WHERE id = ?"), eq(1L));
         verify(jdbcTemplate, never()).update(startsWith("INSERT INTO processed_data"), eq(1L), eq("hello"));
     }
+
+    @Test
+    void doesNotCoerceFractionalNumericKeyIdIntoAnotherRow() {
+        String topic = "xtrmetl-cdc.public.processed_data";
+        String keyJson = "{\"payload\":{\"id\":1.5}}";
+        String valueJson = "{\"payload\":{\"op\":\"c\",\"after\":{\"id\":1.5,\"data\":\"hello\"}}}";
+
+        applier.apply(topic, keyJson, valueJson);
+
+        verifyNoInteractions(jdbcTemplate);
+    }
+
+    @Test
+    void doesNotCoerceFractionalNumericValueIdIntoAnotherRow() {
+        String topic = "xtrmetl-cdc.public.processed_data";
+        String keyJson = null;
+        String valueJson = "{\"payload\":{\"op\":\"c\",\"after\":{\"id\":1.5,\"data\":\"hello\"}}}";
+
+        applier.apply(topic, keyJson, valueJson);
+
+        verifyNoInteractions(jdbcTemplate);
+    }
+
+    @Test
+    void doesNotAcceptFloatingPointTypedIntegralId() {
+        String topic = "xtrmetl-cdc.public.processed_data";
+        String keyJson = "{\"payload\":{\"id\":1.0}}";
+        String valueJson = "{\"payload\":{\"op\":\"c\",\"after\":{\"id\":1.0,\"data\":\"hello\"}}}";
+
+        applier.apply(topic, keyJson, valueJson);
+
+        verifyNoInteractions(jdbcTemplate);
+    }
+
+    @Test
+    void doesNotWrapNumericIdAboveLongMax() {
+        String topic = "xtrmetl-cdc.public.processed_data";
+        String keyJson = "{\"payload\":{\"id\":9223372036854775808}}";
+        String valueJson = "{\"payload\":{\"op\":\"c\",\"after\":{\"id\":9223372036854775808,\"data\":\"hello\"}}}";
+
+        applier.apply(topic, keyJson, valueJson);
+
+        verifyNoInteractions(jdbcTemplate);
+    }
+
+    @Test
+    void doesNotWrapNumericIdBelowLongMin() {
+        String topic = "xtrmetl-cdc.public.processed_data";
+        String keyJson = "{\"payload\":{\"id\":-9223372036854775809}}";
+        String valueJson = "{\"payload\":{\"op\":\"c\",\"after\":{\"id\":-9223372036854775809,\"data\":\"hello\"}}}";
+
+        applier.apply(topic, keyJson, valueJson);
+
+        verifyNoInteractions(jdbcTemplate);
+    }
+
+    @Test
+    void keepsExactSignedLongBoundaryIds() {
+        String topic = "xtrmetl-cdc.public.processed_data";
+        String maxValue = "{\"payload\":{\"op\":\"c\",\"after\":{\"id\":9223372036854775807,\"data\":\"hello\"}}}";
+        String minValue = "{\"payload\":{\"op\":\"c\",\"after\":{\"id\":-9223372036854775808,\"data\":\"hello\"}}}";
+
+        applier.apply(topic, "{\"payload\":{\"id\":9223372036854775807}}", maxValue);
+        applier.apply(topic, "{\"payload\":{\"id\":-9223372036854775808}}", minValue);
+
+        verify(jdbcTemplate).update(startsWith("INSERT INTO processed_data"), eq(Long.MAX_VALUE), eq("hello"));
+        verify(jdbcTemplate).update(startsWith("INSERT INTO processed_data"), eq(Long.MIN_VALUE), eq("hello"));
+    }
+
+    @Test
+    void keepsOrdinaryIntegralNumericAndStrictTextIds() {
+        String topic = "xtrmetl-cdc.public.processed_data";
+        String valueJson = "{\"payload\":{\"op\":\"c\",\"after\":{\"id\":42,\"data\":\"hello\"}}}";
+
+        applier.apply(topic, "{\"payload\":{\"id\":42}}", valueJson);
+        applier.apply(topic, "{\"payload\":{\"id\":\"42\"}}", valueJson);
+
+        verify(jdbcTemplate, org.mockito.Mockito.times(2))
+                .update(startsWith("INSERT INTO processed_data"), eq(42L), eq("hello"));
+    }
 }
