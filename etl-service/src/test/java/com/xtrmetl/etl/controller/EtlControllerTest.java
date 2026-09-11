@@ -79,6 +79,23 @@ class EtlControllerTest {
     }
 
     @Test
+    void declaresUtf8CharsetForNonAsciiSuccessBody() throws Exception {
+        String request = "[{\"id\":\"record_alpha\"}]";
+        String nonAsciiResult = "Processed: \uB808\uCF54\uB4DC_\u03B1";
+        when(etlService.processData(request)).thenReturn(nonAsciiResult);
+
+        mockMvc.perform(post(PROCESS_PATH)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(request))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType("text/plain;charset=UTF-8"))
+                .andExpect(header().string("Content-Type", "text/plain;charset=UTF-8"))
+                .andExpect(content().string(nonAsciiResult));
+
+        verify(etlService).processData(request);
+    }
+
+    @Test
     void processesTheFirstKeyedRequestAndMarksItAsNotReplayed() throws Exception {
         String request = "[{\"id\":\"record_alpha\"}]";
         Principal principal = () -> "tenant_alpha";

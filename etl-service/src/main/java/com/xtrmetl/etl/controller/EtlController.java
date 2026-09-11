@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.nio.charset.StandardCharsets;
 import java.security.Principal;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -104,7 +105,7 @@ public class EtlController {
         }
 
         ResponseEntity.BodyBuilder response = ResponseEntity.ok()
-                .contentType(MediaType.TEXT_PLAIN);
+                .contentType(new MediaType(MediaType.TEXT_PLAIN, StandardCharsets.UTF_8));
         if (idempotencyKey != null) {
             response.header(IDEMPOTENCY_REPLAYED_HEADER, Boolean.toString(replayed));
         }
