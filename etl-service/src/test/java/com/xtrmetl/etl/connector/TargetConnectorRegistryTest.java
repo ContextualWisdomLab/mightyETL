@@ -111,4 +111,61 @@ class TargetConnectorRegistryTest {
         when(connector.id()).thenReturn(id);
         return connector;
     }
+
+    @Test
+    void duplicateTargetConnectorIdCannotReplaceRegistrationAuthority() {
+        TargetConnectorRegistry registry = new TargetConnectorRegistry();
+        TargetConnector original = registry.find("databricks").orElseThrow();
+        TargetConnector impostor = connector("databricks");
+        int registeredBefore = registry.all().size();
+
+        assertThrows(IllegalArgumentException.class, () -> registry.register(impostor));
+
+        assertSame(original, registry.find("databricks").orElseThrow());
+        assertEquals(registeredBefore, registry.all().size());
+    }
+
+    @Test
+    void nullTargetConnectorFailsBeforeRegistryMutation() {
+        TargetConnectorRegistry registry = new TargetConnectorRegistry();
+        int registeredBefore = registry.all().size();
+
+        assertThrows(IllegalArgumentException.class, () -> registry.register(null));
+
+        assertEquals(registeredBefore, registry.all().size());
+    }
+
+    @Test
+    void nullTargetConnectorIdFailsBeforeRegistryMutation() {
+        TargetConnectorRegistry registry = new TargetConnectorRegistry();
+        int registeredBefore = registry.all().size();
+
+        assertThrows(IllegalArgumentException.class, () -> registry.register(connector(null)));
+
+        assertEquals(registeredBefore, registry.all().size());
+    }
+
+    @Test
+    void blankTargetConnectorIdFailsBeforeRegistryMutation() {
+        TargetConnectorRegistry registry = new TargetConnectorRegistry();
+        int registeredBefore = registry.all().size();
+
+        assertThrows(IllegalArgumentException.class, () -> registry.register(connector("   ")));
+
+        assertEquals(registeredBefore, registry.all().size());
+    }
+
+    @Test
+    void rejectedDuplicateRegistrationDoesNotEnterDiscoveryOrder() {
+        TargetConnectorRegistry registry = new TargetConnectorRegistry();
+        TargetConnector impostor = connector("databricks");
+
+        assertThrows(IllegalArgumentException.class, () -> registry.register(impostor));
+
+        List<String> ids = new ArrayList<>();
+        for (TargetConnector connector : registry.all()) {
+            ids.add(connector.id());
+        }
+        assertEquals(List.of("databricks", "snowflake"), ids);
+    }
 }

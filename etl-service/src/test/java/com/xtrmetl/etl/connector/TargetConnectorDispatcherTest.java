@@ -71,8 +71,7 @@ class TargetConnectorDispatcherTest {
     @Test
     void opensSupportedConnectorOnceBeforeWritingAndClosesExactlyOnce() {
         RecordingConnector connector = new RecordingConnector(ConnectorStatus.SUPPORTED, false);
-        TargetConnectorRegistry registry = new TargetConnectorRegistry();
-        registry.register(connector);
+        TargetConnectorRegistry registry = new TargetConnectorRegistry(List.of(connector));
         TargetConnectorDispatcher dispatcher =
                 new TargetConnectorDispatcher(registry, enabledDatabricksProperties());
 
@@ -95,8 +94,7 @@ class TargetConnectorDispatcherTest {
     @Test
     void cleansUpFailedOpenBeforeRetryingSupportedConnector() {
         RecordingConnector connector = new RecordingConnector(ConnectorStatus.SUPPORTED, true);
-        TargetConnectorRegistry registry = new TargetConnectorRegistry();
-        registry.register(connector);
+        TargetConnectorRegistry registry = new TargetConnectorRegistry(List.of(connector));
         TargetConnectorDispatcher dispatcher =
                 new TargetConnectorDispatcher(registry, enabledDatabricksProperties());
 
@@ -112,8 +110,7 @@ class TargetConnectorDispatcherTest {
     @Test
     void refusesUnsupportedConnectorBeforeOpenOrWrite() {
         RecordingConnector connector = new RecordingConnector(ConnectorStatus.UNSUPPORTED, false);
-        TargetConnectorRegistry registry = new TargetConnectorRegistry();
-        registry.register(connector);
+        TargetConnectorRegistry registry = new TargetConnectorRegistry(List.of(connector));
         TargetConnectorDispatcher dispatcher =
                 new TargetConnectorDispatcher(registry, enabledDatabricksProperties());
 
@@ -126,8 +123,7 @@ class TargetConnectorDispatcherTest {
     @Test
     void serializesWritesToTheSameConnector() throws Exception {
         SerializingProbeConnector connector = new SerializingProbeConnector();
-        TargetConnectorRegistry registry = new TargetConnectorRegistry();
-        registry.register(connector);
+        TargetConnectorRegistry registry = new TargetConnectorRegistry(List.of(connector));
         TargetConnectorDispatcher dispatcher =
                 new TargetConnectorDispatcher(registry, enabledDatabricksProperties());
         ExecutorService executor = Executors.newFixedThreadPool(2);
@@ -169,8 +165,7 @@ class TargetConnectorDispatcherTest {
     @Test
     void shutdownWaitsForInFlightWriteAndRejectsLaterDispatches() throws Exception {
         BlockingConnector connector = new BlockingConnector();
-        TargetConnectorRegistry registry = new TargetConnectorRegistry();
-        registry.register(connector);
+        TargetConnectorRegistry registry = new TargetConnectorRegistry(List.of(connector));
         TargetConnectorDispatcher dispatcher =
                 new TargetConnectorDispatcher(registry, enabledDatabricksProperties());
         ExecutorService executor = Executors.newFixedThreadPool(2);
