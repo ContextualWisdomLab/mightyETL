@@ -25,13 +25,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class MavenWrapperIntegrityTest {
 
     private static final String REVIEWED_DISTRIBUTION_URL =
-            "https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.12/"
-                    + "apache-maven-3.9.12-bin.zip";
+            "https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.16/"
+                    + "apache-maven-3.9.16-bin.zip";
     private static final String REVIEWED_DISTRIBUTION_SHA256 =
-            "305773a68d6ddfd413df58c82b3f8050e89778e777f3a745c8e5b8cbea4018ef";
+            "5af3b743dd8b876b5c45da33b676251e5f1687712644abb4ee519ca56e1d89ce";
 
     /**
-     * Requires the fixed Maven 3.9.12 download to remain bound to its reviewed SHA-256 checksum.
+     * Requires the fixed Maven 3.9.16 download to remain bound to its reviewed SHA-256 checksum.
      *
      * @throws IOException when the wrapper properties cannot be read as repository source
      */
@@ -67,7 +67,7 @@ class MavenWrapperIntegrityTest {
         assertEquals(
                 REVIEWED_DISTRIBUTION_SHA256,
                 distributionSha256,
-                "The checksum must match the reviewed Maven 3.9.12 distribution"
+                "The checksum must match the reviewed Maven 3.9.16 distribution"
         );
     }
 
