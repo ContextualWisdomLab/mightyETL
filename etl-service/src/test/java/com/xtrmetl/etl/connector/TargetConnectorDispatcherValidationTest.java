@@ -17,8 +17,7 @@ class TargetConnectorDispatcherValidationTest {
     @Test
     void validatesSupportedConnectorBeforeOpening() {
         ValidationProbeConnector connector = new ValidationProbeConnector();
-        TargetConnectorRegistry registry = new TargetConnectorRegistry();
-        registry.register(connector);
+        TargetConnectorRegistry registry = new TargetConnectorRegistry(List.of(connector));
         TargetConnectorDispatcher dispatcher = new TargetConnectorDispatcher(
                 registry,
                 enabledDatabricksProperties()

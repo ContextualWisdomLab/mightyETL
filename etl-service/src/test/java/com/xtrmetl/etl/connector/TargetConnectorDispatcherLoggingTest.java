@@ -76,8 +76,7 @@ class TargetConnectorDispatcherLoggingTest {
     }
 
     private static TargetConnectorDispatcher dispatcher(TargetConnector connector) {
-        TargetConnectorRegistry registry = new TargetConnectorRegistry();
-        registry.register(connector);
+        TargetConnectorRegistry registry = new TargetConnectorRegistry(List.of(connector));
         return new TargetConnectorDispatcher(registry, enabledDatabricksProperties());
     }
 
