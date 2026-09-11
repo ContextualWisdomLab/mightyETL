@@ -44,7 +44,7 @@ Fields are transformed directly from the Jackson JSON tree; values are not split
 - `NAME` values use locale-independent uppercase conversion.
 - `EMAIL` values use locale-independent lowercase conversion.
 - `AMOUNT` values use `BigDecimal`, `HALF_UP`, scale `2`, and `toPlainString()`.
-- Invalid, excessive-precision, or extreme-scale amounts retain the legacy fallback `0.00` without expanding attacker-controlled exponents into huge strings.
+- Invalid, excessive-precision, or extreme-scale amounts fail closed as `etl_invalid_record` before JDBC, without expanding attacker-controlled exponents into huge strings or manufacturing `0.00`.
 - Nested arrays and objects are retained as compact JSON instead of collapsing to empty text.
 - Response lines remain `Processed: <id>` in input order. Identifier whitespace, ISO control, Unicode format-control, Unicode line-separator characters, and length are bounded so one record cannot inject, visually reorder, conceal, or amplify response lines.
 

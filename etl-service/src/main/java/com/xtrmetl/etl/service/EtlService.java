@@ -406,11 +406,11 @@ public class EtlService {
             if (amount.precision() > MAX_AMOUNT_PRECISION
                     || scale < -MAX_AMOUNT_ABSOLUTE_SCALE
                     || scale > MAX_AMOUNT_ABSOLUTE_SCALE) {
-                return "0.00";
+                throw invalidRecord();
             }
             return amount.setScale(2, RoundingMode.HALF_UP).toPlainString();
         } catch (NumberFormatException exception) {
-            return "0.00";
+            throw invalidRecord();
         }
     }
 
