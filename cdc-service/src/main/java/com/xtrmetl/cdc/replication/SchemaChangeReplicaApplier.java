@@ -24,14 +24,14 @@ import java.util.stream.Collectors;
  *
  * <p>DDL execution is disabled by default. When enabled, the default policy is a positive
  * allow-list, only a single comment-free statement is accepted, and prefix matches must end
- * at a SQL token boundary.
+ * at a SQL token boundary. Ordinary lifecycle logs retain bounded outcome metadata without
+ * reproducing raw DDL statements or provider exception diagnostics.</p>
  */
 @Service
 @ConditionalOnProperty(prefix = "xtrmetl.replica", name = "enabled", havingValue = "true")
 public class SchemaChangeReplicaApplier {
 
     private static final Logger log = LoggerFactory.getLogger(SchemaChangeReplicaApplier.class);
-    private static final int DDL_LOG_MAX_LENGTH = 500;
     private static final Set<String> IDEMPOTENT_DDL_SQL_STATES = Set.of(
             "42P06",
             "42P07",
@@ -46,6 +46,16 @@ public class SchemaChangeReplicaApplier {
     private final Set<String> ddlAllowedPrefixes;
     private final Set<String> ddlBlockedPrefixes;
 
+    /**
+     * Creates the schema-change applier from replica JDBC and DDL-policy configuration.
+     *
+     * @param jdbcTemplate replica-database JDBC access
+     * @param objectMapper JSON parser used for Debezium event envelopes
+     * @param ddlEnabled whether schema-changing SQL may be executed at all
+     * @param ddlValidationMode configured validation mode: {@code whitelist}, {@code blocklist}, or {@code none}
+     * @param ddlAllowedPrefixes comma-separated positive prefixes used by whitelist mode
+     * @param ddlBlockedPrefixes comma-separated prohibited prefixes used by blocklist mode
+     */
     public SchemaChangeReplicaApplier(
             @Qualifier("replicaJdbcTemplate") JdbcTemplate jdbcTemplate,
             ObjectMapper objectMapper,
@@ -70,6 +80,18 @@ public class SchemaChangeReplicaApplier {
         }
     }
 
+    /**
+     * Applies one schema-change event when DDL replication is enabled and the event passes policy.
+     *
+     * <p>Events outside the schema-change topic family, blank payloads, and envelopes without DDL
+     * are ignored. Malformed JSON is classified as an unavailable event and skipped without
+     * publishing parser diagnostics. Policy violations fail closed with an exception before JDBC
+     * execution. Non-duplicate JDBC failures are rethrown after a bounded diagnostic event.</p>
+     *
+     * @param topic source Kafka topic; only the schema-change suffix is accepted
+     * @param keyJson optional Debezium key, currently unused by schema application
+     * @param valueJson Debezium value envelope containing a {@code ddl} field
+     */
     public void apply(@Nullable String topic, @Nullable String keyJson, @Nullable String valueJson) {
         if (!ddlEnabled
                 || topic == null
@@ -94,20 +116,17 @@ public class SchemaChangeReplicaApplier {
             // single-statement, comment-free, and configured policy gates above.
             jdbcTemplate.execute(ddl); // nosemgrep: java.spring.security.audit.spring-sqli.spring-sqli
             if (log.isInfoEnabled()) {
-                log.info("Applied schema change DDL on replica (topic={}, ddl={})",
-                        topic, truncateForLog(ddl));
+                log.info("Applied schema change DDL on replica (topic={})", topic);
             }
         } catch (DataAccessException e) {
             if (isIdempotentDuplicate(e)) {
                 if (log.isInfoEnabled()) {
-                    log.info("Schema change DDL already applied; skipping duplicate (topic={}, ddl={})",
-                            topic, truncateForLog(ddl));
+                    log.info("Schema change DDL already applied; skipping duplicate (topic={})", topic);
                 }
                 return;
             }
             if (log.isErrorEnabled()) {
-                log.error("Failed to apply schema change DDL on replica (topic={}, ddl={})",
-                        topic, truncateForLog(ddl), e);
+                log.error("Failed to apply schema change DDL on replica (topic={})", topic);
             }
             throw e;
         }
@@ -119,7 +138,7 @@ public class SchemaChangeReplicaApplier {
             trimmed = trimmed.substring(0, trimmed.length() - 1).trim();
         }
         if (trimmed.contains(";")) {
-            logBlocked(topic, ddl, "Blocked multi-statement DDL");
+            logBlocked(topic, "Blocked multi-statement DDL");
             throw new IllegalArgumentException("Multiple SQL statements are not allowed");
         }
         return trimmed;
@@ -127,12 +146,13 @@ public class SchemaChangeReplicaApplier {
 
     private String requireCommentFree(String topic, String ddl) {
         if (ddl.contains("--") || ddl.contains("/*") || ddl.contains("*/") || ddl.indexOf('\0') >= 0) {
-            logBlocked(topic, ddl, "Blocked DDL containing SQL comments or NUL");
+            logBlocked(topic, "Blocked DDL containing SQL comments or NUL");
             throw new IllegalArgumentException("SQL comments and NUL characters are not allowed in replicated DDL");
         }
         return ddl;
     }
 
+    @Nullable
     private String extractDdl(String valueJson) {
         try {
             JsonNode root = objectMapper.readTree(valueJson);
@@ -142,7 +162,7 @@ public class SchemaChangeReplicaApplier {
             }
             return payload.path("ddl").asText(null);
         } catch (IOException e) {
-            log.warn("Failed to parse Debezium schema change JSON; skipping DDL apply", e);
+            log.warn("Failed to parse Debezium schema change JSON; skipping DDL apply");
             return null;
         }
     }
@@ -230,21 +250,20 @@ public class SchemaChangeReplicaApplier {
         String normalized = normalizeForValidation(ddl);
         if (ddlValidationMode == DdlValidationMode.BLOCKLIST
                 && ddlBlockedPrefixes.stream().anyMatch(prefix -> matchesPrefix(normalized, prefix))) {
-            logBlocked(topic, ddl, "Blocked DDL by validation policy");
+            logBlocked(topic, "Blocked DDL by validation policy");
             throw new IllegalArgumentException("DDL blocked by validation policy");
         }
 
         if (ddlValidationMode == DdlValidationMode.WHITELIST
                 && ddlAllowedPrefixes.stream().noneMatch(prefix -> matchesPrefix(normalized, prefix))) {
-            logBlocked(topic, ddl, "Blocked DDL by validation policy");
+            logBlocked(topic, "Blocked DDL by validation policy");
             throw new IllegalArgumentException("DDL blocked by validation policy");
         }
     }
 
-    private void logBlocked(String topic, String ddl, String message) {
+    private void logBlocked(String topic, String message) {
         if (log.isWarnEnabled()) {
-            log.warn("{} (mode={}, topic={}, ddl={})",
-                    message, ddlValidationMode, topic, truncateForLog(ddl));
+            log.warn("{} (mode={}, topic={})", message, ddlValidationMode, topic);
         }
     }
 
@@ -266,17 +285,6 @@ public class SchemaChangeReplicaApplier {
 
     private static String normalizeForValidation(String ddl) {
         return ddl.trim().replaceAll("\\s+", " ").toUpperCase(Locale.ROOT);
-    }
-
-    private static String truncateForLog(String ddl) {
-        if (ddl == null) {
-            return null;
-        }
-        String normalized = ddl.trim().replaceAll("\\s+", " ");
-        if (normalized.length() <= DDL_LOG_MAX_LENGTH) {
-            return normalized;
-        }
-        return normalized.substring(0, DDL_LOG_MAX_LENGTH) + "...";
     }
 
     private enum DdlValidationMode {
