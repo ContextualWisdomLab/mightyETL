@@ -186,11 +186,7 @@ public class TargetConnectorDispatcher {
                 connector.close();
             } catch (RuntimeException cleanupFailure) {
                 openFailure.addSuppressed(cleanupFailure);
-                log.warn(
-                        "Failed to clean up target connector after open failure id={}",
-                        connectorId,
-                        cleanupFailure
-                );
+                log.warn("Failed to clean up target connector after open failure id={}", connectorId);
             }
             throw openFailure;
         }
@@ -232,7 +228,7 @@ public class TargetConnectorDispatcher {
                         connector.close();
                         log.info("Closed target connector id={}", connectorId);
                     } catch (RuntimeException exception) {
-                        log.error("Failed to close target connector id={}", connectorId, exception);
+                        log.error("Failed to close target connector id={}", connectorId);
                     }
                 }
             }
