@@ -25,6 +25,16 @@ public final class JdbcReplicaCdcTargetConnector implements CdcTargetConnector {
         return false;
     }
 
+    /**
+     * Reports that replica apply is live through the processed-data applier while canonical SPI writes remain unwired.
+     *
+     * @return immutable JDBC replica target execution metadata
+     */
+    @Override
+    public Capabilities capabilities() {
+        return new Capabilities(true, false, DeliveryMode.PROCESSED_DATA_JDBC_REPLICA);
+    }
+
     @Override
     public void validate(Map<String, String> config) {
         if (config == null) {
