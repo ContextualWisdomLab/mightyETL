@@ -30,8 +30,20 @@ class ConfigServerInboundSecurityTest {
     void anonymousConfigurationReadIsDeniedWhileHealthRemainsPublic() {
         ResponseEntity<String> configuration = restTemplate.getForEntity("/application/default", String.class);
         ResponseEntity<String> health = restTemplate.getForEntity("/actuator/health", String.class);
+        ResponseEntity<String> liveness = restTemplate.getForEntity(
+                "/actuator/health/liveness",
+                String.class
+        );
+        ResponseEntity<String> info = restTemplate.getForEntity("/actuator/info", String.class);
+        ResponseEntity<String> nestedConfiguration = restTemplate.getForEntity(
+                "/application/default/extra",
+                String.class
+        );
 
         assertEquals(HttpStatus.FORBIDDEN, configuration.getStatusCode());
         assertEquals(HttpStatus.OK, health.getStatusCode());
+        assertEquals(HttpStatus.OK, liveness.getStatusCode());
+        assertEquals(HttpStatus.OK, info.getStatusCode());
+        assertEquals(HttpStatus.FORBIDDEN, nestedConfiguration.getStatusCode());
     }
 }
