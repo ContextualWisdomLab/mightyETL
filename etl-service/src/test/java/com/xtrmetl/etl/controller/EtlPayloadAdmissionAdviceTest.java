@@ -39,6 +39,11 @@ class EtlPayloadAdmissionAdviceTest {
                 String.class,
                 StringHttpMessageConverter.class
         ));
+        assertTrue(advice.supports(
+                jobRequestBodyParameter(),
+                String.class,
+                StringHttpMessageConverter.class
+        ));
         assertFalse(advice.supports(
                 integerParameter(),
                 Integer.class,
@@ -193,6 +198,16 @@ class EtlPayloadAdmissionAdviceTest {
     private static MethodParameter requestBodyParameter() throws NoSuchMethodException {
         Method method = EtlController.class.getMethod(
                 "processData",
+                String.class,
+                String.class,
+                Principal.class
+        );
+        return new MethodParameter(method, 0);
+    }
+
+    private static MethodParameter jobRequestBodyParameter() throws NoSuchMethodException {
+        Method method = EtlJobController.class.getMethod(
+                "submit",
                 String.class,
                 String.class,
                 Principal.class

@@ -36,6 +36,8 @@ class EtlBatchDocsAlignmentTest {
 
         assertTrue(runbook.contains("A rejected request performs no database writes"));
         assertTrue(runbook.contains("rolls back earlier writes"));
+        assertTrue(runbook.contains("without reading the entity"));
+        assertTrue(runbook.contains("POST /api/etl/jobs"));
         assertTrue(runbook.contains("not a substitute for edge enforcement"));
         assertTrue(normalizedRunbook.contains("numeric json identifier types are rejected"));
         assertTrue(runbook.contains("no more than 256 Unicode code points"));
