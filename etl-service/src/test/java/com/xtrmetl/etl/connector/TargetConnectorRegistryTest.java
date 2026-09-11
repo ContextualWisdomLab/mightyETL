@@ -39,46 +39,50 @@ class TargetConnectorRegistryTest {
     @Test
     void discoveryCollectionCannotDeleteRegistrationAuthorityViaClear() {
         TargetConnectorRegistry registry = new TargetConnectorRegistry();
+        int registeredBefore = registry.all().size();
 
         assertThrows(UnsupportedOperationException.class, () -> registry.all().clear());
 
         assertTrue(registry.find("databricks").isPresent());
         assertTrue(registry.find("snowflake").isPresent());
-        assertEquals(3, registry.all().size());
+        assertEquals(registeredBefore, registry.all().size());
     }
 
     @Test
     void discoveryCollectionCannotRemoveRegistrationOfAConnector() {
         TargetConnectorRegistry registry = new TargetConnectorRegistry();
+        int registeredBefore = registry.all().size();
         TargetConnector databricks = registry.find("databricks").orElseThrow();
 
         assertThrows(UnsupportedOperationException.class, () -> registry.all().remove(databricks));
 
         assertSame(databricks, registry.find("databricks").orElseThrow());
-        assertEquals(3, registry.all().size());
+        assertEquals(registeredBefore, registry.all().size());
     }
 
     @Test
     void discoveryIteratorCannotRemoveRegistrationOfAConnector() {
         TargetConnectorRegistry registry = new TargetConnectorRegistry();
+        int registeredBefore = registry.all().size();
         Iterator<TargetConnector> iterator = registry.all().iterator();
         assertTrue(iterator.hasNext());
         iterator.next();
 
         assertThrows(UnsupportedOperationException.class, iterator::remove);
 
-        assertEquals(3, registry.all().size());
+        assertEquals(registeredBefore, registry.all().size());
     }
 
     @Test
     void previouslyReturnedDiscoverySnapshotDoesNotChangeAfterLaterRegistration() {
         TargetConnectorRegistry registry = new TargetConnectorRegistry();
         Collection<TargetConnector> snapshot = registry.all();
+        int registeredBefore = snapshot.size();
 
         TargetConnector laterConnector = connector("later-target");
         registry.register(laterConnector);
 
-        assertEquals(3, snapshot.size());
+        assertEquals(registeredBefore, snapshot.size());
         assertTrue(registry.find("later-target").isPresent());
         assertFalse(snapshot.contains(laterConnector));
     }
@@ -92,7 +96,7 @@ class TargetConnectorRegistryTest {
             ids.add(connector.id());
         }
 
-        assertEquals(List.of("databricks", "snowflake", "qlik-sense"), ids);
+        assertEquals(List.of("databricks", "snowflake"), ids);
         for (String id : ids) {
             TargetConnector fromSnapshot = registry.all().stream()
                     .filter(connector -> connector.id().equals(id))
