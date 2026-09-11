@@ -1,8 +1,8 @@
 package com.xtrmetl.etl.config;
 
 import org.springframework.boot.SpringApplication;
+import org.springframework.boot.context.config.ConfigDataEnvironmentPostProcessor;
 import org.springframework.boot.env.EnvironmentPostProcessor;
-import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.MapPropertySource;
@@ -15,10 +15,11 @@ import java.util.Map;
  * Dual-read configuration bridge: {@code mightyetl.*} is preferred and mirrored to the legacy
  * {@code xtrmetl.*} namespace used by existing configuration-property consumers.
  *
- * <p>Only explicitly supported product keys are mirrored. See
+ * <p>Only explicitly supported product keys are mirrored. Qlik Sense keys are deliberately absent:
+ * Qlik is not a published production row-write connector. See
  * {@code docs/rebrand-name-matrix.md} for compatibility boundaries.</p>
  */
-@Order(Ordered.HIGHEST_PRECEDENCE + 10)
+@Order(ConfigDataEnvironmentPostProcessor.ORDER + 1)
 public class MightyEtlConfigAliasEnvironmentPostProcessor implements EnvironmentPostProcessor {
 
     /** Name of the highest-precedence synthetic alias property source. */
@@ -29,7 +30,24 @@ public class MightyEtlConfigAliasEnvironmentPostProcessor implements Environment
             "etl.max-batch-records",
             "etl.jobs.intake-enabled",
             "connectors.databricks.enabled",
-            "connectors.snowflake.enabled"
+            "connectors.databricks.host",
+            "connectors.databricks.http-path",
+            "connectors.databricks.token",
+            "connectors.databricks.catalog",
+            "connectors.databricks.schema",
+            "connectors.databricks.table",
+            "connectors.databricks.write-mode",
+            "connectors.snowflake.enabled",
+            "connectors.snowflake.account",
+            "connectors.snowflake.warehouse",
+            "connectors.snowflake.database",
+            "connectors.snowflake.schema",
+            "connectors.snowflake.user",
+            "connectors.snowflake.password",
+            "connectors.snowflake.private-key",
+            "connectors.snowflake.role",
+            "connectors.snowflake.table",
+            "connectors.snowflake.merge-keys"
     );
 
     /**
