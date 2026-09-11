@@ -12,6 +12,7 @@ import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.math.BigInteger;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -225,8 +226,12 @@ public class ProcessedDataReplicaApplier {
             return null;
         }
 
-        if (value.isNumber()) {
-            return value.longValue();
+        if (value.isIntegralNumber()) {
+            BigInteger exact = value.bigIntegerValue();
+            if (exact.bitLength() < Long.SIZE) {
+                return exact.longValue();
+            }
+            return null;
         }
 
         if (value.isTextual()) {
