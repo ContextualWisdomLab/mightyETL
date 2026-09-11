@@ -10,10 +10,18 @@ import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.Provider;
+import java.security.Security;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -70,6 +78,44 @@ class EtlJobServiceBoundaryTest {
     }
 
     @Test
+    void reportsPlatformFailureWhenRequiredSha256DigestIsUnavailable() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        EtlRequestLock requestLock = mock(EtlRequestLock.class);
+        EtlJobService service = service(jdbcTemplate, requestLock, new EtlBatchProperties());
+        Provider[] originalProviders = Security.getProviders();
+        Provider[] sha256Providers = Security.getProviders("MessageDigest.SHA-256");
+        assertNotNull(sha256Providers);
+        assertTrue(sha256Providers.length > 0);
+
+        Map<String, Integer> originalPositions = new HashMap<>();
+        for (int index = 0; index < originalProviders.length; index++) {
+            originalPositions.put(originalProviders[index].getName(), index + 1);
+        }
+
+        try {
+            for (Provider provider : sha256Providers) {
+                Security.removeProvider(provider.getName());
+            }
+            assertThrows(NoSuchAlgorithmException.class, () -> MessageDigest.getInstance("SHA-256"));
+
+            IllegalStateException exception = assertThrows(
+                    IllegalStateException.class,
+                    () -> service.findOwned(UUID.randomUUID(), "tenant_alpha")
+            );
+
+            assertEquals("SHA-256 is required by the Java platform", exception.getMessage());
+            assertEquals(NoSuchAlgorithmException.class, exception.getCause().getClass());
+        } finally {
+            for (Provider provider : originalProviders) {
+                if (Security.getProvider(provider.getName()) == null) {
+                    Security.insertProviderAt(provider, originalPositions.get(provider.getName()));
+                }
+            }
+        }
+        verifyNoInteractions(requestLock, jdbcTemplate);
+    }
+
+    @Test
     void rejectsInvalidKeysAndPrincipalScopesBeforeTransactionOrDatabaseAccess() {
         JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
         EtlRequestLock requestLock = mock(EtlRequestLock.class);
@@ -109,6 +155,10 @@ class EtlJobServiceBoundaryTest {
         assertError(
                 EtlRequestError.INVALID_JSON,
                 () -> service.submit(null, IDEMPOTENCY_KEY, "tenant_alpha")
+        );
+        assertError(
+                EtlRequestError.INVALID_JSON,
+                () -> service.submit("   ", IDEMPOTENCY_KEY, "tenant_alpha")
         );
         assertError(
                 EtlRequestError.INVALID_JSON,
@@ -156,7 +206,47 @@ class EtlJobServiceBoundaryTest {
         );
         assertError(
                 EtlRequestError.INVALID_RECORD,
+                () -> service.submit(
+                        payloadWithIdentifier("\u00a0record_alpha"),
+                        IDEMPOTENCY_KEY,
+                        "tenant_alpha"
+                )
+        );
+        assertError(
+                EtlRequestError.INVALID_RECORD,
+                () -> service.submit(
+                        payloadWithIdentifier("x".repeat(257)),
+                        IDEMPOTENCY_KEY,
+                        "tenant_alpha"
+                )
+        );
+        assertError(
+                EtlRequestError.INVALID_RECORD,
                 () -> service.submit("[{\"id\":\"record\\u0000alpha\"}]", IDEMPOTENCY_KEY, "tenant_alpha")
+        );
+        assertError(
+                EtlRequestError.INVALID_RECORD,
+                () -> service.submit(
+                        payloadWithIdentifier("record" + Character.toString(0x200e) + "alpha"),
+                        IDEMPOTENCY_KEY,
+                        "tenant_alpha"
+                )
+        );
+        assertError(
+                EtlRequestError.INVALID_RECORD,
+                () -> service.submit(
+                        payloadWithIdentifier("record" + Character.toString(0x2028) + "alpha"),
+                        IDEMPOTENCY_KEY,
+                        "tenant_alpha"
+                )
+        );
+        assertError(
+                EtlRequestError.INVALID_RECORD,
+                () -> service.submit(
+                        payloadWithIdentifier("record" + Character.toString(0x2029) + "alpha"),
+                        IDEMPOTENCY_KEY,
+                        "tenant_alpha"
+                )
         );
         assertError(
                 EtlRequestError.INVALID_RECORD,
@@ -201,6 +291,10 @@ class EtlJobServiceBoundaryTest {
                 () -> service.findOwned(UUID.randomUUID(), null)
         );
         verifyNoInteractions(requestLock, jdbcTemplate);
+    }
+
+    private static String payloadWithIdentifier(String identifier) {
+        return "[{\"id\":\"" + identifier + "\"}]";
     }
 
     private static EtlJobService service(

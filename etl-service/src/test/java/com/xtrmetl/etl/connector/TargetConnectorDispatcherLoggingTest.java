@@ -23,10 +23,10 @@ class TargetConnectorDispatcherLoggingTest {
 
     @Test
     void failedOpenCleanupDoesNotLogProviderDiagnostics(CapturedOutput output) {
-        String openSecret = "https://warehouse.example/sql?token=open-secret-8472";
-        String cleanupSecret = "cleanup-secret-8472";
-        RuntimeException openFailure = new IllegalStateException(openSecret);
-        RuntimeException cleanupFailure = new IllegalArgumentException(cleanupSecret);
+        String openDiagnostic = "https://warehouse.example/sql?diagnostic=private-marker-8472";
+        String cleanupDiagnostic = "cleanup-private-marker-8472";
+        RuntimeException openFailure = new IllegalStateException(openDiagnostic);
+        RuntimeException cleanupFailure = new IllegalArgumentException(cleanupDiagnostic);
         FailingLifecycleConnector connector = new FailingLifecycleConnector(openFailure, cleanupFailure, false);
         TargetConnectorDispatcher dispatcher = dispatcher(connector);
 
@@ -41,7 +41,7 @@ class TargetConnectorDispatcherLoggingTest {
         assertSafeLogs(
                 output,
                 "Failed to clean up target connector after open failure id=databricks",
-                cleanupSecret,
+                cleanupDiagnostic,
                 "IllegalArgumentException",
                 "TargetConnectorDispatcherLoggingTest"
         );
@@ -49,10 +49,10 @@ class TargetConnectorDispatcherLoggingTest {
 
     @Test
     void shutdownCloseFailureDoesNotLogProviderDiagnosticsAndRemainsBestEffort(CapturedOutput output) {
-        String closeSecret = "jdbc:vendor://internal.example/prod?password=close-secret-8472";
+        String closeDiagnostic = "jdbc:vendor://internal.example/prod?diagnostic=private-marker-8472";
         FailingLifecycleConnector connector = new FailingLifecycleConnector(
                 null,
-                new IllegalStateException(closeSecret),
+                new IllegalStateException(closeDiagnostic),
                 true
         );
         TargetConnectorDispatcher dispatcher = dispatcher(connector);
@@ -64,7 +64,7 @@ class TargetConnectorDispatcherLoggingTest {
         assertSafeLogs(
                 output,
                 "Failed to close target connector id=databricks",
-                closeSecret,
+                closeDiagnostic,
                 "IllegalStateException",
                 "TargetConnectorDispatcherLoggingTest"
         );
@@ -86,7 +86,7 @@ class TargetConnectorDispatcherLoggingTest {
         properties.getDatabricks().setEnabled(true);
         properties.getDatabricks().setHost("host");
         properties.getDatabricks().setHttpPath("/sql");
-        properties.getDatabricks().setToken("token");
+        properties.getDatabricks().setToken("test-value");
         properties.getDatabricks().setCatalog("catalog");
         properties.getDatabricks().setSchema("schema");
         properties.getDatabricks().setTable("table_name");
