@@ -26,6 +26,16 @@ public final class KafkaCdcTargetConnector implements CdcTargetConnector {
         return false;
     }
 
+    /**
+     * Reports that Kafka is live through the raw Debezium path while canonical SPI writes remain unwired.
+     *
+     * @return immutable Kafka target execution metadata
+     */
+    @Override
+    public Capabilities capabilities() {
+        return new Capabilities(true, false, DeliveryMode.RAW_DEBEZIUM_KAFKA);
+    }
+
     @Override
     public void validate(Map<String, String> config) {
         if (config == null) {

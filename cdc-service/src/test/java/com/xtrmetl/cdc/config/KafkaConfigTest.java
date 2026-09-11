@@ -1,9 +1,9 @@
 package com.xtrmetl.cdc.config;
 
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.producer.ProducerRecord;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.mockito.ArgumentCaptor;
 import org.springframework.classify.BinaryExceptionClassifier;
 import org.springframework.boot.test.system.CapturedOutput;
@@ -25,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -102,6 +103,47 @@ class KafkaConfigTest {
         assertNotNull(deadLetterRecord.headers().lastHeader(KafkaHeaders.DLT_EXCEPTION_FQCN));
         assertNull(deadLetterRecord.headers().lastHeader(KafkaHeaders.DLT_EXCEPTION_MESSAGE));
         assertNull(deadLetterRecord.headers().lastHeader(KafkaHeaders.DLT_EXCEPTION_STACKTRACE));
+    }
+
+    @Test
+    void preservesZeroRetrySettings() {
+        KafkaConfig config = new KafkaConfig();
+        KafkaTemplate<String, String> kafkaTemplate = mock(KafkaTemplate.class);
+
+        DefaultErrorHandler errorHandler = config.kafkaListenerErrorHandler(kafkaTemplate, 0L, 0L);
+
+        Object failureTracker = ReflectionTestUtils.getField(errorHandler, "failureTracker");
+        assertNotNull(failureTracker);
+        FixedBackOff fixedBackOff = (FixedBackOff) ReflectionTestUtils.getField(failureTracker, "backOff");
+        assertNotNull(fixedBackOff);
+        assertEquals(0L, fixedBackOff.getInterval());
+        assertEquals(0L, fixedBackOff.getMaxAttempts());
+    }
+
+    @Test
+    void rejectsNegativeRetryBackoffBeforeBuildingErrorHandler() {
+        KafkaConfig config = new KafkaConfig();
+        KafkaTemplate<String, String> kafkaTemplate = mock(KafkaTemplate.class);
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> config.kafkaListenerErrorHandler(kafkaTemplate, -1L, 30L)
+        );
+
+        assertTrue(exception.getMessage().contains("xtrmetl.replica.kafka.retry-backoff-ms"));
+    }
+
+    @Test
+    void rejectsNegativeRetryAttemptsBeforeBuildingErrorHandler() {
+        KafkaConfig config = new KafkaConfig();
+        KafkaTemplate<String, String> kafkaTemplate = mock(KafkaTemplate.class);
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> config.kafkaListenerErrorHandler(kafkaTemplate, 1000L, -1L)
+        );
+
+        assertTrue(exception.getMessage().contains("xtrmetl.replica.kafka.retry-max-attempts"));
     }
 
     @Test
