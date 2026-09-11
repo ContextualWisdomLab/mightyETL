@@ -1,0 +1,65 @@
+asyncapi: 3.1.0
+info:
+  title: mightyETL protected CDC publication API
+  version: 0.1.0-develop
+  description: >-
+    Machine-readable description of the protected-develop PostgreSQL Debezium to Kafka publication boundary.
+    The live path forwards raw Debezium JSON and is replay-tolerant with at-least-once semantics; this contract
+    deliberately makes no end-to-end delivery-strength claim beyond that implemented behavior.
+defaultContentType: application/json
+servers:
+  kafkaBroker:
+    host: '{bootstrapServers}'
+    protocol: kafka
+    description: Deployment-provided Kafka bootstrap endpoint.
+    variables:
+      bootstrapServers:
+        default: localhost:9092
+        description: Kafka bootstrap host and port supplied by the deployment.
+channels:
+  debeziumChanges:
+    address: '{destination}'
+    title: Debezium change-event destination
+    description: >-
+      The actual Kafka destination is ChangeEvent.destination() supplied by Debezium. With the protected default
+      PostgreSQL connector configuration this derives from the configured topic prefix plus source table identity.
+    servers:
+      - $ref: '#/servers/kafkaBroker'
+    parameters:
+      destination:
+        description: Runtime Debezium destination/topic. Consumers must not assume a hard-coded table list.
+    messages:
+      rawDebeziumChange:
+        $ref: '#/components/messages/RawDebeziumChange'
+operations:
+  publishRawDebeziumChange:
+    action: send
+    title: Publish a raw Debezium change event
+    description: >-
+      mightyETL publishes the raw Debezium JSON value to Kafka. When Debezium supplies a key it is forwarded;
+      otherwise the key-less Kafka send form is used. The optional canonical mapper is validation/scaffolding and
+      does not replace the live publication payload.
+    channel:
+      $ref: '#/channels/debeziumChanges'
+    messages:
+      - $ref: '#/channels/debeziumChanges/messages/rawDebeziumChange'
+components:
+  messages:
+    RawDebeziumChange:
+      name: RawDebeziumChange
+      title: Raw Debezium JSON change event
+      summary: PostgreSQL CDC event forwarded without canonical payload transformation
+      contentType: application/json
+      description: >-
+        Payload compatibility follows the configured Debezium PostgreSQL connector JSON output. The current
+        protected implementation submits the Kafka send asynchronously and therefore documents replay-tolerant
+        at-least-once behavior rather than stronger broker-acknowledged source-progress semantics. PR #139 owns
+        the separate acknowledgement-before-progress repair.
+      headers:
+        type: object
+        additionalProperties: true
+        description: No application-specific Kafka header contract is asserted by protected mightyETL.
+      payload:
+        type: object
+        additionalProperties: true
+        description: Raw Debezium JSON object; schema evolves according to Debezium/source configuration.
