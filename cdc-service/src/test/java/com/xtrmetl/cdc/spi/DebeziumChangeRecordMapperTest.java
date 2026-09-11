@@ -104,6 +104,29 @@ class DebeziumChangeRecordMapperTest {
     }
 
     @Test
+    void doesNotThrowWhenBeforePrimaryKeyIsExplicitlyJsonNull() {
+        String value = """
+                {
+                  "payload": {
+                    "op": "d",
+                    "before": {"id": null, "data": "deleted"},
+                    "after": null
+                  }
+                }
+                """;
+
+        Optional<CanonicalChangeRecord> result = assertDoesNotThrow(() -> mapper.map(
+                "postgres-debezium",
+                "xtrmetl-cdc.public.processed_data",
+                null,
+                value
+        ));
+
+        assertTrue(result.isPresent());
+        assertTrue(result.orElseThrow().getPk().isEmpty());
+    }
+
+    @Test
     void emptyValueReturnsEmpty() {
         assertTrue(mapper.map("s", "t", null, null).isEmpty());
         assertTrue(mapper.map("s", "t", null, "  ").isEmpty());
