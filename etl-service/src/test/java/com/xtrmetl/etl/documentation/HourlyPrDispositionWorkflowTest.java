@@ -65,6 +65,9 @@ class HourlyPrDispositionWorkflowTest {
                 "pending: any(.[]; .status != \"completed\")"
         ));
         assertTrue(workflow.contains(
+                "failed: any(.[];"
+        ));
+        assertTrue(workflow.contains(
                 "successful: any(.[];"
         ));
         assertTrue(workflow.contains(
