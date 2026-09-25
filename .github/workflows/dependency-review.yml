@@ -12,7 +12,10 @@ permissions:
 
 jobs:
   dependency-review:
-    if: ${{ github.event.repository.private == false }}
+    # Central required Security Scan dependency-review (fail-on-severity: moderate, stricter than high) (ContextualWisdomLab/.github)
+    # already runs this check on pull requests that target the default branch.
+    # Skip the local duplicate there; keep it for pushes and other base branches.
+    if: ${{ github.event.repository.private == false && github.base_ref != github.event.repository.default_branch }}
     runs-on: ubuntu-latest
     steps:
       - name: Dependency Review
