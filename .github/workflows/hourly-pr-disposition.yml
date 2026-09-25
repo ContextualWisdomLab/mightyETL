@@ -132,18 +132,27 @@ jobs:
                 checks=$(gh api --paginate -H "Accept: application/vnd.github+json" \
                   "/repos/${repo}/commits/${head_sha}/check-runs?filter=latest&per_page=100")
                 check_summary=$(jq -s '
-                  [.[].check_runs[]] as $runs
-                  | {
-                      total: ($runs | length),
-                      pending: ($runs | map(select(.status != "completed")) | length),
-                      failed: ($runs | map(select(
+                  [.[].check_runs[]]
+                  | group_by(.name)
+                  | map({
+                      name: .[0].name,
+                      pending: any(.[]; .status != "completed"),
+                      failed: any(.[];
                         .status == "completed"
                         and (.conclusion != "success" and .conclusion != "neutral" and .conclusion != "skipped")
-                      )) | length),
-                      names: ($runs | map(.name) | unique),
-                      successful_names: ($runs
-                        | map(select(.status == "completed" and .conclusion == "success") | .name)
-                        | unique)
+                      ),
+                      successful: any(.[];
+                        .status == "completed" and .conclusion == "success"
+                      )
+                    }) as $checks
+                  | {
+                      total: ($checks | length),
+                      pending: ($checks | map(select(.pending)) | length),
+                      failed: ($checks | map(select(.failed)) | length),
+                      names: ($checks | map(.name)),
+                      successful_names: ($checks
+                        | map(select(.successful) | .name)
+                      )
                     }
                 ' <<<"${checks}")
                 check_total=$(jq -r '.total' <<<"${check_summary}")

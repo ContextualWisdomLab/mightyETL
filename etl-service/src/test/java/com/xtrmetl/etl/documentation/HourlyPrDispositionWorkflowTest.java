@@ -59,6 +59,23 @@ class HourlyPrDispositionWorkflowTest {
     }
 
     @Test
+    void resolvesDuplicateCheckNamesByOutcome() {
+        assertTrue(workflow.contains("group_by(.name)"));
+        assertTrue(workflow.contains(
+                "pending: any(.[]; .status != \"completed\")"
+        ));
+        assertTrue(workflow.contains(
+                "failed: any(.[];"
+        ));
+        assertTrue(workflow.contains(
+                "successful: any(.[];"
+        ));
+        assertTrue(workflow.contains(
+                ".status == \"completed\" and .conclusion == \"success\""
+        ));
+    }
+
+    @Test
     void protectsWorkflowChangesAndHeadMovement() {
         assertTrue(workflow.contains("automerge-workflow"));
         assertTrue(workflow.contains("-f sha=\"${head_sha}\""));
