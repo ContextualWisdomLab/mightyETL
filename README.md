@@ -262,6 +262,8 @@ Until #121 merges, those workflow controls are **active_pr**, not protected runt
 
 Do not release because one PR is green. A release requires the exact integrated protected head to satisfy required CI/security/coverage, migrations/rollback, compatibility, SBOM/provenance, independent review, standalone/MSA operational smoke tests, current canonical documentation, and artifact verification.
 
-## License
+## Licensing status
 
-mightyETL original source and documentation are licensed under the [Apache License 2.0](LICENSE). Third-party dependencies, container bases, bundled tools/assets, standards, and generated artifacts retain their own commercially compatible terms and attribution requirements; this repository license does not relicense them.
+No license grant is effective for mightyETL repository source or documentation. [issue #151](https://github.com/ContextualWisdomLab/mightyETL/issues/151) owns the owner/legal/product decision and the required copyright and provenance inventory. Until that issue records explicit approval and verifies ownership and imported-material rights, treat the repository as all rights reserved: do not redistribute it or rely on proposed Apache-2.0 or MIT language as commercial clearance.
+
+Third-party dependencies, container bases, bundled tools/assets, standards, and generated artifacts retain their own terms and attribution requirements. An SBOM, scanner result, or compatible dependency license does not establish rights in the repository's original or imported source.
