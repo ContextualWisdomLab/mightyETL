@@ -199,6 +199,22 @@ class CanonicalDocumentationContractTest {
         }
     }
 
+    @Test
+    void licensingRemainsFailClosedUntilOwnerProvenanceDecision() throws IOException {
+        String readme = read("README.md");
+        String assessment = read("docs/DOCUMENTATION_ASSESSMENT.md");
+
+        assertTrue(
+                !Files.exists(PROJECT_ROOT.resolve("LICENSE")),
+                "Do not publish a repository license before issue #151 records owner/legal/product approval and provenance"
+        );
+        assertTrue(readme.contains("No license grant is effective"));
+        assertTrue(readme.contains("issue #151"));
+        assertTrue(assessment.contains(
+                "Do not create a license file until owner/legal/product decision is explicit"
+        ));
+    }
+
     private static String read(String relativePath) throws IOException {
         return Files.readString(PROJECT_ROOT.resolve(relativePath), StandardCharsets.UTF_8)
                 .replace("\r\n", "\n")
